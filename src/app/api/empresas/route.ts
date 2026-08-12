@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getUsuarioActual, requiereSuperadmin } from "@/lib/auth";
+
 // Esta ruta lee sesión/usuario y consulta la base de datos en cada
 // petición — no debe pre-generarse durante el build.
 export const dynamic = "force-dynamic";
@@ -97,15 +98,51 @@ export async function POST(request: Request) {
     });
 
     // RN-011: clonar catálogos semilla del rubro hacia los catálogos propios
-    // de la empresa. Los catálogos por empresa (categorias_insumo, etc.) se
-    // agregan en el Sprint 2 (módulo de Ventas/Inventario); aquí dejamos el
-    // punto de extensión ya resuelto en la transacción para que ese sprint
-    // solo tenga que llamar a tx.categoriaInsumo.createMany(...) con estos datos.
+    // de la empresa recién creada.
     const plantillas = await tx.rubroPlantillaCatalogo.findMany({
       where: { rubroId: datos.rubroId },
     });
-    // (Los createMany hacia las tablas de catálogo por empresa se activan
-    // cuando esas tablas existan en el schema — ver nota en README del Sprint 2.)
+
+    const categoriasInsumo = plantillas.filter((p) => p.tipoCatalogo === "categoria_insumo");
+    if (categoriasInsumo.length > 0) {
+      await tx.categoriaInsumo.createMany({
+        data: categoriasInsumo.map((p) => ({ empresaId: nuevaEmpresa.id, nombre: p.nombreItem })),
+      });
+    }
+
+    const categoriasProducto = plantillas.filter((p) => p.tipoCatalogo === "categoria_producto");
+    if (categoriasProducto.length > 0) {
+      await tx.categoriaProducto.createMany({
+        data: categoriasProducto.map((p) => ({ empresaId: nuevaEmpresa.id, nombre: p.nombreItem })),
+      });
+    }
+
+    const tiposGasto = plantillas.filter((p) => p.tipoCatalogo === "tipo_gasto");
+    if (tiposGasto.length > 0) {
+      await tx.tipoGasto.createMany({
+        data: tiposGasto.map((p) => ({ empresaId: nuevaEmpresa.id, nombre: p.nombreItem })),
+      });
+    }
+
+    const unidadesMedida = plantillas.filter((p) => p.tipoCatalogo === "unidad_medida");
+    if (unidadesMedida.length > 0) {
+      await tx.unidadMedida.createMany({
+        data: unidadesMedida.map((p) => ({
+          empresaId: nuevaEmpresa.id,
+          nombre: p.nombreItem,
+          abreviatura: p.nombreItem.slice(0, 6),
+        })),
+      });
+    }
+
+    // Métodos de pago: set estándar igual para toda empresa, no depende
+    // del rubro (sección 3 de la arquitectura).
+    await tx.metodoPago.createMany({
+      data: ["Efectivo", "Yape/Plin", "Tarjeta", "Transferencia"].map((nombre) => ({
+        empresaId: nuevaEmpresa.id,
+        nombre,
+      })),
+    });
 
     // RN-014: si hay capital social inicial, se registrará el asiento contable
     // de apertura cuando el motor contable (Sprint 6) esté implementado.

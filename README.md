@@ -61,7 +61,26 @@ Si algo falla en el Paso 3 (build de Vercel), la pantalla de **Deployments → [
 
 ## Cómo seguimos construyendo
 
-Para el próximo sprint (catálogos por empresa + gestión de usuarios + Ventas/Inventario), simplemente vuelve a este chat y dime que continuamos. Yo genero los archivos nuevos, tú los subes a GitHub (arrastrando los archivos nuevos/modificados a la misma pantalla de **Add file → Upload files** de tu repositorio), y Vercel vuelve a desplegar automáticamente solo.
+Para el próximo sprint (Ventas/Inventario/Fichas técnicas), simplemente vuelve a este chat y dime que continuamos. Yo genero los archivos nuevos, tú los subes a GitHub (arrastrando los archivos nuevos/modificados a la misma pantalla de **Add file → Upload files** de tu repositorio), y Vercel vuelve a desplegar automáticamente solo.
+
+---
+
+## Sprint 2 — Catálogos por empresa y gestión de usuarios
+
+Agregado sobre el Sprint 1:
+
+- **RN-011 implementado de verdad**: al crear una empresa, ahora se clonan sus catálogos (categorías de insumo, categorías de producto, tipos de gasto, unidades de medida) desde la plantilla de su rubro, más un set estándar de métodos de pago.
+- **Gestión de equipo** (HU-02): la pantalla `/empresas/[id]` (antes daba 404) ahora muestra los datos de la empresa, sus módulos activos, su equipo asignado, y un botón para crear/asignar nuevas personas (Asesor, Asistente o Cliente) con su rol operativo.
+- Nueva tabla `Auditoria` sigue registrando cada alta de usuario y asignación.
+
+### Pasos para aplicar el Sprint 2 en tu proyecto ya desplegado
+
+1. **Sube el código nuevo a GitHub** — arrastra todos los archivos de este zip actualizado a tu repositorio (Add file → Upload files), sobrescribiendo los que ya existían y agregando los nuevos.
+2. **Corre el SQL nuevo en Supabase**: ve a SQL Editor → New query → pega el contenido completo de `prisma/sprint2_catalogos.sql` → Run. Si te sale el aviso de RLS, elige **"Run and enable RLS"**, igual que en el Sprint 1.
+3. Vercel va a redesplegar automáticamente al detectar el commit. Espera a que diga "Ready".
+4. Entra a tu app, ve a una empresa que ya tenías creada (como "Heladería Dolas") — **como se creó antes de este sprint, no va a tener catálogos clonados** (esa parte del código no existía todavía). Para probar el flujo completo, crea una empresa nueva de prueba y entra a su detalle — ahí sí deberías ver las categorías, tipos de gasto y métodos de pago ya cargados.
+5. Prueba el botón **"+ Asignar persona"** dentro del detalle de una empresa, creando un usuario de prueba tipo "Cliente" con rol "Admin Local".
+
 
 ## Estructura del proyecto
 

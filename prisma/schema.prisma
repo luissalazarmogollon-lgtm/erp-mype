@@ -111,6 +111,12 @@ model Empresa {
   modulos                EmpresaModulo[]
   asignaciones           UsuarioEmpresa[]
   auditorias              Auditoria[]
+  categoriasInsumo       CategoriaInsumo[]
+  unidadesMedida         UnidadMedida[]
+  categoriasProducto     CategoriaProducto[]
+  tiposGasto             TipoGasto[]
+  metodosPago            MetodoPago[]
+  conceptosMovimientoCaja ConceptoMovimientoCaja[]
 
   @@map("empresas")
 }
@@ -193,4 +199,73 @@ model Auditoria {
 
   @@index([empresaId, tablaAfectada, registroId])
   @@map("auditoria")
+}
+
+// ---------------------------------------------------------------------
+// 2. Catálogos por empresa (sección 3 de la arquitectura)
+// Se pre-cargan al crear la empresa clonando rubro_plantilla_catalogo
+// (RN-011), y luego son 100% editables por el cliente.
+// ---------------------------------------------------------------------
+
+model CategoriaInsumo {
+  id         BigInt  @id @default(autoincrement())
+  empresaId  BigInt  @map("empresa_id")
+  empresa    Empresa @relation(fields: [empresaId], references: [id])
+  nombre     String
+
+  @@unique([empresaId, nombre])
+  @@map("categorias_insumo")
+}
+
+model UnidadMedida {
+  id           BigInt  @id @default(autoincrement())
+  empresaId    BigInt  @map("empresa_id")
+  empresa      Empresa @relation(fields: [empresaId], references: [id])
+  nombre       String
+  abreviatura  String
+
+  @@unique([empresaId, nombre])
+  @@map("unidades_medida")
+}
+
+model CategoriaProducto {
+  id         BigInt  @id @default(autoincrement())
+  empresaId  BigInt  @map("empresa_id")
+  empresa    Empresa @relation(fields: [empresaId], references: [id])
+  nombre     String
+
+  @@unique([empresaId, nombre])
+  @@map("categorias_producto")
+}
+
+model TipoGasto {
+  id         BigInt  @id @default(autoincrement())
+  empresaId  BigInt  @map("empresa_id")
+  empresa    Empresa @relation(fields: [empresaId], references: [id])
+  nombre     String
+
+  @@unique([empresaId, nombre])
+  @@map("tipos_gasto")
+}
+
+// No viene de plantilla de rubro — set estándar igual para toda empresa
+// (ver sección 3 de la arquitectura), se crea con valores fijos al alta.
+model MetodoPago {
+  id         BigInt  @id @default(autoincrement())
+  empresaId  BigInt  @map("empresa_id")
+  empresa    Empresa @relation(fields: [empresaId], references: [id])
+  nombre     String
+
+  @@unique([empresaId, nombre])
+  @@map("metodos_pago")
+}
+
+model ConceptoMovimientoCaja {
+  id         BigInt  @id @default(autoincrement())
+  empresaId  BigInt  @map("empresa_id")
+  empresa    Empresa @relation(fields: [empresaId], references: [id])
+  nombre     String
+  tipo       String  // ingreso | egreso
+
+  @@map("conceptos_movimiento_caja")
 }

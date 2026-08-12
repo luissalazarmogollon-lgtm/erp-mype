@@ -24,7 +24,10 @@ export default function LoginPage() {
 
     setCargando(false);
 
-   if (authError) {
+    if (authError) {
+      // Mostramos el mensaje real (temporalmente) para diagnosticar el
+      // problema de login que estamos viendo en producción. Cuando quede
+      // resuelto, podemos volver a un mensaje genérico más amigable.
       setError(`${authError.message} (código: ${authError.status ?? "sin código"})`);
       return;
     }
