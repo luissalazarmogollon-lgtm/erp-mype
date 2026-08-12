@@ -1,0 +1,196 @@
+// =====================================================================
+// ESQUEMA PRISMA — Sprint 1: Núcleo multiempresa, alta de empresa, seguridad
+// Traducción de modelo_datos_erp_mype.sql (secciones 0 y 1).
+// Los módulos operativos (ventas, compras, caja, planilla...) se agregan
+// en los siguientes sprints, siguiendo el orden de especificacion_mvp_erp_mype.md.
+//
+// NOTA DE DISEÑO: `Usuario.id` es UUID (no BIGSERIAL como en el SQL original)
+// porque coincide 1 a 1 con `auth.users.id` de Supabase Auth — así no
+// duplicamos lógica de login/password, Supabase la maneja por nosotros.
+// =====================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------------
+// 0. Catálogos globales de plataforma
+// ---------------------------------------------------------------------
+
+model TipoNegocio {
+  id      Int      @id @default(autoincrement())
+  nombre  String   @unique // 'Productos' | 'Servicios' | 'Productos y Servicios'
+  rubros  Rubro[]
+  empresas Empresa[]
+
+  @@map("tipos_negocio")
+}
+
+model Rubro {
+  id                       Int      @id @default(autoincrement())
+  nombre                   String   @unique
+  tipoNegocioSugeridoId    Int?     @map("tipo_negocio_sugerido_id")
+  tipoNegocioSugerido      TipoNegocio? @relation(fields: [tipoNegocioSugeridoId], references: [id])
+  requiereInventario       Boolean  @default(true) @map("requiere_inventario")
+  requiereFichasTecnicas   Boolean  @default(true) @map("requiere_fichas_tecnicas")
+  estado                   String   @default("activo") // activo | inactivo
+  plantillasCatalogo       RubroPlantillaCatalogo[]
+  empresas                 Empresa[]
+
+  @@map("rubros")
+}
+
+// Catálogo semilla: al crear una empresa de este rubro, estos ítems se
+// clonan hacia los catálogos propios de la empresa (RN-011).
+model RubroPlantillaCatalogo {
+  id            Int    @id @default(autoincrement())
+  rubroId       Int    @map("rubro_id")
+  rubro         Rubro  @relation(fields: [rubroId], references: [id])
+  tipoCatalogo  String @map("tipo_catalogo") // categoria_insumo | categoria_producto | tipo_gasto | unidad_medida
+  nombreItem    String @map("nombre_item")
+
+  @@map("rubro_plantilla_catalogo")
+}
+
+model Banco {
+  id     Int    @id @default(autoincrement())
+  nombre String @unique
+
+  @@map("bancos")
+}
+
+// ---------------------------------------------------------------------
+// 1. Núcleo: usuarios, empresas, seguridad
+// ---------------------------------------------------------------------
+
+model Usuario {
+  id                       String   @id @db.Uuid // = auth.users.id de Supabase Auth
+  nombres                  String
+  apellidos                String
+  email                    String   @unique
+  telefono                 String?
+  tipoActorBase            String   @map("tipo_actor_base") // asesor | asistente | cliente
+  esSuperadminPlataforma   Boolean  @default(false) @map("es_superadmin_plataforma")
+  estado                   String   @default("activo")
+  fechaCreacion            DateTime @default(now()) @map("fecha_creacion")
+
+  empresasComoAsesorPrincipal Empresa[]        @relation("AsesorPrincipal")
+  asignaciones                UsuarioEmpresa[]
+  auditorias                  Auditoria[]
+
+  @@map("usuarios")
+}
+
+model Empresa {
+  id                     BigInt   @id @default(autoincrement())
+  razonSocial            String   @map("razon_social")
+  nombreComercial        String   @map("nombre_comercial")
+  ruc                    String?
+  logoUrl                String?  @map("logo_url")
+  tipoNegocioId          Int      @map("tipo_negocio_id")
+  tipoNegocio            TipoNegocio @relation(fields: [tipoNegocioId], references: [id])
+  rubroId                Int      @map("rubro_id")
+  rubro                  Rubro    @relation(fields: [rubroId], references: [id])
+  monedaOperacion        String   @default("PEN") @map("moneda_operacion") // PEN | USD
+  aplicaIgv              Boolean  @default(true) @map("aplica_igv")
+  tasaIgv                Decimal  @default(18.00) @map("tasa_igv") @db.Decimal(5, 2)
+  regimenTributario      String?  @map("regimen_tributario") // NUEVO_RUS | RER | RMT | GENERAL
+  capitalSocialInicial   Decimal  @default(0) @map("capital_social_inicial") @db.Decimal(12, 2)
+  fechaAlta              DateTime @default(now()) @map("fecha_alta")
+  estadoServicio         String   @default("activo") @map("estado_servicio") // activo | pausado | finalizado
+  asesorPrincipalId      String?  @map("asesor_principal_id") @db.Uuid
+  asesorPrincipal        Usuario? @relation("AsesorPrincipal", fields: [asesorPrincipalId], references: [id])
+  estado                 String   @default("activo")
+
+  modulos                EmpresaModulo[]
+  asignaciones           UsuarioEmpresa[]
+  auditorias              Auditoria[]
+
+  @@map("empresas")
+}
+
+// Qué módulos están activos para esta empresa (RN-012), predefinido según el rubro.
+model EmpresaModulo {
+  id         BigInt  @id @default(autoincrement())
+  empresaId  BigInt  @map("empresa_id")
+  empresa    Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  modulo     String  // inventario_insumos | fichas_tecnicas | compras | cxc | cxp | caja_bancos |
+                       // gastos | planilla | activos_fijos | prestamos_bancarios
+  activo     Boolean @default(true)
+
+  @@unique([empresaId, modulo])
+  @@map("empresa_modulos")
+}
+
+model RolOperativo {
+  id            Int    @id @default(autoincrement())
+  nombre        String @unique // Gerencial | Admin Local | Cajero | Almacén-Cocina
+  descripcion   String?
+
+  permisos      RolPermiso[]
+  asignaciones  UsuarioEmpresa[]
+
+  @@map("roles_operativos")
+}
+
+model Permiso {
+  id       Int    @id @default(autoincrement())
+  modulo   String
+  accion   String // ver | crear | editar | eliminar | aprobar
+
+  roles    RolPermiso[]
+
+  @@unique([modulo, accion])
+  @@map("permisos")
+}
+
+model RolPermiso {
+  rolOperativoId  Int
+  rolOperativo    RolOperativo @relation(fields: [rolOperativoId], references: [id])
+  permisoId       Int
+  permiso         Permiso      @relation(fields: [permisoId], references: [id])
+
+  @@id([rolOperativoId, permisoId])
+  @@map("rol_permisos")
+}
+
+// Tabla puente clave del modelo multiempresa (ver sección 4.A de la arquitectura).
+model UsuarioEmpresa {
+  id               BigInt   @id @default(autoincrement())
+  usuarioId        String   @map("usuario_id") @db.Uuid
+  usuario          Usuario  @relation(fields: [usuarioId], references: [id])
+  empresaId        BigInt   @map("empresa_id")
+  empresa          Empresa  @relation(fields: [empresaId], references: [id])
+  tipoActor        String   @map("tipo_actor") // asesor | asistente | cliente
+  rolOperativoId   Int      @map("rol_operativo_id")
+  rolOperativo     RolOperativo @relation(fields: [rolOperativoId], references: [id])
+  estado           String   @default("activo")
+  fechaAsignacion  DateTime @default(now()) @map("fecha_asignacion")
+
+  @@unique([usuarioId, empresaId])
+  @@map("usuario_empresa")
+}
+
+model Auditoria {
+  id              BigInt   @id @default(autoincrement())
+  usuarioId       String?  @map("usuario_id") @db.Uuid
+  usuario         Usuario? @relation(fields: [usuarioId], references: [id])
+  empresaId       BigInt?  @map("empresa_id")
+  empresa         Empresa? @relation(fields: [empresaId], references: [id])
+  tablaAfectada   String   @map("tabla_afectada")
+  registroId      BigInt   @map("registro_id")
+  accion          String   // crear | editar | eliminar | aprobar
+  valorAnterior   Json?    @map("valor_anterior")
+  valorNuevo      Json?    @map("valor_nuevo")
+  fecha           DateTime @default(now())
+  ipOrigen        String?  @map("ip_origen")
+
+  @@index([empresaId, tablaAfectada, registroId])
+  @@map("auditoria")
+}
