@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+// Esta ruta consulta la base de datos en cada petición — no debe
+// pre-generarse durante el build (Next.js lo haría por defecto si
+// no ve ninguna señal de que depende de datos dinámicos).
+export const dynamic = "force-dynamic";
+
 // GET /api/rubros — usado por el wizard de alta de empresa (HU-01) para
 // poblar el selector de rubro. Público dentro de la app autenticada,
 // no requiere ser superadmin: cualquiera que esté armando el formulario
