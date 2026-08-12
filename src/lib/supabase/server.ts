@@ -1,4 +1,4 @@
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
 // Cliente Supabase para Server Components y API routes.
@@ -15,11 +15,22 @@ export function createServerSupabaseClient() {
         get(name: string) {
           return cookieStore.get(name)?.value;
         },
-        set(name: string, value: string, options) {
-          cookieStore.set({ name, value, ...options });
+        set(name: string, value: string, options: CookieOptions) {
+          try {
+            cookieStore.set({ name, value, ...options });
+          } catch {
+            // Se ignora: ocurre cuando esta función se llama desde un
+            // Server Component (no una Route Handler/Server Action).
+            // Next.js no permite escribir cookies ahí; la sesión sigue
+            // funcionando porque el middleware (siguiente sprint) la refresca.
+          }
         },
-        remove(name: string, options) {
-          cookieStore.set({ name, value: "", ...options });
+        remove(name: string, options: CookieOptions) {
+          try {
+            cookieStore.set({ name, value: "", ...options });
+          } catch {
+            // Ver nota arriba.
+          }
         },
       },
     }
