@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getUsuarioActual, requiereSuperadmin } from "@/lib/auth";
+// Esta ruta lee sesión/usuario y consulta la base de datos en cada
+// petición — no debe pre-generarse durante el build.
+export const dynamic = "force-dynamic";
 
 // Módulos que se activan por defecto según las banderas del rubro (RN-012).
 // Los módulos que no dependen del rubro (compras, cxc, cxp, caja_bancos, gastos)
