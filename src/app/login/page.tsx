@@ -24,8 +24,8 @@ export default function LoginPage() {
 
     setCargando(false);
 
-    if (authError) {
-      setError("Correo o contraseña incorrectos.");
+   if (authError) {
+      setError(`${authError.message} (código: ${authError.status ?? "sin código"})`);
       return;
     }
 
