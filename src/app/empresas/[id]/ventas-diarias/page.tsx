@@ -43,6 +43,7 @@ export default function VentasDiariasPage({ params }: { params: { id: string } }
   const [guardando, setGuardando] = useState(false);
   const [conciliando, setConciliando] = useState<string | null>(null);
   const [formConciliar, setFormConciliar] = useState<Record<string, string>>({});
+  const [esSuperadmin, setEsSuperadmin] = useState(false);
 
   const [form, setForm] = useState({
     localId: "",
@@ -55,13 +56,15 @@ export default function VentasDiariasPage({ params }: { params: { id: string } }
   });
 
   async function cargar() {
-    const [resRegistros, resCatalogos] = await Promise.all([
+    const [resRegistros, resCatalogos, resAcceso] = await Promise.all([
       fetch(`/api/empresas/${empresaId}/ventas-diarias`).then((r) => r.json()),
       fetch(`/api/empresas/${empresaId}/catalogos`).then((r) => r.json()),
+      fetch(`/api/empresas/${empresaId}/mi-acceso`).then((r) => r.json()),
     ]);
     setRegistros(resRegistros);
     setLocales(resCatalogos.locales ?? []);
     setCuentasBancarias(resCatalogos.cuentasBancarias ?? []);
+    setEsSuperadmin(Boolean(resAcceso.esSuperadminPlataforma));
   }
 
   useEffect(() => {
@@ -189,13 +192,13 @@ export default function VentasDiariasPage({ params }: { params: { id: string } }
                 <span className="mono" style={{ fontWeight: 500 }}>S/ {Number(r.total).toFixed(2)}</span>
               </div>
               <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 4 }}>
-                Efectivo S/{Number(r.montoEfectivo).toFixed(2)}{r.conciliacion.efectivoCuenta ? ` → ${r.conciliacion.efectivoCuenta}` : ""} ·
-                {" "}Yape S/{Number(r.montoYape).toFixed(2)}{r.conciliacion.yapeCuenta ? ` → ${r.conciliacion.yapeCuenta}` : ""} ·
-                {" "}Plin S/{Number(r.montoPlin).toFixed(2)}{r.conciliacion.plinCuenta ? ` → ${r.conciliacion.plinCuenta}` : ""} ·
-                {" "}Tarjeta S/{Number(r.montoTarjeta).toFixed(2)}{r.conciliacion.tarjetaCuenta ? ` → ${r.conciliacion.tarjetaCuenta}` : ""}
+                Efectivo S/{Number(r.montoEfectivo).toFixed(2)}{r.conciliacion.efectivoCuenta ? ` ✓ ${r.conciliacion.efectivoCuenta}` : ""} ·
+                {" "}Yape S/{Number(r.montoYape).toFixed(2)}{r.conciliacion.yapeCuenta ? ` ✓ ${r.conciliacion.yapeCuenta}` : ""} ·
+                {" "}Plin S/{Number(r.montoPlin).toFixed(2)}{r.conciliacion.plinCuenta ? ` ✓ ${r.conciliacion.plinCuenta}` : ""} ·
+                {" "}Tarjeta S/{Number(r.montoTarjeta).toFixed(2)}{r.conciliacion.tarjetaCuenta ? ` ✓ ${r.conciliacion.tarjetaCuenta}` : ""}
               </p>
 
-              {cuentasBancarias.length > 0 && legsPendientes.length > 0 && (
+              {esSuperadmin && cuentasBancarias.length > 0 && legsPendientes.length > 0 && (
                 conciliando === r.id ? (
                   <div style={{ marginTop: 10, borderTop: "1px solid var(--line)", paddingTop: 10 }}>
                     {legsPendientes.map((leg) => (

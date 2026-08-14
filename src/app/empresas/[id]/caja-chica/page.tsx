@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { NATURALEZAS_EGRESO, CATEGORIAS_POR_NATURALEZA } from "@/lib/naturalezaEgreso";
+import { TIPOS_COMPROBANTE } from "@/lib/tiposComprobante";
 
 type Caja = { id: string; nombre: string; cuentaBancaria: string | null; montoFondo: string };
 type GastoCC = {
@@ -11,6 +12,7 @@ type GastoCC = {
   monto: string;
   fecha: string;
   tipoComprobante: string;
+  numeroComprobante: string | null;
   estado: string;
   naturaleza: string | null;
   categoriaEspecifica: string | null;
@@ -32,19 +34,22 @@ export default function CajaChicaPage({ params }: { params: { id: string } }) {
   const [reponiendo, setReponiendo] = useState(false);
   const [clasificando, setClasificando] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [puedeClasificar, setPuedeClasificar] = useState(false);
 
   const [formCaja, setFormCaja] = useState({ nombre: "", cuentaBancariaId: "", montoFondo: 0 });
   const [formReponer, setFormReponer] = useState({ monto: 0, cuentaBancariaId: "" });
-  const [formGasto, setFormGasto] = useState({ descripcion: "", monto: 0, fecha: hoyISO(), tipoComprobante: "sin_comprobante" });
+  const [formGasto, setFormGasto] = useState({ descripcion: "", monto: 0, fecha: hoyISO(), tipoComprobante: "sin_comprobante", numeroComprobante: "" });
   const [formClasificar, setFormClasificar] = useState({ naturaleza: "gasto_operativo", categoriaEspecifica: CATEGORIAS_POR_NATURALEZA.gasto_operativo[0], proveedorNombre: "" });
 
   async function cargarCajas() {
-    const [resCajas, resCatalogos] = await Promise.all([
+    const [resCajas, resCatalogos, resAcceso] = await Promise.all([
       fetch(`/api/empresas/${empresaId}/caja-chica`).then((r) => r.json()),
       fetch(`/api/empresas/${empresaId}/catalogos`).then((r) => r.json()),
+      fetch(`/api/empresas/${empresaId}/mi-acceso`).then((r) => r.json()),
     ]);
     setCajas(resCajas);
     setCuentasBancarias(resCatalogos.cuentasBancarias ?? []);
+    setPuedeClasificar(Boolean(resAcceso.esSuperadminPlataforma) || resAcceso.tipoActor === "asesor");
     if (resCajas.length > 0 && !cajaSeleccionada) setCajaSeleccionada(resCajas[0].id);
   }
 
@@ -114,7 +119,7 @@ export default function CajaChicaPage({ params }: { params: { id: string } }) {
       setError(data.error?.toString() ?? "No se pudo registrar el gasto.");
       return;
     }
-    setFormGasto({ descripcion: "", monto: 0, fecha: hoyISO(), tipoComprobante: "sin_comprobante" });
+    setFormGasto({ descripcion: "", monto: 0, fecha: hoyISO(), tipoComprobante: "sin_comprobante", numeroComprobante: "" });
     setMostrarFormGasto(false);
     cargarCajas();
     cargarGastos(cajaSeleccionada);
@@ -266,6 +271,18 @@ export default function CajaChicaPage({ params }: { params: { id: string } }) {
                   <label>Fecha</label>
                   <input type="date" value={formGasto.fecha} onChange={(e) => setFormGasto({ ...formGasto, fecha: e.target.value })} required />
                 </div>
+                <div className="field">
+                  <label>Tipo de documento</label>
+                  <select value={formGasto.tipoComprobante} onChange={(e) => setFormGasto({ ...formGasto, tipoComprobante: e.target.value })}>
+                    {TIPOS_COMPROBANTE.map((t) => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label>N° de documento (opcional)</label>
+                  <input value={formGasto.numeroComprobante} onChange={(e) => setFormGasto({ ...formGasto, numeroComprobante: e.target.value })} placeholder="Ej: B001-00123" />
+                </div>
               </div>
               {error && <p className="field error">{error}</p>}
               <div style={{ display: "flex", gap: 10 }}>
@@ -284,6 +301,7 @@ export default function CajaChicaPage({ params }: { params: { id: string } }) {
                     <p style={{ fontSize: 14 }}>{g.descripcion}</p>
                     <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
                       {new Date(g.fecha).toLocaleDateString("es-PE")}
+                      {g.numeroComprobante ? ` · ${g.numeroComprobante}` : g.tipoComprobante !== "sin_comprobante" ? ` · ${g.tipoComprobante}` : ""}
                       {g.estado === "trasladado" && ` · ${g.naturaleza} · ${g.categoriaEspecifica}`}
                     </p>
                   </div>
@@ -295,7 +313,13 @@ export default function CajaChicaPage({ params }: { params: { id: string } }) {
                   </div>
                 </div>
 
-                {g.estado === "pendiente" && (
+                {g.estado === "pendiente" && !puedeClasificar && (
+                  <p className="mono" style={{ marginTop: 8, fontSize: 11, color: "var(--ink-soft)" }}>
+                    Pendiente de que el superadmin o un Asesor lo clasifique y traslade.
+                  </p>
+                )}
+
+                {g.estado === "pendiente" && puedeClasificar && (
                   clasificando === g.id ? (
                     <div style={{ marginTop: 10, borderTop: "1px solid var(--line)", paddingTop: 10 }}>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>

@@ -275,3 +275,78 @@ Ventas totales
 2. **Corre el SQL de migración en Supabase**: SQL Editor → New query → pega `prisma/conciliacion_caja_chica.sql` → Run.
 3. Espera el redeploy automático de Vercel.
 4. Prueba: en Ventas diarias, concilia un registro existente con una cuenta → confirma que el saldo sube en Flujo de Caja. Luego ve a Caja Chica, crea una con fondo desde una cuenta bancaria, registra un gasto chico, y como administrador clasifícalo y traslada — confirma que aparece en Gastos y Costos y en el Estado de Resultados. Finalmente revisa que el Estado de Resultados muestre la línea de EBITDA.
+
+---
+
+## Ajustes de seguridad y de visualización
+
+Sin cambios en el modelo de datos esta vez (no hay SQL nuevo que correr) — solo lógica y pantallas.
+
+### 1. Flujo de Caja: reporte agrupado por banco y por día
+
+La lista de movimientos ya no es un listado plano — ahora cada cuenta bancaria es una sección plegable (clic para abrir/cerrar), y dentro de cada una, los movimientos están agrupados por día con su neto (ingresos − egresos) visible de un vistazo.
+
+### 2. Conciliar ventas diarias: ahora requiere ser superadmin
+
+El botón "Actualizar flujo de caja" en Ventas diarias solo aparece si el usuario logueado es el superadmin de la plataforma — nadie más puede mover saldos de cuentas bancarias desde ahí, aunque tenga el permiso "Flujo de Caja" asignado. El indicador de qué método de pago ya se registró también se hizo más visible (✓ + nombre del banco).
+
+### 3. "Equipo asignado" ya no se muestra a usuarios tipo Cliente
+
+Solo el superadmin, un Asesor o un Asistente ven la sección de equipo dentro de una empresa. Un dueño, cajero, o encargado de caja chica (tipo "Cliente") ahora solo ve los botones de las transacciones a las que tiene acceso — sin ver quién más está asignado a la empresa.
+
+### 4. Caja Chica: "Clasificar y trasladar" restringido a superadmin o Asesor
+
+La persona que registra gastos de caja chica (tipo Cliente, con el permiso "Caja Chica") solo puede registrar — nunca ve el botón de clasificar/trasladar. Ni siquiera un Asistente puede hacerlo: es exclusivo de superadmin o Asesor, tal como pediste. Quien no puede clasificar ve una nota explicando que está pendiente de que el superadmin o un Asesor lo revise.
+
+### Pasos para aplicar
+
+1. Sube el zip completo a GitHub (sobrescribe lo existente) — no hay SQL que correr esta vez.
+2. Espera el redeploy de Vercel.
+3. Prueba con un usuario tipo "Cliente" (crea uno de prueba en Usuarios y accesos si no tienes): confirma que no ve "Equipo asignado", que si tiene acceso a Caja Chica solo ve el botón de registrar (no "Clasificar y trasladar"), y que en Ventas diarias no ve el botón de conciliar aunque tenga el permiso de Flujo de Caja.
+4. Revisa el Flujo de Caja de una empresa con movimientos y confirma que ahora se ve organizado por banco y por día.
+
+---
+
+## Ajustes finos de seguridad y organización
+
+Sin cambios en la base de datos — solo lógica de permisos y presentación sobre datos que ya existían.
+
+### 1. Flujo de Caja: movimientos agrupados por cuenta y por día
+
+En vez de una lista larga y plana, los movimientos ahora se agrupan primero por cuenta bancaria, y dentro de cada cuenta, por día — con el total de ingresos y egresos de cada día a la vista.
+
+### 2. Conciliar ventas diarias: ahora solo el superadmin puede hacerlo
+
+El botón "Actualizar flujo de caja" en Ventas diarias ya no aparece para nadie más que tú. Además, cada método de pago que ya se conciliaron muestra a qué cuenta entró (y no se puede volver a registrar).
+
+### 3. "Equipo asignado" ya no lo ve cualquiera
+
+Solo el superadmin, los Asesores y los Asistentes ven la sección de equipo dentro de una empresa. Si entra alguien tipo "Cliente" (dueño, cajero, encargado de local, etc.), esa sección directamente no aparece — solo ve los módulos/transacciones que tiene asignados.
+
+### 4. Caja Chica: la persona que la maneja solo registra gastos
+
+Si alguien tiene el permiso "Registrar gastos de caja chica" pero no es superadmin ni Asesor, en la pantalla de Caja Chica solo puede: crear su gasto chico. No ve los botones de "Nueva caja chica" ni "Reponer fondo" (esos requieren el permiso de Flujo de Caja), y en los gastos pendientes de clasificar ve un mensaje explicando que están esperando a que el superadmin o un Asesor los traslade — en vez de un botón que le fallaría al hacer clic.
+
+### Pasos para aplicar
+
+1. Sube el código a GitHub (sobrescribe lo existente) — no hay SQL nuevo que correr esta vez.
+2. Espera el redeploy de Vercel.
+3. Prueba: entra con un usuario tipo "Cliente" a una empresa y confirma que no ve "Equipo asignado". Si tienes un usuario con solo el permiso de Caja Chica, confirma que solo ve el botón de registrar gasto.
+
+---
+
+## Tipo y número de documento en Caja Chica (y en Gastos y Costos)
+
+### Qué se agregó
+
+- Al registrar un gasto de **Caja Chica**, ahora eliges el **tipo de documento** (Boleta, Factura, Nota de venta, Recibo por honorarios, Ticket, Sin comprobante) y puedes anotar el **número** (ej. `B001-00123`).
+- Ese número **se traslada automáticamente** al Gasto real cuando el superadmin/Asesor lo clasifica y traslada — no se pierde el dato.
+- De paso, agregué el mismo campo de número al formulario principal de **Gastos y Costos**, para que quede consistente en todo el sistema.
+- Se agregó **"Nota de venta"** como tipo de documento válido en ambos formularios — es un comprobante común en compras pequeñas a proveedores informales.
+
+### Pasos para aplicar
+
+1. **Sube el código a GitHub** — arrastra todos los archivos de este zip (Add file → Upload files), sobrescribiendo lo existente.
+2. **Corre el SQL de migración en Supabase**: SQL Editor → New query → pega `prisma/numero_comprobante.sql` → Run.
+3. Espera el redeploy automático de Vercel.
+4. Prueba: registra un gasto de caja chica con tipo "Boleta" y número "B001-00123" → clasifícalo y traslada → confirma que en Gastos y Costos aparece con ese mismo número.

@@ -4,13 +4,16 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 type Cuenta = { id: string; bancoNombre: string; numeroCuenta: string | null; moneda: string; saldoActual: string };
-type Movimiento = { id: string; cuenta: string; tipo: string; monto: string; concepto: string; fecha: string };
+type MovimientoItem = { id: string; tipo: string; monto: number; concepto: string; fecha: string };
+type DiaGrupo = { fecha: string; movimientos: MovimientoItem[]; totalIngreso: number; totalEgreso: number };
+type CuentaGrupo = { cuentaId: string; cuentaNombre: string; dias: DiaGrupo[] };
 
 export default function FlujoCajaPage({ params }: { params: { id: string } }) {
   const empresaId = params.id;
   const [saldoConsolidado, setSaldoConsolidado] = useState(0);
   const [cuentas, setCuentas] = useState<Cuenta[]>([]);
-  const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
+  const [movimientosPorCuenta, setMovimientosPorCuenta] = useState<CuentaGrupo[]>([]);
+  const [cuentasAbiertas, setCuentasAbiertas] = useState<Record<string, boolean>>({});
   const [mostrarForm, setMostrarForm] = useState(false);
   const [ajustando, setAjustando] = useState<string | null>(null);
   const [nuevoSaldo, setNuevoSaldo] = useState(0);
@@ -22,7 +25,7 @@ export default function FlujoCajaPage({ params }: { params: { id: string } }) {
     const data = await fetch(`/api/empresas/${empresaId}/flujo-caja`).then((r) => r.json());
     setSaldoConsolidado(data.saldoConsolidado ?? 0);
     setCuentas(data.cuentas ?? []);
-    setMovimientos(data.movimientos ?? []);
+    setMovimientosPorCuenta(data.movimientosPorCuenta ?? []);
   }
 
   useEffect(() => {
@@ -163,25 +166,56 @@ export default function FlujoCajaPage({ params }: { params: { id: string } }) {
         )}
       </div>
 
-      <h2 style={{ fontSize: 16, marginBottom: 10 }}>Movimientos recientes</h2>
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        {movimientos.map((m) => (
-          <div key={m.id} className="card" style={{ display: "flex", justifyContent: "space-between", padding: 12 }}>
-            <div>
-              <p style={{ fontSize: 13 }}>{m.concepto}</p>
-              <p className="mono" style={{ fontSize: 10, color: "var(--ink-soft)" }}>
-                {m.cuenta} · {new Date(m.fecha).toLocaleDateString("es-PE")}
-              </p>
+      <h2 style={{ fontSize: 16, marginBottom: 10 }}>Movimientos, por banco y por día</h2>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {movimientosPorCuenta.map((grupo) => {
+          const abierto = cuentasAbiertas[grupo.cuentaId] ?? false;
+          const totalCuenta = grupo.dias.reduce((acc, d) => acc + d.totalIngreso - d.totalEgreso, 0);
+          return (
+            <div key={grupo.cuentaId} className="card" style={{ padding: 0, overflow: "hidden" }}>
+              <button
+                onClick={() => setCuentasAbiertas({ ...cuentasAbiertas, [grupo.cuentaId]: !abierto })}
+                style={{
+                  width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
+                  padding: 14, background: "none", border: "none", cursor: "pointer", textAlign: "left",
+                }}
+              >
+                <span style={{ fontSize: 14, fontWeight: 500 }}>
+                  {abierto ? "▾" : "▸"} {grupo.cuentaNombre}
+                </span>
+                <span className="mono" style={{ fontSize: 12, color: "var(--ink-soft)" }}>
+                  {grupo.dias.length} día{grupo.dias.length !== 1 ? "s" : ""} con movimiento · neto S/ {totalCuenta.toFixed(2)}
+                </span>
+              </button>
+
+              {abierto && (
+                <div style={{ borderTop: "1px solid var(--line)" }}>
+                  {grupo.dias.map((dia) => (
+                    <div key={dia.fecha} style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                        <span className="mono" style={{ fontSize: 11, fontWeight: 500, color: "var(--ink-soft)" }}>
+                          {new Date(dia.fecha).toLocaleDateString("es-PE", { weekday: "short", day: "2-digit", month: "short" })}
+                        </span>
+                        <span className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
+                          + S/{dia.totalIngreso.toFixed(2)} / − S/{dia.totalEgreso.toFixed(2)}
+                        </span>
+                      </div>
+                      {dia.movimientos.map((m) => (
+                        <div key={m.id} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0" }}>
+                          <span style={{ fontSize: 12.5 }}>{m.concepto}</span>
+                          <span className="mono" style={{ fontSize: 12.5, color: m.tipo === "egreso" ? "var(--alert)" : "var(--teal)" }}>
+                            {m.tipo === "egreso" ? "−" : "+"} S/ {m.monto.toFixed(2)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            <p
-              className="mono"
-              style={{ fontSize: 13, color: m.tipo === "egreso" ? "var(--alert)" : "var(--teal)" }}
-            >
-              {m.tipo === "egreso" ? "−" : "+"} S/ {Number(m.monto).toFixed(2)}
-            </p>
-          </div>
-        ))}
-        {movimientos.length === 0 && (
+          );
+        })}
+        {movimientosPorCuenta.length === 0 && (
           <p style={{ color: "var(--ink-soft)", fontSize: 14 }}>Todavía no hay movimientos.</p>
         )}
       </div>

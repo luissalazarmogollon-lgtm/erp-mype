@@ -27,12 +27,23 @@ const LEGS = [
 // bancario de ingreso y suma el saldo de esa cuenta. Es idempotente: si un
 // método ya estaba conciliado, no se vuelve a procesar (evita duplicar el
 // ingreso si se envía el formulario dos veces).
+//
+// Reservado a superadmin: es una acción sensible (mueve saldos reales de
+// cuentas bancarias), así que requiere autorización del dueño de la
+// plataforma, sin importar qué permisos tenga el usuario en esta empresa.
 export async function POST(
   request: Request,
   { params }: { params: { id: string; registroId: string } }
 ) {
   const usuarioActual = await getUsuarioActual();
   if (!usuarioActual) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  if (!usuarioActual.esSuperadminPlataforma) {
+    return NextResponse.json(
+      { error: "Solo el superadmin puede actualizar el flujo de caja desde una venta diaria" },
+      { status: 403 }
+    );
+  }
 
   const empresaId = BigInt(params.id);
   try {

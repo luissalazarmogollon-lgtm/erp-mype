@@ -31,10 +31,20 @@ export async function POST(
   if (!usuarioActual) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
   const empresaId = BigInt(params.id);
+  let acceso: Awaited<ReturnType<typeof verificarAccesoEmpresa>>;
   try {
-    await verificarAccesoEmpresa(usuarioActual.id, empresaId, "gastos");
+    acceso = await verificarAccesoEmpresa(usuarioActual.id, empresaId, "gastos");
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 403 });
+  }
+
+  // Solo el superadmin o un Asesor pueden clasificar y trasladar — ni
+  // siquiera un Asistente, aunque tenga el permiso "gastos" asignado.
+  if (acceso.tipoActor !== "superadmin" && acceso.tipoActor !== "asesor") {
+    return NextResponse.json(
+      { error: "Solo el superadmin o un Asesor pueden clasificar y trasladar gastos de caja chica" },
+      { status: 403 }
+    );
   }
 
   const body = await request.json();
@@ -62,6 +72,7 @@ export async function POST(
         proveedorNombre: datos.proveedorNombre || null,
         descripcion: `[Caja chica] ${gastoCC.descripcion}`,
         tipoComprobante: gastoCC.tipoComprobante,
+        numeroComprobante: gastoCC.numeroComprobante,
         montoTotal: gastoCC.monto,
         fecha: gastoCC.fecha,
         condicion: "contado",

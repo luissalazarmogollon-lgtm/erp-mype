@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { NATURALEZAS_EGRESO, CATEGORIAS_POR_NATURALEZA } from "@/lib/naturalezaEgreso";
+import { TIPOS_COMPROBANTE } from "@/lib/tiposComprobante";
 
 type Gasto = {
   id: string;
@@ -11,6 +12,8 @@ type Gasto = {
   categoriaEspecifica: string | null;
   proveedorNombre: string | null;
   descripcion: string;
+  tipoComprobante: string;
+  numeroComprobante: string | null;
   montoTotal: string;
   fecha: string;
   condicion: string;
@@ -22,14 +25,6 @@ type LocalOpcion = { id: string; nombre: string };
 function hoyISO() {
   return new Date().toISOString().slice(0, 10);
 }
-
-const TIPOS_COMPROBANTE = [
-  { value: "boleta", label: "Boleta" },
-  { value: "factura", label: "Factura" },
-  { value: "recibo_honorarios", label: "Recibo por honorarios" },
-  { value: "ticket", label: "Ticket" },
-  { value: "sin_comprobante", label: "Sin comprobante" },
-];
 
 const naturalezaLabel = (value: string) => NATURALEZAS_EGRESO.find((n) => n.value === value)?.label ?? value;
 
@@ -49,6 +44,7 @@ export default function GastosPage({ params }: { params: { id: string } }) {
     proveedorNombre: "",
     descripcion: "",
     tipoComprobante: "boleta",
+    numeroComprobante: "",
     montoTotal: 0,
     fecha: hoyISO(),
     condicion: "contado",
@@ -187,6 +183,10 @@ export default function GastosPage({ params }: { params: { id: string } }) {
               </select>
             </div>
             <div className="field">
+              <label>N° de comprobante (opcional)</label>
+              <input value={form.numeroComprobante} onChange={(e) => setForm({ ...form, numeroComprobante: e.target.value })} placeholder="Ej: F001-00234" />
+            </div>
+            <div className="field">
               <label>Monto total pagado (S/)</label>
               <input type="number" step="0.01" value={form.montoTotal} onChange={(e) => setForm({ ...form, montoTotal: Number(e.target.value) })} required />
             </div>
@@ -277,6 +277,7 @@ export default function GastosPage({ params }: { params: { id: string } }) {
                 <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
                   {naturalezaLabel(g.naturaleza)}
                   {g.categoriaEspecifica ? ` · ${g.categoriaEspecifica}` : ""}
+                  {g.numeroComprobante ? ` · ${g.numeroComprobante}` : ""}
                   {g.local ? ` · ${g.local}` : ""} · {new Date(g.fecha).toLocaleDateString("es-PE")}
                   {!g.impactaResultados && " · no afecta resultados"}
                 </p>

@@ -88,24 +88,28 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
         )}
       </div>
 
-      <h2 style={{ fontSize: 18, marginBottom: 12 }}>Equipo asignado</h2>
-      {usuarioActual.esSuperadminPlataforma && <InvitarUsuarioForm empresaId={params.id} />}
+      {(acceso.tipoActor === "superadmin" || acceso.tipoActor === "asesor" || acceso.tipoActor === "asistente") && (
+        <>
+          <h2 style={{ fontSize: 18, marginBottom: 12 }}>Equipo asignado</h2>
+          {usuarioActual.esSuperadminPlataforma && <InvitarUsuarioForm empresaId={params.id} />}
 
-      <EquipoAsignado
-        empresaId={params.id}
-        puedeEditar={usuarioActual.esSuperadminPlataforma}
-        equipoInicial={equipo.map((a) => ({
-          asignacionId: a.id.toString(),
-          usuarioId: a.usuario.id,
-          nombres: a.usuario.nombres,
-          apellidos: a.usuario.apellidos,
-          email: a.usuario.email,
-          tipoActor: a.tipoActor,
-          rolOperativo: a.rolOperativo.nombre,
-          accesoTotal: a.accesoTotal,
-          permisos: (a.permisos as unknown as string[] | null) ?? [],
-        }))}
-      />
+          <EquipoAsignado
+            empresaId={params.id}
+            puedeEditar={usuarioActual.esSuperadminPlataforma}
+            equipoInicial={equipo.map((a) => ({
+              asignacionId: a.id.toString(),
+              usuarioId: a.usuario.id,
+              nombres: a.usuario.nombres,
+              apellidos: a.usuario.apellidos,
+              email: a.usuario.email,
+              tipoActor: a.tipoActor,
+              rolOperativo: a.rolOperativo.nombre,
+              accesoTotal: a.accesoTotal,
+              permisos: (a.permisos as unknown as string[] | null) ?? [],
+            }))}
+          />
+        </>
+      )}
     </main>
   );
 }

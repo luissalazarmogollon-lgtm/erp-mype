@@ -3,10 +3,12 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
 import { NATURALEZAS_EGRESO, impactaResultados } from "@/lib/naturalezaEgreso";
+import { TIPOS_COMPROBANTE } from "@/lib/tiposComprobante";
 
 export const dynamic = "force-dynamic";
 
 const NATURALEZAS_VALIDAS = NATURALEZAS_EGRESO.map((n) => n.value) as [string, ...string[]];
+const TIPOS_COMPROBANTE_VALIDOS = TIPOS_COMPROBANTE.map((t) => t.value) as [string, ...string[]];
 
 const registrarGastoSchema = z.object({
   localId: z.string().optional(),
@@ -14,7 +16,8 @@ const registrarGastoSchema = z.object({
   categoriaEspecifica: z.string().optional(),
   proveedorNombre: z.string().optional(),
   descripcion: z.string().min(2, "Describe brevemente el egreso"),
-  tipoComprobante: z.enum(["boleta", "factura", "recibo_honorarios", "ticket", "sin_comprobante"]),
+  tipoComprobante: z.enum(TIPOS_COMPROBANTE_VALIDOS),
+  numeroComprobante: z.string().optional(),
   montoTotal: z.number().positive(),
   fecha: z.string(),
   condicion: z.enum(["contado", "credito"]),
@@ -51,6 +54,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
       proveedorNombre: g.proveedorNombre,
       descripcion: g.descripcion,
       tipoComprobante: g.tipoComprobante,
+      numeroComprobante: g.numeroComprobante,
       montoTotal: g.montoTotal.toString(),
       fecha: g.fecha,
       condicion: g.condicion,
@@ -114,6 +118,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
           proveedorNombre: datos.proveedorNombre || null,
           descripcion: descripcionExtra ? `${datos.descripcion} — ${descripcionExtra}` : datos.descripcion,
           tipoComprobante: datos.tipoComprobante,
+          numeroComprobante: datos.numeroComprobante || null,
           montoTotal: monto,
           fecha: new Date(datos.fecha),
           condicion: datos.condicion,

@@ -2,14 +2,18 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
+import { TIPOS_COMPROBANTE } from "@/lib/tiposComprobante";
 
 export const dynamic = "force-dynamic";
+
+const TIPOS_COMPROBANTE_VALIDOS = TIPOS_COMPROBANTE.map((t) => t.value) as [string, ...string[]];
 
 const registrarGastoSchema = z.object({
   descripcion: z.string().min(2, "Describe brevemente el gasto"),
   monto: z.number().positive(),
   fecha: z.string(), // YYYY-MM-DD
-  tipoComprobante: z.enum(["boleta", "factura", "recibo_honorarios", "ticket", "sin_comprobante"]).default("sin_comprobante"),
+  tipoComprobante: z.enum(TIPOS_COMPROBANTE_VALIDOS).default("sin_comprobante"),
+  numeroComprobante: z.string().optional(),
 });
 
 // GET /api/empresas/[id]/caja-chica/[cajaChicaId]/gastos
@@ -40,6 +44,7 @@ export async function GET(
       monto: g.monto.toString(),
       fecha: g.fecha,
       tipoComprobante: g.tipoComprobante,
+      numeroComprobante: g.numeroComprobante,
       estado: g.estado,
       naturaleza: g.naturaleza,
       categoriaEspecifica: g.categoriaEspecifica,
@@ -89,6 +94,7 @@ export async function POST(
         monto: datos.monto,
         fecha: new Date(datos.fecha),
         tipoComprobante: datos.tipoComprobante,
+        numeroComprobante: datos.numeroComprobante || null,
         usuarioId: usuarioActual.id,
       },
     });
