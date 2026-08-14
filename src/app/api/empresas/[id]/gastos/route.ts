@@ -19,6 +19,7 @@ const registrarGastoSchema = z.object({
   fecha: z.string(),
   condicion: z.enum(["contado", "credito"]),
   medioPago: z.string().optional(),
+  cuentaBancariaId: z.string().optional(),
   fechaVencimiento: z.string().optional(),
   montoInteres: z.number().min(0).default(0),
 });
@@ -36,7 +37,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
   const gastos = await prisma.gasto.findMany({
     where: { empresaId },
-    include: { local: true, cuentaPorPagar: true },
+    include: { local: true, cuentaPorPagar: true, cuentaBancaria: true },
     orderBy: { fecha: "desc" },
     take: 150,
   });
@@ -54,6 +55,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
       fecha: g.fecha,
       condicion: g.condicion,
       medioPago: g.medioPago,
+      cuentaBancaria: g.cuentaBancaria?.bancoNombre ?? null,
       estadoPago: g.cuentaPorPagar?.estado ?? "pagado",
       impactaResultados: impactaResultados(g.naturaleza),
     }))
@@ -65,6 +67,10 @@ export async function GET(request: Request, { params }: { params: { id: string }
 // LOGICA CLAVE: todo egreso se registra por su monto total (lo que
 // realmente salio de caja), pero solo la parte que corresponde a
 // costo/gasto (segun `naturaleza`) impacta el Estado de Resultados.
+//
+// Si es al contado y se indica cuentaBancariaId, se genera automaticamente
+// el movimiento bancario de egreso y se descuenta el saldo de esa cuenta
+// (flujo de caja por cuenta bancaria).
 //
 // Caso especial "pago de deuda": si se otorga un montoInteres > 0, el
 // pago se parte automaticamente en DOS registros: uno de naturaleza
@@ -94,6 +100,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
   }
 
   const localId = datos.localId ? BigInt(datos.localId) : null;
+  const cuentaBancariaId = datos.condicion === "contado" && datos.cuentaBancariaId ? BigInt(datos.cuentaBancariaId) : null;
   const usuarioId = usuarioActual.id;
 
   const gastosCreados = await prisma.$transaction(async (tx) => {
@@ -111,6 +118,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
           fecha: new Date(datos.fecha),
           condicion: datos.condicion,
           medioPago: datos.condicion === "contado" ? datos.medioPago : null,
+          cuentaBancariaId,
           usuarioId,
         },
       });
@@ -125,6 +133,24 @@ export async function POST(request: Request, { params }: { params: { id: string 
             saldoPendiente: monto,
             fechaVencimiento: datos.fechaVencimiento ? new Date(datos.fechaVencimiento) : null,
           },
+        });
+      }
+
+      if (cuentaBancariaId) {
+        await tx.movimientoBancario.create({
+          data: {
+            cuentaBancariaId,
+            tipo: "egreso",
+            monto,
+            concepto: descripcionExtra ? `${datos.descripcion} — ${descripcionExtra}` : datos.descripcion,
+            referenciaTipo: "gasto",
+            referenciaId: nuevoGasto.id,
+            usuarioId,
+          },
+        });
+        await tx.cuentaBancaria.update({
+          where: { id: cuentaBancariaId },
+          data: { saldoActual: { decrement: monto } },
         });
       }
 

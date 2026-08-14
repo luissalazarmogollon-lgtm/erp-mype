@@ -12,6 +12,8 @@ export const MODULOS_DISPONIBLES = [
   { key: "productos", label: "Gestionar productos y recetas" },
   { key: "insumos", label: "Gestionar insumos" },
   { key: "mermas", label: "Registrar mermas" },
+  { key: "rrhh", label: "Gestionar RRHH (empleados y adelantos de sueldo)" },
+  { key: "flujo_caja", label: "Gestionar flujo de caja y cuentas bancarias" },
 ] as const;
 
 export type ModuloKey = (typeof MODULOS_DISPONIBLES)[number]["key"];

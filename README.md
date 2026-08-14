@@ -205,3 +205,26 @@ Al asignar (o editar) a alguien en una empresa, ahora eliges:
 2. **Corre el SQL de migración en Supabase**: SQL Editor → New query → pega `prisma/permisos_granulares.sql` → Run. Los usuarios que ya tenías asignados quedan con "Acceso total" automáticamente — no pierden nada por esta actualización.
 3. Espera el redeploy automático de Vercel.
 4. Prueba: ve a **Usuarios y accesos**, crea un usuario de prueba, asígnalo a una empresa con "Acceso limitado" marcando solo "Ventas diarias". Inicia sesión con ese usuario (en otra ventana/incógnito) y confirma que solo ve el botón de Ventas diarias en esa empresa, y que si intenta entrar a otra sección le sale "no encontrado" o error de permiso.
+
+---
+
+## RRHH (empleados y adelantos de sueldo) + Flujo de Caja por cuenta bancaria
+
+### Qué se agregó
+
+- **RRHH**: registra trabajadores con sus datos personales, de contrato (cargo, fecha de ingreso, tipo de contrato) y de remuneración (sueldo básico, otros ingresos, cuenta bancaria personal).
+- **Adelantos de sueldo**: registra un anticipo a un trabajador. No es un gasto — es dinero que sale de caja/banco y se descuenta del sueldo más adelante. Puedes marcarlo como "descontado" cuando corresponda.
+- **Cuentas bancarias + Flujo de Caja**: crea tantas cuentas (o "Caja Efectivo") como necesites, con su saldo inicial. El sistema mantiene el saldo de cada una **vivo** — se actualiza solo cada vez que un pago, cobro o adelanto se vincula a ella.
+- **Conexión con lo que ya existía**: al pagar un gasto al contado, al pagar una cuenta por pagar, o al cobrar un crédito (CxC), ahora puedes elegir de/a qué cuenta bancaria corresponde — el sistema genera el movimiento y ajusta el saldo automáticamente. Si no seleccionas cuenta, el registro sigue funcionando igual que antes (no es obligatorio).
+
+### Lo que dejé como simplificación consciente
+
+Las **ventas diarias** (Efectivo/Yape/Plin/Tarjeta) no se conectan automáticamente a una cuenta bancaria — son el total que reporta el POS del cliente, y hacer la conciliación exacta de a qué cuenta bancaria termina entrando cada método de pago es un paso más avanzado (normalmente el banco deposita en lotes, no transacción por transacción) que dejé fuera del alcance por ahora. Si más adelante lo necesitas, se puede agregar.
+
+### Pasos para aplicar
+
+1. **Sube el código a GitHub** — arrastra todos los archivos de este zip (Add file → Upload files), sobrescribiendo lo existente.
+2. **Corre el SQL de migración en Supabase**: SQL Editor → New query → pega `prisma/rrhh_flujo_caja.sql` → Run. Es seguro de re-ejecutar.
+3. Espera el redeploy automático de Vercel.
+4. Prueba: ve a **Flujo de Caja** en una empresa → crea una cuenta ("BCP" o "Caja Efectivo") con un saldo inicial → ve a **RRHH** → registra un trabajador → regístrale un adelanto de sueldo eligiendo esa cuenta → vuelve a Flujo de Caja y confirma que el saldo bajó y aparece el movimiento.
+5. Prueba también: registra un gasto al contado eligiendo esa misma cuenta, y confirma que el saldo se actualiza igual.

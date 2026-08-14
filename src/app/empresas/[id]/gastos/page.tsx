@@ -37,6 +37,7 @@ export default function GastosPage({ params }: { params: { id: string } }) {
   const empresaId = params.id;
   const [gastos, setGastos] = useState<Gasto[]>([]);
   const [locales, setLocales] = useState<LocalOpcion[]>([]);
+  const [cuentasBancarias, setCuentasBancarias] = useState<{ id: string; bancoNombre: string; saldoActual: string }[]>([]);
   const [mostrarForm, setMostrarForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
@@ -52,6 +53,7 @@ export default function GastosPage({ params }: { params: { id: string } }) {
     fecha: hoyISO(),
     condicion: "contado",
     medioPago: "Efectivo",
+    cuentaBancariaId: "",
     fechaVencimiento: "",
     montoInteres: 0,
   });
@@ -63,6 +65,7 @@ export default function GastosPage({ params }: { params: { id: string } }) {
     ]);
     setGastos(resGastos);
     setLocales(resCatalogos.locales ?? []);
+    setCuentasBancarias(resCatalogos.cuentasBancarias ?? []);
   }
 
   useEffect(() => {
@@ -226,15 +229,28 @@ export default function GastosPage({ params }: { params: { id: string } }) {
           </div>
 
           {form.condicion === "contado" ? (
-            <div className="field">
-              <label>Medio de pago</label>
-              <select value={form.medioPago} onChange={(e) => setForm({ ...form, medioPago: e.target.value })}>
-                <option value="Efectivo">Efectivo</option>
-                <option value="Yape/Plin">Yape/Plin</option>
-                <option value="Tarjeta">Tarjeta</option>
-                <option value="Transferencia">Transferencia</option>
-              </select>
-            </div>
+            <>
+              <div className="field">
+                <label>Medio de pago</label>
+                <select value={form.medioPago} onChange={(e) => setForm({ ...form, medioPago: e.target.value })}>
+                  <option value="Efectivo">Efectivo</option>
+                  <option value="Yape/Plin">Yape/Plin</option>
+                  <option value="Tarjeta">Tarjeta</option>
+                  <option value="Transferencia">Transferencia</option>
+                </select>
+              </div>
+              {cuentasBancarias.length > 0 && (
+                <div className="field">
+                  <label>Cuenta de la que salió (opcional, para el flujo de caja)</label>
+                  <select value={form.cuentaBancariaId} onChange={(e) => setForm({ ...form, cuentaBancariaId: e.target.value })}>
+                    <option value="">No registrar en flujo de caja</option>
+                    {cuentasBancarias.map((c) => (
+                      <option key={c.id} value={c.id}>{c.bancoNombre} (S/ {Number(c.saldoActual).toFixed(2)})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </>
           ) : (
             <div className="field">
               <label>Fecha de vencimiento (opcional)</label>

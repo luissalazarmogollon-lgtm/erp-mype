@@ -39,10 +39,12 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
 
   const ACCESOS_DIRECTOS = [
     { modulo: "estado_resultados", href: "estado-resultados", label: "Estado de Resultados", primario: true },
+    { modulo: "flujo_caja", href: "flujo-caja", label: "Flujo de Caja" },
     { modulo: "ventas_diarias", href: "ventas-diarias", label: "Ventas diarias" },
     { modulo: "gastos", href: "gastos", label: "Gastos y Costos" },
     { modulo: "creditos", href: "creditos", label: "Créditos (CxC)" },
     { modulo: "cuentas_por_pagar", href: "cuentas-por-pagar", label: "Cuentas por pagar" },
+    { modulo: "rrhh", href: "rrhh", label: "RRHH" },
     { modulo: "locales", href: "locales", label: "Locales" },
   ];
 

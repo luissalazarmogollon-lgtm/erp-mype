@@ -22,18 +22,22 @@ export default function CreditosPage({ params }: { params: { id: string } }) {
   const [mostrarNuevoCliente, setMostrarNuevoCliente] = useState(false);
   const [cobrando, setCobrando] = useState<string | null>(null);
   const [montoCobro, setMontoCobro] = useState(0);
+  const [cuentaCobro, setCuentaCobro] = useState("");
+  const [cuentasBancarias, setCuentasBancarias] = useState<{ id: string; bancoNombre: string; saldoActual: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const [form, setForm] = useState({ clienteId: "", montoTotal: 0, descripcion: "" });
   const [nuevoCliente, setNuevoCliente] = useState({ nombre: "", telefono: "" });
 
   async function cargar() {
-    const [resCxc, resClientes] = await Promise.all([
+    const [resCxc, resClientes, resCatalogos] = await Promise.all([
       fetch(`/api/empresas/${empresaId}/cuentas-por-cobrar`).then((r) => r.json()),
       fetch(`/api/empresas/${empresaId}/clientes`).then((r) => r.json()),
+      fetch(`/api/empresas/${empresaId}/catalogos`).then((r) => r.json()),
     ]);
     setCxcs(resCxc);
     setClientes(resClientes);
+    setCuentasBancarias(resCatalogos.cuentasBancarias ?? []);
   }
 
   useEffect(() => {
@@ -81,7 +85,7 @@ export default function CreditosPage({ params }: { params: { id: string } }) {
     const res = await fetch(`/api/empresas/${empresaId}/cuentas-por-cobrar/${cxcId}/cobro`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ monto: montoCobro }),
+      body: JSON.stringify({ monto: montoCobro, cuentaBancariaId: cuentaCobro || undefined }),
     });
     if (!res.ok) {
       const data = await res.json();
@@ -183,26 +187,40 @@ export default function CreditosPage({ params }: { params: { id: string } }) {
 
             {c.estado !== "pagada" && (
               cobrando === c.id ? (
-                <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center" }}>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={montoCobro}
-                    onChange={(e) => setMontoCobro(Number(e.target.value))}
-                    style={{ flex: 1, padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 2 }}
-                  />
-                  <button className="btn-primary" style={{ padding: "8px 14px", fontSize: 12 }} onClick={() => handleCobro(c.id)}>
-                    Confirmar
-                  </button>
-                  <button className="btn-ghost" style={{ padding: "8px 14px", fontSize: 12 }} onClick={() => setCobrando(null)}>
-                    Cancelar
-                  </button>
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: cuentasBancarias.length > 0 ? 8 : 0 }}>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={montoCobro}
+                      onChange={(e) => setMontoCobro(Number(e.target.value))}
+                      style={{ flex: 1, padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 2 }}
+                    />
+                    <button className="btn-primary" style={{ padding: "8px 14px", fontSize: 12 }} onClick={() => handleCobro(c.id)}>
+                      Confirmar
+                    </button>
+                    <button className="btn-ghost" style={{ padding: "8px 14px", fontSize: 12 }} onClick={() => setCobrando(null)}>
+                      Cancelar
+                    </button>
+                  </div>
+                  {cuentasBancarias.length > 0 && (
+                    <select
+                      value={cuentaCobro}
+                      onChange={(e) => setCuentaCobro(e.target.value)}
+                      style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 2, fontSize: 12 }}
+                    >
+                      <option value="">¿A qué cuenta entra? (opcional, para el flujo de caja)</option>
+                      {cuentasBancarias.map((cb) => (
+                        <option key={cb.id} value={cb.id}>{cb.bancoNombre} (S/ {Number(cb.saldoActual).toFixed(2)})</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               ) : (
                 <button
                   className="btn-ghost"
                   style={{ marginTop: 10, fontSize: 12, padding: "6px 12px" }}
-                  onClick={() => { setCobrando(c.id); setMontoCobro(Number(c.saldoPendiente)); setError(null); }}
+                  onClick={() => { setCobrando(c.id); setMontoCobro(Number(c.saldoPendiente)); setCuentaCobro(""); setError(null); }}
                 >
                   Registrar cobro
                 </button>

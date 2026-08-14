@@ -12,17 +12,24 @@ type Cxp = {
   fechaEmision: string;
   estado: string;
 };
+type CuentaOpcion = { id: string; bancoNombre: string; saldoActual: string };
 
 export default function CuentasPorPagarPage({ params }: { params: { id: string } }) {
   const empresaId = params.id;
   const [cxps, setCxps] = useState<Cxp[]>([]);
+  const [cuentasBancarias, setCuentasBancarias] = useState<CuentaOpcion[]>([]);
   const [pagando, setPagando] = useState<string | null>(null);
   const [montoPago, setMontoPago] = useState(0);
+  const [cuentaPago, setCuentaPago] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   async function cargar() {
-    const data = await fetch(`/api/empresas/${empresaId}/cuentas-por-pagar`).then((r) => r.json());
-    setCxps(data);
+    const [resCxp, resCatalogos] = await Promise.all([
+      fetch(`/api/empresas/${empresaId}/cuentas-por-pagar`).then((r) => r.json()),
+      fetch(`/api/empresas/${empresaId}/catalogos`).then((r) => r.json()),
+    ]);
+    setCxps(resCxp);
+    setCuentasBancarias(resCatalogos.cuentasBancarias ?? []);
   }
 
   useEffect(() => {
@@ -37,7 +44,7 @@ export default function CuentasPorPagarPage({ params }: { params: { id: string }
     const res = await fetch(`/api/empresas/${empresaId}/cuentas-por-pagar/${cxpId}/pago`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ monto: montoPago }),
+      body: JSON.stringify({ monto: montoPago, cuentaBancariaId: cuentaPago || undefined }),
     });
     if (!res.ok) {
       const data = await res.json();
@@ -63,6 +70,7 @@ export default function CuentasPorPagarPage({ params }: { params: { id: string }
       </p>
       <p style={{ color: "var(--ink-soft)", fontSize: 13, marginBottom: 20 }}>
         Estas cuentas se generan automáticamente al registrar un gasto "al crédito" en la pantalla de Gastos y Costos.
+        Puedes pagarlas de una sola vez o en varios abonos.
       </p>
 
       {cxps.length === 0 ? (
@@ -91,26 +99,40 @@ export default function CuentasPorPagarPage({ params }: { params: { id: string }
 
               {c.estado !== "pagada" && (
                 pagando === c.id ? (
-                  <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center" }}>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={montoPago}
-                      onChange={(e) => setMontoPago(Number(e.target.value))}
-                      style={{ flex: 1, padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 2 }}
-                    />
-                    <button className="btn-primary" style={{ padding: "8px 14px", fontSize: 12 }} onClick={() => handlePago(c.id)}>
-                      Confirmar
-                    </button>
-                    <button className="btn-ghost" style={{ padding: "8px 14px", fontSize: 12 }} onClick={() => setPagando(null)}>
-                      Cancelar
-                    </button>
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: cuentasBancarias.length > 0 ? 8 : 0 }}>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={montoPago}
+                        onChange={(e) => setMontoPago(Number(e.target.value))}
+                        style={{ flex: 1, padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 2 }}
+                      />
+                      <button className="btn-primary" style={{ padding: "8px 14px", fontSize: 12 }} onClick={() => handlePago(c.id)}>
+                        Confirmar
+                      </button>
+                      <button className="btn-ghost" style={{ padding: "8px 14px", fontSize: 12 }} onClick={() => setPagando(null)}>
+                        Cancelar
+                      </button>
+                    </div>
+                    {cuentasBancarias.length > 0 && (
+                      <select
+                        value={cuentaPago}
+                        onChange={(e) => setCuentaPago(e.target.value)}
+                        style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 2, fontSize: 12 }}
+                      >
+                        <option value="">¿De qué cuenta sale? (opcional, para el flujo de caja)</option>
+                        {cuentasBancarias.map((cb) => (
+                          <option key={cb.id} value={cb.id}>{cb.bancoNombre} (S/ {Number(cb.saldoActual).toFixed(2)})</option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                 ) : (
                   <button
                     className="btn-ghost"
                     style={{ marginTop: 10, fontSize: 12, padding: "6px 12px" }}
-                    onClick={() => { setPagando(c.id); setMontoPago(Number(c.saldoPendiente)); setError(null); }}
+                    onClick={() => { setPagando(c.id); setMontoPago(Number(c.saldoPendiente)); setCuentaPago(""); setError(null); }}
                   >
                     Registrar pago
                   </button>

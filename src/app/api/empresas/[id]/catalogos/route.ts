@@ -35,6 +35,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
     productos,
     clientes,
     locales,
+    cuentasBancarias,
+    empleados,
   ] = await Promise.all([
     prisma.categoriaInsumo.findMany({ where: { empresaId }, orderBy: { nombre: "asc" } }),
     prisma.categoriaProducto.findMany({ where: { empresaId }, orderBy: { nombre: "asc" } }),
@@ -45,6 +47,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
     prisma.producto.findMany({ where: { empresaId, estado: "activo" }, orderBy: { nombre: "asc" } }),
     prisma.cliente.findMany({ where: { empresaId }, orderBy: { nombre: "asc" } }),
     prisma.local.findMany({ where: { empresaId, estado: "activo" }, orderBy: { nombre: "asc" } }),
+    prisma.cuentaBancaria.findMany({ where: { empresaId, estado: "activo" }, orderBy: { bancoNombre: "asc" } }),
+    prisma.empleado.findMany({ where: { empresaId, estado: "activo" }, orderBy: { nombres: "asc" } }),
   ]);
 
   return NextResponse.json({
@@ -67,5 +71,11 @@ export async function GET(request: Request, { params }: { params: { id: string }
     })),
     clientes: clientes.map((c) => ({ id: c.id.toString(), nombre: c.nombre })),
     locales: locales.map((l) => ({ id: l.id.toString(), nombre: l.nombre })),
+    cuentasBancarias: cuentasBancarias.map((c) => ({
+      id: c.id.toString(),
+      bancoNombre: c.bancoNombre,
+      saldoActual: c.saldoActual.toString(),
+    })),
+    empleados: empleados.map((e) => ({ id: e.id.toString(), nombre: `${e.nombres} ${e.apellidos}` })),
   });
 }
