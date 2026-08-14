@@ -6,6 +6,7 @@ import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
 export const dynamic = "force-dynamic";
 
 const registroSchema = z.object({
+  localId: z.string().optional(),
   fecha: z.string(), // YYYY-MM-DD
   montoEfectivo: z.number().min(0).default(0),
   montoYape: z.number().min(0).default(0),
@@ -28,13 +29,15 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
   const registros = await prisma.registroVentaDiaria.findMany({
     where: { empresaId },
+    include: { local: true },
     orderBy: { fecha: "desc" },
-    take: 60,
+    take: 90,
   });
 
   return NextResponse.json(
     registros.map((r) => ({
       id: r.id.toString(),
+      local: r.local?.nombre ?? null,
       fecha: r.fecha,
       montoEfectivo: r.montoEfectivo.toString(),
       montoYape: r.montoYape.toString(),
@@ -49,8 +52,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
 }
 
 // POST /api/empresas/[id]/ventas-diarias — crea o actualiza (upsert) el
-// resumen del día. Un solo registro por empresa+fecha: si ya existe, se
-// sobreescribe (permite corregir un día sin duplicar filas).
+// resumen del día. Un registro por empresa+fecha+local: si ya existe para
+// esa combinación, se sobreescribe (permite corregir un día sin duplicar).
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   const usuarioActual = await getUsuarioActual();
   if (!usuarioActual) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
@@ -67,8 +70,10 @@ export async function POST(request: Request, { params }: { params: { id: string 
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   const datos = parsed.data;
 
+  const localId = datos.localId ? BigInt(datos.localId) : null;
+
   const registro = await prisma.registroVentaDiaria.upsert({
-    where: { empresaId_fecha: { empresaId, fecha: new Date(datos.fecha) } },
+    where: { empresaId_fecha_localId: { empresaId, fecha: new Date(datos.fecha), localId } },
     update: {
       montoEfectivo: datos.montoEfectivo,
       montoYape: datos.montoYape,
@@ -78,6 +83,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
     },
     create: {
       empresaId,
+      localId,
       fecha: new Date(datos.fecha),
       montoEfectivo: datos.montoEfectivo,
       montoYape: datos.montoYape,

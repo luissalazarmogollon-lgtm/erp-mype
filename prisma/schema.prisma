@@ -127,6 +127,7 @@ model Empresa {
   cuentasPorCobrar       CuentaPorCobrar[]
   gastos                 Gasto[]
   cuentasPorPagar        CuentaPorPagar[]
+  locales                Local[]
 
   @@map("empresas")
 }
@@ -261,6 +262,22 @@ model TipoGasto {
 
   @@unique([empresaId, nombre])
   @@map("tipos_gasto")
+}
+
+// Local / centro de costo — para clientes con más de un punto de venta.
+// Ventas diarias y Gastos pueden asociarse a un local específico; el
+// Estado de Resultados siempre consolida todos los locales de la empresa
+// por defecto (con opción de filtrar por local puntual si se necesita).
+model Local {
+  id                    BigInt   @id @default(autoincrement())
+  empresaId             BigInt   @map("empresa_id")
+  empresa               Empresa  @relation(fields: [empresaId], references: [id])
+  nombre                String
+  estado                String   @default("activo")
+  registrosVentaDiaria  RegistroVentaDiaria[]
+  gastos                Gasto[]
+
+  @@map("locales")
 }
 
 // No viene de plantilla de rubro — set estándar igual para toda empresa
@@ -451,6 +468,8 @@ model RegistroVentaDiaria {
   id             BigInt   @id @default(autoincrement())
   empresaId      BigInt   @map("empresa_id")
   empresa        Empresa  @relation(fields: [empresaId], references: [id])
+  localId        BigInt?  @map("local_id")
+  local          Local?   @relation(fields: [localId], references: [id])
   fecha          DateTime @db.Date
   montoEfectivo  Decimal  @default(0) @map("monto_efectivo") @db.Decimal(12, 2)
   montoYape      Decimal  @default(0) @map("monto_yape") @db.Decimal(12, 2)
@@ -460,7 +479,7 @@ model RegistroVentaDiaria {
   usuarioId      String   @map("usuario_id") @db.Uuid
   fechaRegistro  DateTime @default(now()) @map("fecha_registro")
 
-  @@unique([empresaId, fecha])
+  @@unique([empresaId, fecha, localId])
   @@map("registros_venta_diaria")
 }
 
@@ -499,25 +518,32 @@ model CobroCxc {
 }
 
 // Gastos y costos registrados desde comprobantes recibidos (WhatsApp,
-// físico, etc.). es_costo_directo determina si impacta el Costo de Ventas
-// o el Gasto Operativo del Estado de Resultados (RN-070).
+// físico, etc.). CLAVE: `naturaleza` determina si el egreso impacta el
+// Estado de Resultados (costo/gasto) o no (activo, pago de deuda, retiro
+// de socios) — un egreso de caja no siempre es un gasto contable.
 model Gasto {
-  id               BigInt    @id @default(autoincrement())
-  empresaId        BigInt    @map("empresa_id")
-  empresa          Empresa   @relation(fields: [empresaId], references: [id])
-  categoriaId      BigInt?   @map("categoria_id")
-  categoria        TipoGasto? @relation(fields: [categoriaId], references: [id])
-  proveedorNombre  String?   @map("proveedor_nombre")
-  descripcion      String
-  tipoComprobante  String    @default("sin_comprobante") @map("tipo_comprobante")
-  montoTotal       Decimal   @map("monto_total") @db.Decimal(12, 2)
-  fecha            DateTime  @db.Date
-  esCostoDirecto   Boolean   @default(false) @map("es_costo_directo")
-  condicion        String    // contado | credito
-  medioPago        String?   @map("medio_pago") // solo si condicion = contado
-  usuarioId        String    @map("usuario_id") @db.Uuid
+  id                   BigInt    @id @default(autoincrement())
+  empresaId            BigInt    @map("empresa_id")
+  empresa              Empresa   @relation(fields: [empresaId], references: [id])
+  localId              BigInt?   @map("local_id")
+  local                Local?    @relation(fields: [localId], references: [id])
+  categoriaId          BigInt?   @map("categoria_id")
+  categoria            TipoGasto? @relation(fields: [categoriaId], references: [id])
+  // Naturaleza del egreso — determina el tratamiento contable (ver RN nuevas):
+  // costo_directo | mano_obra_directa | gasto_operativo | gasto_financiero |
+  // gasto_tributario | activo | deuda | retiro_socios | otros
+  naturaleza           String
+  categoriaEspecifica  String?   @map("categoria_especifica")
+  proveedorNombre      String?   @map("proveedor_nombre")
+  descripcion          String
+  tipoComprobante      String    @default("sin_comprobante") @map("tipo_comprobante")
+  montoTotal           Decimal   @map("monto_total") @db.Decimal(12, 2)
+  fecha                DateTime  @db.Date
+  condicion            String    // contado | credito
+  medioPago            String?   @map("medio_pago") // solo si condicion = contado
+  usuarioId            String    @map("usuario_id") @db.Uuid
 
-  cuentaPorPagar   CuentaPorPagar?
+  cuentaPorPagar       CuentaPorPagar?
 
   @@map("gastos")
 }

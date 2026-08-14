@@ -156,3 +156,24 @@ erp-mype/
 │       └── supabase/        # Clientes de autenticación
 └── README.md                 # Este archivo
 ```
+
+---
+
+## Mejoras: Naturaleza del egreso + Locales/Centros de costo
+
+Esto corrige un problema importante de fondo: **no todo egreso de caja es un gasto contable**. Comprar una cocina industrial (S/12,000) sale de caja, pero no es un "gasto operativo" — es un activo. Pagar una cuota de préstamo (S/5,000) también sale de caja, pero solo el interés es gasto; el capital reduce una deuda. El sistema ahora hace esta distinción automáticamente.
+
+### Qué cambió
+
+- **Naturaleza del egreso** (reemplaza la clasificación anterior de "costo directo / gasto"): Costo directo, Mano de obra directa, Gasto operativo, Gasto financiero, Gasto tributario, Activo/Inversión, Pago de deuda, Distribución/retiro de socios, Otros egresos extraordinarios. Solo las primeras 5 y la última afectan el Estado de Resultados — las de Activo, Deuda y Retiro de socios se registran como salida de caja pero **no** reducen la utilidad.
+- **Categoría específica**: una lista corta y curada por cada naturaleza (ej. bajo "Gasto operativo": Alquiler, Servicios básicos, Marketing, Mantenimiento...) — ya no depende del catálogo vacío por rubro, así que el bug de "no me deja poner categoría" queda resuelto de raíz.
+- **Caso especial préstamos**: si registras un pago de deuda y le indicas cuánto de ese monto es interés, el sistema separa automáticamente el registro en dos — capital (no afecta resultados) e interés (sí afecta, como gasto financiero) — sin que tengas que hacer dos registros manuales.
+- **Locales/Centros de costo**: nueva pantalla para crear locales cuando un cliente tiene más de un punto de venta. Ventas diarias y Gastos ahora pueden asociarse a un local específico. El Estado de Resultados consolida todos los locales automáticamente por defecto, con un selector para filtrar por uno en particular si lo necesitas.
+- **Estado de Resultados con estructura contable completa**: Ventas → (−) Costo de Ventas → Utilidad Bruta → (−) Gasto Operativo → Utilidad Operativa → (−) Financiero/Tributario/Otros → Utilidad Neta. Además, un bloque nuevo que responde "¿cuánto dinero salió realmente de la empresa?" (egreso de caja total), distinto de "¿cuánto de eso fue gasto?" — exactamente la distinción que pediste.
+
+### Pasos para aplicar
+
+1. **Sube el código a GitHub** — arrastra todos los archivos de este zip (Add file → Upload files), sobrescribiendo lo existente.
+2. **Corre el SQL de migración en Supabase**: SQL Editor → New query → pega `prisma/mejoras_naturaleza_egreso_locales.sql` → Run. Es seguro de re-ejecutar si algo falla a la mitad.
+3. Espera el redeploy automático de Vercel.
+4. Prueba: ve a **Locales** en una empresa, crea 2 locales de prueba. Ve a **Ventas diarias** y confirma que aparece el selector de local. Ve a **Gastos y Costos**, registra un "Pago de deuda" de S/500 indicando S/50 de interés, y confirma que en el historial aparecen dos registros separados. Finalmente ve a **Estado de Resultados** y confirma que ves la estructura completa (Costo de Ventas, Utilidad Bruta, Utilidad Operativa, Utilidad Neta) más el bloque de egreso de caja.

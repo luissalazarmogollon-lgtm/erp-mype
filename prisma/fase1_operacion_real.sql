@@ -4,7 +4,7 @@
 -- scripts anteriores (sprint1, sprint2, sprint3).
 -- =====================================================================
 
-CREATE TABLE registros_venta_diaria (
+CREATE TABLE IF NOT EXISTS registros_venta_diaria (
   id              BIGSERIAL PRIMARY KEY,
   empresa_id      BIGINT NOT NULL REFERENCES empresas(id),
   fecha           DATE NOT NULL,
@@ -18,7 +18,7 @@ CREATE TABLE registros_venta_diaria (
   UNIQUE (empresa_id, fecha)
 );
 
-CREATE TABLE cuentas_por_cobrar (
+CREATE TABLE IF NOT EXISTS cuentas_por_cobrar (
   id                 BIGSERIAL PRIMARY KEY,
   empresa_id         BIGINT NOT NULL REFERENCES empresas(id),
   cliente_id         BIGINT NOT NULL REFERENCES clientes(id),
@@ -31,7 +31,7 @@ CREATE TABLE cuentas_por_cobrar (
   usuario_id         UUID NOT NULL REFERENCES usuarios(id)
 );
 
-CREATE TABLE cobros_cxc (
+CREATE TABLE IF NOT EXISTS cobros_cxc (
   id          BIGSERIAL PRIMARY KEY,
   cxc_id      BIGINT NOT NULL REFERENCES cuentas_por_cobrar(id),
   monto       NUMERIC(12,2) NOT NULL CHECK (monto > 0),
@@ -40,7 +40,7 @@ CREATE TABLE cobros_cxc (
   usuario_id  UUID NOT NULL REFERENCES usuarios(id)
 );
 
-CREATE TABLE gastos (
+CREATE TABLE IF NOT EXISTS gastos (
   id                BIGSERIAL PRIMARY KEY,
   empresa_id        BIGINT NOT NULL REFERENCES empresas(id),
   categoria_id      BIGINT REFERENCES tipos_gasto(id),
@@ -56,7 +56,7 @@ CREATE TABLE gastos (
   usuario_id        UUID NOT NULL REFERENCES usuarios(id)
 );
 
-CREATE TABLE cuentas_por_pagar (
+CREATE TABLE IF NOT EXISTS cuentas_por_pagar (
   id                 BIGSERIAL PRIMARY KEY,
   empresa_id         BIGINT NOT NULL REFERENCES empresas(id),
   gasto_id           BIGINT NOT NULL UNIQUE REFERENCES gastos(id),
@@ -68,7 +68,7 @@ CREATE TABLE cuentas_por_pagar (
   estado             VARCHAR(10) NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente','vencida','pagada'))
 );
 
-CREATE TABLE pagos_cxp (
+CREATE TABLE IF NOT EXISTS pagos_cxp (
   id          BIGSERIAL PRIMARY KEY,
   cxp_id      BIGINT NOT NULL REFERENCES cuentas_por_pagar(id),
   monto       NUMERIC(12,2) NOT NULL CHECK (monto > 0),

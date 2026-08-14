@@ -29,6 +29,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
     insumos,
     productos,
     clientes,
+    locales,
   ] = await Promise.all([
     prisma.categoriaInsumo.findMany({ where: { empresaId }, orderBy: { nombre: "asc" } }),
     prisma.categoriaProducto.findMany({ where: { empresaId }, orderBy: { nombre: "asc" } }),
@@ -38,6 +39,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
     prisma.insumo.findMany({ where: { empresaId }, orderBy: { nombre: "asc" } }),
     prisma.producto.findMany({ where: { empresaId, estado: "activo" }, orderBy: { nombre: "asc" } }),
     prisma.cliente.findMany({ where: { empresaId }, orderBy: { nombre: "asc" } }),
+    prisma.local.findMany({ where: { empresaId, estado: "activo" }, orderBy: { nombre: "asc" } }),
   ]);
 
   const bigintToStr = <T extends { id: bigint }>(arr: T[]) =>
@@ -62,5 +64,6 @@ export async function GET(request: Request, { params }: { params: { id: string }
       requiereReceta: p.requiereReceta,
     })),
     clientes: clientes.map((c) => ({ id: c.id.toString(), nombre: c.nombre })),
+    locales: locales.map((l) => ({ id: l.id.toString(), nombre: l.nombre })),
   });
 }

@@ -2,20 +2,22 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { NATURALEZAS_EGRESO, CATEGORIAS_POR_NATURALEZA } from "@/lib/naturalezaEgreso";
 
 type Gasto = {
   id: string;
-  categoria: string;
+  local: string | null;
+  naturaleza: string;
+  categoriaEspecifica: string | null;
   proveedorNombre: string | null;
   descripcion: string;
-  tipoComprobante: string;
   montoTotal: string;
   fecha: string;
-  esCostoDirecto: boolean;
   condicion: string;
   estadoPago: string;
+  impactaResultados: boolean;
 };
-type Catalogo = { id: string; nombre: string };
+type LocalOpcion = { id: string; nombre: string };
 
 function hoyISO() {
   return new Date().toISOString().slice(0, 10);
@@ -29,25 +31,29 @@ const TIPOS_COMPROBANTE = [
   { value: "sin_comprobante", label: "Sin comprobante" },
 ];
 
+const naturalezaLabel = (value: string) => NATURALEZAS_EGRESO.find((n) => n.value === value)?.label ?? value;
+
 export default function GastosPage({ params }: { params: { id: string } }) {
   const empresaId = params.id;
   const [gastos, setGastos] = useState<Gasto[]>([]);
-  const [tiposGasto, setTiposGasto] = useState<Catalogo[]>([]);
+  const [locales, setLocales] = useState<LocalOpcion[]>([]);
   const [mostrarForm, setMostrarForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
   const [form, setForm] = useState({
-    categoriaId: "",
+    localId: "",
+    naturaleza: "gasto_operativo",
+    categoriaEspecifica: CATEGORIAS_POR_NATURALEZA.gasto_operativo[0],
     proveedorNombre: "",
     descripcion: "",
     tipoComprobante: "boleta",
     montoTotal: 0,
     fecha: hoyISO(),
-    esCostoDirecto: false,
     condicion: "contado",
     medioPago: "Efectivo",
     fechaVencimiento: "",
+    montoInteres: 0,
   });
 
   async function cargar() {
@@ -56,7 +62,7 @@ export default function GastosPage({ params }: { params: { id: string } }) {
       fetch(`/api/empresas/${empresaId}/catalogos`).then((r) => r.json()),
     ]);
     setGastos(resGastos);
-    setTiposGasto(resCatalogos.tiposGasto ?? []);
+    setLocales(resCatalogos.locales ?? []);
   }
 
   useEffect(() => {
@@ -64,8 +70,24 @@ export default function GastosPage({ params }: { params: { id: string } }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [empresaId]);
 
-  const totalCostoDirecto = gastos.filter((g) => g.esCostoDirecto).reduce((acc, g) => acc + Number(g.montoTotal), 0);
-  const totalGastoOperativo = gastos.filter((g) => !g.esCostoDirecto).reduce((acc, g) => acc + Number(g.montoTotal), 0);
+  const categoriasDisponibles = CATEGORIAS_POR_NATURALEZA[form.naturaleza] ?? [];
+
+  function cambiarNaturaleza(naturaleza: string) {
+    setForm({
+      ...form,
+      naturaleza,
+      categoriaEspecifica: CATEGORIAS_POR_NATURALEZA[naturaleza]?.[0] ?? "",
+      montoInteres: 0,
+    });
+  }
+
+  const totalCostoVentas = gastos
+    .filter((g) => g.naturaleza === "costo_directo" || g.naturaleza === "mano_obra_directa")
+    .reduce((acc, g) => acc + Number(g.montoTotal), 0);
+  const totalGastoOperativo = gastos
+    .filter((g) => g.naturaleza === "gasto_operativo")
+    .reduce((acc, g) => acc + Number(g.montoTotal), 0);
+  const totalEgresoCaja = gastos.reduce((acc, g) => acc + Number(g.montoTotal), 0);
 
   async function handleCrear(e: React.FormEvent) {
     e.preventDefault();
@@ -82,11 +104,11 @@ export default function GastosPage({ params }: { params: { id: string } }) {
 
     if (!res.ok) {
       const data = await res.json();
-      setError(data.error?.toString() ?? "No se pudo registrar el gasto.");
+      setError(data.error?.toString() ?? "No se pudo registrar el egreso.");
       return;
     }
 
-    setForm({ ...form, descripcion: "", montoTotal: 0, proveedorNombre: "" });
+    setForm({ ...form, descripcion: "", montoTotal: 0, proveedorNombre: "", montoInteres: 0 });
     setMostrarForm(false);
     cargar();
   }
@@ -101,12 +123,13 @@ export default function GastosPage({ params }: { params: { id: string } }) {
       </p>
       <h1 style={{ fontSize: 26, marginBottom: 6 }}>Gastos y Costos</h1>
       <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 20 }}>
-        Costo directo: S/ {totalCostoDirecto.toFixed(2)} · Gasto operativo: S/ {totalGastoOperativo.toFixed(2)}
+        Costo de ventas: S/ {totalCostoVentas.toFixed(2)} · Gasto operativo: S/ {totalGastoOperativo.toFixed(2)} ·
+        Egreso de caja total: S/ {totalEgresoCaja.toFixed(2)}
       </p>
 
       {!mostrarForm ? (
         <button className="btn-primary" onClick={() => setMostrarForm(true)} style={{ marginBottom: 20 }}>
-          + Registrar gasto/costo
+          + Registrar egreso
         </button>
       ) : (
         <form onSubmit={handleCrear} className="card" style={{ marginBottom: 20 }}>
@@ -121,23 +144,31 @@ export default function GastosPage({ params }: { params: { id: string } }) {
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            {locales.length > 0 && (
+              <div className="field">
+                <label>Local (opcional)</label>
+                <select value={form.localId} onChange={(e) => setForm({ ...form, localId: e.target.value })}>
+                  <option value="">Consolidado (sin local específico)</option>
+                  {locales.map((l) => (
+                    <option key={l.id} value={l.id}>{l.nombre}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="field">
-              <label>Categoría</label>
-              <select value={form.categoriaId} onChange={(e) => setForm({ ...form, categoriaId: e.target.value })}>
-                <option value="">Sin categoría</option>
-                {tiposGasto.map((t) => (
-                  <option key={t.id} value={t.id}>{t.nombre}</option>
+              <label>Naturaleza del egreso</label>
+              <select value={form.naturaleza} onChange={(e) => cambiarNaturaleza(e.target.value)}>
+                {NATURALEZAS_EGRESO.map((n) => (
+                  <option key={n.value} value={n.value}>{n.label}</option>
                 ))}
               </select>
             </div>
             <div className="field">
-              <label>¿Costo directo o gasto operativo?</label>
-              <select
-                value={form.esCostoDirecto ? "costo" : "gasto"}
-                onChange={(e) => setForm({ ...form, esCostoDirecto: e.target.value === "costo" })}
-              >
-                <option value="gasto">Gasto operativo (alquiler, servicios, marketing...)</option>
-                <option value="costo">Costo directo (insumos, materia prima...)</option>
+              <label>Categoría específica</label>
+              <select value={form.categoriaEspecifica} onChange={(e) => setForm({ ...form, categoriaEspecifica: e.target.value })}>
+                {categoriasDisponibles.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
               </select>
             </div>
             <div className="field">
@@ -153,7 +184,7 @@ export default function GastosPage({ params }: { params: { id: string } }) {
               </select>
             </div>
             <div className="field">
-              <label>Monto total (S/)</label>
+              <label>Monto total pagado (S/)</label>
               <input type="number" step="0.01" value={form.montoTotal} onChange={(e) => setForm({ ...form, montoTotal: Number(e.target.value) })} required />
             </div>
             <div className="field">
@@ -161,6 +192,30 @@ export default function GastosPage({ params }: { params: { id: string } }) {
               <input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} required />
             </div>
           </div>
+
+          {form.naturaleza === "deuda" && (
+            <div className="field" style={{ background: "var(--stamp-bg, #f1e2c8)", padding: 12, borderRadius: 2 }}>
+              <label>De ese monto, ¿cuánto es interés? (S/, opcional)</label>
+              <input
+                type="number"
+                step="0.01"
+                value={form.montoInteres}
+                onChange={(e) => setForm({ ...form, montoInteres: Number(e.target.value) })}
+              />
+              <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 6 }}>
+                El capital no afecta el Estado de Resultados; el interés sí, como gasto financiero. El sistema
+                separa esto automáticamente en dos registros.
+              </p>
+            </div>
+          )}
+
+          {form.naturaleza === "activo" && (
+            <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginBottom: 12 }}>
+              Este egreso se registra como salida de caja pero NO impacta el Estado de Resultados — es una compra
+              de activo, no un gasto (su depreciación futura sí impactará, cuando el módulo de Activos Fijos esté
+              disponible).
+            </p>
+          )}
 
           <div className="field">
             <label>¿Cómo se pagó?</label>
@@ -204,7 +259,10 @@ export default function GastosPage({ params }: { params: { id: string } }) {
               <div>
                 <p style={{ fontSize: 14, fontWeight: 500 }}>{g.descripcion}</p>
                 <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
-                  {g.categoria} · {g.esCostoDirecto ? "Costo directo" : "Gasto operativo"} · {new Date(g.fecha).toLocaleDateString("es-PE")}
+                  {naturalezaLabel(g.naturaleza)}
+                  {g.categoriaEspecifica ? ` · ${g.categoriaEspecifica}` : ""}
+                  {g.local ? ` · ${g.local}` : ""} · {new Date(g.fecha).toLocaleDateString("es-PE")}
+                  {!g.impactaResultados && " · no afecta resultados"}
                 </p>
               </div>
               <div style={{ textAlign: "right" }}>

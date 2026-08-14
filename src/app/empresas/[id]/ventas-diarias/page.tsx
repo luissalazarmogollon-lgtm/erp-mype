@@ -5,6 +5,7 @@ import Link from "next/link";
 
 type Registro = {
   id: string;
+  local: string | null;
   fecha: string;
   montoEfectivo: string;
   montoYape: string;
@@ -13,6 +14,7 @@ type Registro = {
   total: string;
   observacion: string | null;
 };
+type LocalOpcion = { id: string; nombre: string };
 
 function hoyISO() {
   return new Date().toISOString().slice(0, 10);
@@ -21,10 +23,12 @@ function hoyISO() {
 export default function VentasDiariasPage({ params }: { params: { id: string } }) {
   const empresaId = params.id;
   const [registros, setRegistros] = useState<Registro[]>([]);
+  const [locales, setLocales] = useState<LocalOpcion[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
   const [form, setForm] = useState({
+    localId: "",
     fecha: hoyISO(),
     montoEfectivo: 0,
     montoYape: 0,
@@ -34,8 +38,12 @@ export default function VentasDiariasPage({ params }: { params: { id: string } }
   });
 
   async function cargar() {
-    const data = await fetch(`/api/empresas/${empresaId}/ventas-diarias`).then((r) => r.json());
-    setRegistros(data);
+    const [resRegistros, resCatalogos] = await Promise.all([
+      fetch(`/api/empresas/${empresaId}/ventas-diarias`).then((r) => r.json()),
+      fetch(`/api/empresas/${empresaId}/catalogos`).then((r) => r.json()),
+    ]);
+    setRegistros(resRegistros);
+    setLocales(resCatalogos.locales ?? []);
   }
 
   useEffect(() => {
@@ -64,7 +72,7 @@ export default function VentasDiariasPage({ params }: { params: { id: string } }
       return;
     }
 
-    setForm({ fecha: hoyISO(), montoEfectivo: 0, montoYape: 0, montoPlin: 0, montoTarjeta: 0, observacion: "" });
+    setForm({ ...form, montoEfectivo: 0, montoYape: 0, montoPlin: 0, montoTarjeta: 0, observacion: "" });
     cargar();
   }
 
@@ -78,11 +86,31 @@ export default function VentasDiariasPage({ params }: { params: { id: string } }
       </p>
       <h1 style={{ fontSize: 26, marginBottom: 6 }}>Ventas diarias</h1>
       <p style={{ color: "var(--ink-soft)", fontSize: 13, marginBottom: 20 }}>
-        Registra el total que te reporta el punto de venta del cliente, por método de pago. Si ya existe un registro
-        para esa fecha, se actualiza (no se duplica).
+        Registra el total que te reporta el punto de venta del cliente, por método de pago
+        {locales.length > 0 ? " y por local" : ""}. Si ya existe un registro para esa fecha
+        {locales.length > 0 ? " y local" : ""}, se actualiza (no se duplica).
+        {locales.length === 0 && (
+          <>
+            {" "}¿El cliente tiene más de un local?{" "}
+            <Link href={`/empresas/${empresaId}/locales`} style={{ color: "inherit", textDecoration: "underline" }}>
+              Créalos aquí
+            </Link>.
+          </>
+        )}
       </p>
 
       <form onSubmit={handleGuardar} className="card" style={{ marginBottom: 24 }}>
+        {locales.length > 0 && (
+          <div className="field">
+            <label>Local</label>
+            <select value={form.localId} onChange={(e) => setForm({ ...form, localId: e.target.value })}>
+              <option value="">Consolidado (sin local específico)</option>
+              {locales.map((l) => (
+                <option key={l.id} value={l.id}>{l.nombre}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="field">
           <label>Fecha</label>
           <input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} required />
@@ -125,6 +153,7 @@ export default function VentasDiariasPage({ params }: { params: { id: string } }
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <span style={{ fontWeight: 500, fontSize: 14 }}>
                 {new Date(r.fecha).toLocaleDateString("es-PE", { weekday: "short", day: "2-digit", month: "short" })}
+                {r.local && <span className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}> · {r.local}</span>}
               </span>
               <span className="mono" style={{ fontWeight: 500 }}>S/ {Number(r.total).toFixed(2)}</span>
             </div>

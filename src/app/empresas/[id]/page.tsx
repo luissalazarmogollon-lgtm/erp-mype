@@ -94,6 +94,9 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
           <Link href={`/empresas/${params.id}/cuentas-por-pagar`} className="btn-ghost" style={{ textDecoration: "none" }}>
             Cuentas por pagar
           </Link>
+          <Link href={`/empresas/${params.id}/locales`} className="btn-ghost" style={{ textDecoration: "none" }}>
+            Locales
+          </Link>
         </div>
 
         <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginBottom: 8 }}>
