@@ -177,3 +177,31 @@ Esto corrige un problema importante de fondo: **no todo egreso de caja es un gas
 2. **Corre el SQL de migración en Supabase**: SQL Editor → New query → pega `prisma/mejoras_naturaleza_egreso_locales.sql` → Run. Es seguro de re-ejecutar si algo falla a la mitad.
 3. Espera el redeploy automático de Vercel.
 4. Prueba: ve a **Locales** en una empresa, crea 2 locales de prueba. Ve a **Ventas diarias** y confirma que aparece el selector de local. Ve a **Gastos y Costos**, registra un "Pago de deuda" de S/500 indicando S/50 de interés, y confirma que en el historial aparecen dos registros separados. Finalmente ve a **Estado de Resultados** y confirma que ves la estructura completa (Costo de Ventas, Utilidad Bruta, Utilidad Operativa, Utilidad Neta) más el bloque de egreso de caja.
+
+---
+
+## Usuarios y accesos + permisos granulares por módulo (segregación de funciones)
+
+Dos cosas nuevas que trabajan juntas:
+
+### 1. Pantalla global "Usuarios y accesos" (`/usuarios`)
+
+Antes, para asignar a alguien a una empresa había que entrar a esa empresa específica. Ahora hay una pantalla central (botón en el Dashboard, solo visible para superadmin) donde:
+- Creas un usuario **una sola vez** (consultor, asistente, dueño, encargado).
+- Lo asignas a **una o varias empresas**, cada una con su propio nivel de acceso.
+- Puedes **quitarle el acceso** a una empresa puntual sin borrar al usuario.
+
+### 2. Permisos granulares por checkbox (reemplaza la idea de "todo o nada")
+
+Al asignar (o editar) a alguien en una empresa, ahora eliges:
+- **Acceso total** — ve y hace todo en esa empresa (equivalente a como funcionaba antes), o
+- **Acceso limitado** — marcas exactamente qué módulos puede usar: Ventas diarias, Gastos y Costos, Créditos (CxC), Cuentas por pagar, Locales, Estado de Resultados, y los del análisis detallado (Ventas por producto, Productos, Insumos, Mermas).
+
+**Esto no es solo cosmético** — el permiso se verifica de verdad en cada API del sistema. Si alguien no tiene marcado "Gastos y Costos", intentar registrar un gasto (aunque conozca la URL directa) le devuelve "No tienes permiso para acceder a esta sección". Los botones de navegación dentro de cada empresa también se ocultan automáticamente según lo que esa persona puede hacer.
+
+### Pasos para aplicar
+
+1. **Sube el código a GitHub** — arrastra todos los archivos de este zip (Add file → Upload files), sobrescribiendo lo existente.
+2. **Corre el SQL de migración en Supabase**: SQL Editor → New query → pega `prisma/permisos_granulares.sql` → Run. Los usuarios que ya tenías asignados quedan con "Acceso total" automáticamente — no pierden nada por esta actualización.
+3. Espera el redeploy automático de Vercel.
+4. Prueba: ve a **Usuarios y accesos**, crea un usuario de prueba, asígnalo a una empresa con "Acceso limitado" marcando solo "Ventas diarias". Inicia sesión con ese usuario (en otra ventana/incógnito) y confirma que solo ve el botón de Ventas diarias en esa empresa, y que si intenta entrar a otra sección le sale "no encontrado" o error de permiso.

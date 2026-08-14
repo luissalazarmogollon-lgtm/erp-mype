@@ -33,9 +33,12 @@ export default async function DashboardPage() {
       </div>
 
       {usuario.esSuperadminPlataforma && (
-        <div style={{ margin: "24px 0" }}>
+        <div style={{ margin: "24px 0", display: "flex", gap: 10 }}>
           <Link href="/onboarding/empresa" className="btn-primary" style={{ textDecoration: "none" }}>
             + Dar de alta nueva empresa
+          </Link>
+          <Link href="/usuarios" className="btn-ghost" style={{ textDecoration: "none" }}>
+            Usuarios y accesos
           </Link>
         </div>
       )}

@@ -187,6 +187,12 @@ model UsuarioEmpresa {
   tipoActor        String   @map("tipo_actor") // asesor | asistente | cliente
   rolOperativoId   Int      @map("rol_operativo_id")
   rolOperativo     RolOperativo @relation(fields: [rolOperativoId], references: [id])
+  // Acceso granular por módulo (checkboxes), además del rol operativo:
+  // si accesoTotal = true, ve/hace todo en esta empresa (ignora `permisos`).
+  // Si es false, `permisos` es la lista de claves de módulo permitidas
+  // (ver MODULOS_DISPONIBLES en src/lib/permisosModulo.ts).
+  accesoTotal      Boolean  @default(true) @map("acceso_total")
+  permisos         Json?
   estado           String   @default("activo")
   fechaAsignacion  DateTime @default(now()) @map("fecha_asignacion")
 
