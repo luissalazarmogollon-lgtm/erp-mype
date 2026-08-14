@@ -123,6 +123,10 @@ model Empresa {
   ventas                 Venta[]
   movimientosInventario  MovimientoInventario[]
   mermas                 Merma[]
+  registrosVentaDiaria   RegistroVentaDiaria[]
+  cuentasPorCobrar       CuentaPorCobrar[]
+  gastos                 Gasto[]
+  cuentasPorPagar        CuentaPorPagar[]
 
   @@map("empresas")
 }
@@ -253,6 +257,7 @@ model TipoGasto {
   empresaId  BigInt  @map("empresa_id")
   empresa    Empresa @relation(fields: [empresaId], references: [id])
   nombre     String
+  gastos     Gasto[]
 
   @@unique([empresaId, nombre])
   @@map("tipos_gasto")
@@ -299,6 +304,7 @@ model Cliente {
   limiteCredito     Decimal @default(0) @map("limite_credito") @db.Decimal(12, 2)
 
   ventas            Venta[]
+  cuentasPorCobrar  CuentaPorCobrar[]
 
   @@map("clientes")
 }
@@ -429,4 +435,119 @@ model VentaDetalle {
   subtotal                 Decimal  @db.Decimal(12, 2)
 
   @@map("ventas_detalle")
+}
+
+// ---------------------------------------------------------------------
+// 4. Registro operativo real (lo que definiste como "Fase 1"):
+// ventas diarias agregadas por método de pago, gastos/costos clasificados
+// con generación de CxP, y créditos a clientes con seguimiento de CxC.
+// El "Estado de Resultados en tiempo real" se calcula sumando estas
+// tablas directamente (sin motor contable de partida doble todavía).
+// ---------------------------------------------------------------------
+
+// Resumen diario de ventas reportado por el POS del cliente — no es venta
+// por venta, es el total del día por método de pago.
+model RegistroVentaDiaria {
+  id             BigInt   @id @default(autoincrement())
+  empresaId      BigInt   @map("empresa_id")
+  empresa        Empresa  @relation(fields: [empresaId], references: [id])
+  fecha          DateTime @db.Date
+  montoEfectivo  Decimal  @default(0) @map("monto_efectivo") @db.Decimal(12, 2)
+  montoYape      Decimal  @default(0) @map("monto_yape") @db.Decimal(12, 2)
+  montoPlin      Decimal  @default(0) @map("monto_plin") @db.Decimal(12, 2)
+  montoTarjeta   Decimal  @default(0) @map("monto_tarjeta") @db.Decimal(12, 2)
+  observacion    String?
+  usuarioId      String   @map("usuario_id") @db.Uuid
+  fechaRegistro  DateTime @default(now()) @map("fecha_registro")
+
+  @@unique([empresaId, fecha])
+  @@map("registros_venta_diaria")
+}
+
+// Ventas al crédito por cliente ("fiado") — acumula saldo, se puede
+// marcar como pagado (RN-053 aplicado de forma simplificada, sin
+// vincularse a una venta de punto de venta).
+model CuentaPorCobrar {
+  id               BigInt    @id @default(autoincrement())
+  empresaId        BigInt    @map("empresa_id")
+  empresa          Empresa   @relation(fields: [empresaId], references: [id])
+  clienteId        BigInt    @map("cliente_id")
+  cliente          Cliente   @relation(fields: [clienteId], references: [id])
+  descripcion      String?
+  montoTotal       Decimal   @map("monto_total") @db.Decimal(12, 2)
+  saldoPendiente   Decimal   @map("saldo_pendiente") @db.Decimal(12, 2)
+  fechaEmision     DateTime  @default(now()) @map("fecha_emision")
+  fechaVencimiento DateTime? @map("fecha_vencimiento")
+  estado           String    @default("pendiente") // pendiente | vencida | pagada
+  usuarioId        String    @map("usuario_id") @db.Uuid
+
+  cobros           CobroCxc[]
+
+  @@map("cuentas_por_cobrar")
+}
+
+model CobroCxc {
+  id         BigInt          @id @default(autoincrement())
+  cxcId      BigInt          @map("cxc_id")
+  cxc        CuentaPorCobrar @relation(fields: [cxcId], references: [id])
+  monto      Decimal         @db.Decimal(12, 2)
+  fecha      DateTime        @default(now())
+  medioPago  String?         @map("medio_pago")
+  usuarioId  String          @map("usuario_id") @db.Uuid
+
+  @@map("cobros_cxc")
+}
+
+// Gastos y costos registrados desde comprobantes recibidos (WhatsApp,
+// físico, etc.). es_costo_directo determina si impacta el Costo de Ventas
+// o el Gasto Operativo del Estado de Resultados (RN-070).
+model Gasto {
+  id               BigInt    @id @default(autoincrement())
+  empresaId        BigInt    @map("empresa_id")
+  empresa          Empresa   @relation(fields: [empresaId], references: [id])
+  categoriaId      BigInt?   @map("categoria_id")
+  categoria        TipoGasto? @relation(fields: [categoriaId], references: [id])
+  proveedorNombre  String?   @map("proveedor_nombre")
+  descripcion      String
+  tipoComprobante  String    @default("sin_comprobante") @map("tipo_comprobante")
+  montoTotal       Decimal   @map("monto_total") @db.Decimal(12, 2)
+  fecha            DateTime  @db.Date
+  esCostoDirecto   Boolean   @default(false) @map("es_costo_directo")
+  condicion        String    // contado | credito
+  medioPago        String?   @map("medio_pago") // solo si condicion = contado
+  usuarioId        String    @map("usuario_id") @db.Uuid
+
+  cuentaPorPagar   CuentaPorPagar?
+
+  @@map("gastos")
+}
+
+model CuentaPorPagar {
+  id               BigInt    @id @default(autoincrement())
+  empresaId        BigInt    @map("empresa_id")
+  empresa          Empresa   @relation(fields: [empresaId], references: [id])
+  gastoId          BigInt    @unique @map("gasto_id")
+  gasto            Gasto     @relation(fields: [gastoId], references: [id])
+  proveedorNombre  String?   @map("proveedor_nombre")
+  montoTotal       Decimal   @map("monto_total") @db.Decimal(12, 2)
+  saldoPendiente   Decimal   @map("saldo_pendiente") @db.Decimal(12, 2)
+  fechaEmision     DateTime  @default(now()) @map("fecha_emision")
+  fechaVencimiento DateTime? @map("fecha_vencimiento")
+  estado           String    @default("pendiente") // pendiente | vencida | pagada
+
+  pagos            PagoCxp[]
+
+  @@map("cuentas_por_pagar")
+}
+
+model PagoCxp {
+  id         BigInt         @id @default(autoincrement())
+  cxpId      BigInt         @map("cxp_id")
+  cxp        CuentaPorPagar @relation(fields: [cxpId], references: [id])
+  monto      Decimal        @db.Decimal(12, 2)
+  fecha      DateTime       @default(now())
+  medioPago  String?        @map("medio_pago")
+  usuarioId  String         @map("usuario_id") @db.Uuid
+
+  @@map("pagos_cxp")
 }

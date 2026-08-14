@@ -74,19 +74,45 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 28 }}>
-        <Link href={`/empresas/${params.id}/ventas`} className="btn-primary" style={{ textDecoration: "none" }}>
-          Ventas
-        </Link>
-        <Link href={`/empresas/${params.id}/productos`} className="btn-ghost" style={{ textDecoration: "none" }}>
-          Productos
-        </Link>
-        <Link href={`/empresas/${params.id}/insumos`} className="btn-ghost" style={{ textDecoration: "none" }}>
-          Insumos
-        </Link>
-        <Link href={`/empresas/${params.id}/mermas`} className="btn-ghost" style={{ textDecoration: "none" }}>
-          Mermas
-        </Link>
+      <div style={{ marginBottom: 28 }}>
+        <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginBottom: 8 }}>
+          REGISTRO Y CONTROL FINANCIERO
+        </p>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
+          <Link href={`/empresas/${params.id}/estado-resultados`} className="btn-primary" style={{ textDecoration: "none" }}>
+            Estado de Resultados
+          </Link>
+          <Link href={`/empresas/${params.id}/ventas-diarias`} className="btn-ghost" style={{ textDecoration: "none" }}>
+            Ventas diarias
+          </Link>
+          <Link href={`/empresas/${params.id}/gastos`} className="btn-ghost" style={{ textDecoration: "none" }}>
+            Gastos y Costos
+          </Link>
+          <Link href={`/empresas/${params.id}/creditos`} className="btn-ghost" style={{ textDecoration: "none" }}>
+            Créditos (CxC)
+          </Link>
+          <Link href={`/empresas/${params.id}/cuentas-por-pagar`} className="btn-ghost" style={{ textDecoration: "none" }}>
+            Cuentas por pagar
+          </Link>
+        </div>
+
+        <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginBottom: 8 }}>
+          ANÁLISIS DETALLADO (para más adelante)
+        </p>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Link href={`/empresas/${params.id}/ventas`} className="btn-ghost" style={{ textDecoration: "none" }}>
+            Ventas por producto (POS)
+          </Link>
+          <Link href={`/empresas/${params.id}/productos`} className="btn-ghost" style={{ textDecoration: "none" }}>
+            Productos y Recetas
+          </Link>
+          <Link href={`/empresas/${params.id}/insumos`} className="btn-ghost" style={{ textDecoration: "none" }}>
+            Insumos
+          </Link>
+          <Link href={`/empresas/${params.id}/mermas`} className="btn-ghost" style={{ textDecoration: "none" }}>
+            Mermas
+          </Link>
+        </div>
       </div>
 
       <h2 style={{ fontSize: 18, marginBottom: 12 }}>Equipo asignado</h2>

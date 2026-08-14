@@ -106,6 +106,31 @@ Quedó pendiente desde el principio si el sistema debía **bloquear** o solo **a
 6. Ve a **Ventas → Nueva venta** → agrega el producto al carrito → confirma la venta → verifica que el stock del insumo bajó (vuelve a Insumos y revisa).
 7. Prueba **Mermas** con uno de tus insumos y confirma que también descuenta stock.
 
+---
+
+## Fase 1 (operación real) — Ventas diarias, Gastos/Costos, CxC, CxP, Estado de Resultados
+
+Este bloque reemplaza la forma principal en que vas a usar el sistema día a día: **tú registras** (no el cliente) las ventas totales que te reporta el POS del cliente, y los gastos/costos según las facturas que te llegan por WhatsApp — todo alimentando un Estado de Resultados que se recalcula solo, sin necesitar "cerrar el mes".
+
+**El módulo de Ventas por producto con fichas técnicas del Sprint 3 no se eliminó** — queda disponible bajo "Análisis detallado" en el detalle de cada empresa, para cuando quieras calcular la rentabilidad real por plato más adelante.
+
+### Qué se agregó
+
+- **Ventas diarias**: un formulario simple con 4 campos (Efectivo, Yape, Plin, Tarjeta) por fecha — igual a como te reporta el POS del cliente. Si ya existe un registro para esa fecha, lo actualiza en vez de duplicar.
+- **Gastos y Costos**: registro clasificado (categoría + costo directo/gasto operativo + tipo de comprobante). Si lo marcas "al crédito", genera automáticamente su Cuenta por Pagar.
+- **Créditos (CxC)**: registra crédito ("fiado") a un cliente — permite crear el cliente al vuelo si no existe — y marca cobros parciales o totales, actualizando el saldo automáticamente.
+- **Cuentas por pagar**: lista las generadas desde Gastos, con registro de pagos parciales o totales.
+- **Estado de Resultados**: se recalcula en vivo sumando Ventas diarias + Créditos otorgados − Costo directo − Gasto operativo, con selector de rango de fechas (por defecto, el mes en curso).
+
+### Pasos para aplicar
+
+1. **Sube el código a GitHub** — arrastra todos los archivos de este zip (Add file → Upload files), sobrescribiendo lo existente.
+2. **Corre el SQL nuevo en Supabase**: SQL Editor → New query → pega `prisma/fase1_operacion_real.sql` → Run → "Run and enable RLS" si te lo pide.
+3. Espera el redeploy automático de Vercel.
+4. Entra a una empresa → verás dos grupos de botones: **"Registro y control financiero"** (lo nuevo, lo que vas a usar día a día) y **"Análisis detallado"** (lo del Sprint 3, para más adelante).
+5. Prueba: registra un día de ventas → registra un gasto al contado y otro al crédito → ve a Cuentas por pagar y salda el que quedó a crédito → registra un crédito a un cliente nuevo en Créditos (CxC) y luego cóbralo → finalmente entra a **Estado de Resultados** y confirma que todo se refleja correctamente en el cálculo.
+
+
 
 
 ## Estructura del proyecto
