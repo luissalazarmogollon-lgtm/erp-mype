@@ -71,28 +71,38 @@ export async function POST(request: Request, { params }: { params: { id: string 
   const datos = parsed.data;
 
   const localId = datos.localId ? BigInt(datos.localId) : null;
+  const fecha = new Date(datos.fecha);
 
-  const registro = await prisma.registroVentaDiaria.upsert({
-    where: { empresaId_fecha_localId: { empresaId, fecha: new Date(datos.fecha), localId } },
-    update: {
-      montoEfectivo: datos.montoEfectivo,
-      montoYape: datos.montoYape,
-      montoPlin: datos.montoPlin,
-      montoTarjeta: datos.montoTarjeta,
-      observacion: datos.observacion || null,
-    },
-    create: {
-      empresaId,
-      localId,
-      fecha: new Date(datos.fecha),
-      montoEfectivo: datos.montoEfectivo,
-      montoYape: datos.montoYape,
-      montoPlin: datos.montoPlin,
-      montoTarjeta: datos.montoTarjeta,
-      observacion: datos.observacion || null,
-      usuarioId: usuarioActual.id,
-    },
-  });
+  const datosComunes = {
+    montoEfectivo: datos.montoEfectivo,
+    montoYape: datos.montoYape,
+    montoPlin: datos.montoPlin,
+    montoTarjeta: datos.montoTarjeta,
+    observacion: datos.observacion || null,
+  };
+
+  // Prisma no permite usar `null` dentro de una llave compuesta para
+  // upsert (empresaId_fecha_localId), porque en Postgres varios NULL no
+  // se consideran "iguales" entre sí para efectos de unicidad. Por eso,
+  // cuando no hay local (registro "consolidado"), buscamos manualmente
+  // si ya existe un registro para esa fecha y decidimos crear/actualizar.
+  let registro;
+  if (localId === null) {
+    const existente = await prisma.registroVentaDiaria.findFirst({
+      where: { empresaId, fecha, localId: null },
+    });
+    registro = existente
+      ? await prisma.registroVentaDiaria.update({ where: { id: existente.id }, data: datosComunes })
+      : await prisma.registroVentaDiaria.create({
+          data: { empresaId, localId: null, fecha, ...datosComunes, usuarioId: usuarioActual.id },
+        });
+  } else {
+    registro = await prisma.registroVentaDiaria.upsert({
+      where: { empresaId_fecha_localId: { empresaId, fecha, localId } },
+      update: datosComunes,
+      create: { empresaId, localId, fecha, ...datosComunes, usuarioId: usuarioActual.id },
+    });
+  }
 
   await prisma.auditoria.create({
     data: {
