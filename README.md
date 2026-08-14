@@ -376,3 +376,17 @@ No hay SQL nuevo — solo un cambio de interfaz. Sube el zip completo a GitHub y
 2. **Corre el SQL de migración en Supabase**: SQL Editor → New query → pega `prisma/numero_factura_cxc.sql` → Run.
 3. Espera el redeploy automático de Vercel.
 4. Prueba: crea un cliente nuevo con RUC → registra un crédito con número de factura → cóbralo eligiendo "Yape" como medio de pago y una cuenta bancaria → confirma que el saldo de esa cuenta sube en Flujo de Caja.
+
+---
+
+## Gastos y Costos: listado agrupado por Naturaleza del egreso
+
+El listado de Gastos y Costos ya no es una lista plana — ahora es igual que hicimos con Flujo de Caja: cada Naturaleza del egreso (Costo directo, Mano de obra directa, Gasto operativo, Gasto financiero, Gasto tributario, Activo/Inversión, Pago de deuda, Retiro de socios, Otros) es una sección plegable que muestra cuántos egresos tiene y su total, y se despliega al hacer clic para ver el detalle.
+
+No hay SQL nuevo — solo cambio de interfaz.
+
+### Pasos
+
+1. Sube el zip completo a GitHub.
+2. Espera el redeploy de Vercel.
+3. Entra a Gastos y Costos de una empresa con varios egresos y confirma que se ven agrupados por naturaleza, no en una lista larga.

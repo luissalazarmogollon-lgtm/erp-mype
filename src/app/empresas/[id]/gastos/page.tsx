@@ -26,8 +26,6 @@ function hoyISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
-const naturalezaLabel = (value: string) => NATURALEZAS_EGRESO.find((n) => n.value === value)?.label ?? value;
-
 export default function GastosPage({ params }: { params: { id: string } }) {
   const empresaId = params.id;
   const [gastos, setGastos] = useState<Gasto[]>([]);
@@ -36,6 +34,7 @@ export default function GastosPage({ params }: { params: { id: string } }) {
   const [mostrarForm, setMostrarForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const [naturalezasAbiertas, setNaturalezasAbiertas] = useState<Record<string, boolean>>({});
 
   const [form, setForm] = useState({
     localId: "",
@@ -268,29 +267,60 @@ export default function GastosPage({ params }: { params: { id: string } }) {
         </form>
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {gastos.map((g) => (
-          <div key={g.id} className="card" style={{ padding: 14 }}>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <div>
-                <p style={{ fontSize: 14, fontWeight: 500 }}>{g.descripcion}</p>
-                <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
-                  {naturalezaLabel(g.naturaleza)}
-                  {g.categoriaEspecifica ? ` · ${g.categoriaEspecifica}` : ""}
-                  {g.numeroComprobante ? ` · ${g.numeroComprobante}` : ""}
-                  {g.local ? ` · ${g.local}` : ""} · {new Date(g.fecha).toLocaleDateString("es-PE")}
-                  {!g.impactaResultados && " · no afecta resultados"}
-                </p>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <p className="mono" style={{ fontSize: 14 }}>S/ {Number(g.montoTotal).toFixed(2)}</p>
-                <p className="mono" style={{ fontSize: 10, textTransform: "uppercase", color: g.estadoPago === "pendiente" ? "var(--stamp)" : "var(--teal)" }}>
-                  {g.condicion === "credito" ? g.estadoPago : "pagado"}
-                </p>
-              </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {NATURALEZAS_EGRESO.map((n) => {
+          const gastosGrupo = gastos.filter((g) => g.naturaleza === n.value);
+          if (gastosGrupo.length === 0) return null;
+          const totalGrupo = gastosGrupo.reduce((acc, g) => acc + Number(g.montoTotal), 0);
+          const abierto = naturalezasAbiertas[n.value] ?? false;
+          return (
+            <div key={n.value} className="card" style={{ padding: 0, overflow: "hidden" }}>
+              <button
+                onClick={() => setNaturalezasAbiertas({ ...naturalezasAbiertas, [n.value]: !abierto })}
+                style={{
+                  width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
+                  padding: 14, background: "none", border: "none", cursor: "pointer", textAlign: "left",
+                }}
+              >
+                <span style={{ fontSize: 14, fontWeight: 500 }}>
+                  {abierto ? "▾" : "▸"} {n.label}
+                </span>
+                <span className="mono" style={{ fontSize: 12, color: "var(--ink-soft)" }}>
+                  {gastosGrupo.length} egreso{gastosGrupo.length !== 1 ? "s" : ""} · S/ {totalGrupo.toFixed(2)}
+                </span>
+              </button>
+
+              {abierto && (
+                <div style={{ borderTop: "1px solid var(--line)", display: "flex", flexDirection: "column" }}>
+                  {gastosGrupo.map((g) => (
+                    <div key={g.id} style={{ padding: "12px 14px", borderBottom: "1px solid var(--line)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <div>
+                          <p style={{ fontSize: 13.5 }}>{g.descripcion}</p>
+                          <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
+                            {g.categoriaEspecifica ? `${g.categoriaEspecifica}` : ""}
+                            {g.numeroComprobante ? ` · ${g.numeroComprobante}` : ""}
+                            {g.local ? ` · ${g.local}` : ""} · {new Date(g.fecha).toLocaleDateString("es-PE")}
+                            {!g.impactaResultados && " · no afecta resultados"}
+                          </p>
+                        </div>
+                        <div style={{ textAlign: "right" }}>
+                          <p className="mono" style={{ fontSize: 13 }}>S/ {Number(g.montoTotal).toFixed(2)}</p>
+                          <p className="mono" style={{ fontSize: 10, textTransform: "uppercase", color: g.estadoPago === "pendiente" ? "var(--stamp)" : "var(--teal)" }}>
+                            {g.condicion === "credito" ? g.estadoPago : "pagado"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
+        {gastos.length === 0 && (
+          <p style={{ color: "var(--ink-soft)", fontSize: 14 }}>Todavía no hay gastos registrados.</p>
+        )}
       </div>
     </main>
   );
