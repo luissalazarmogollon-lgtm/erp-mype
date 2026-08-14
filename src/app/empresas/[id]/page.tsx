@@ -4,12 +4,11 @@ import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { InvitarUsuarioForm } from "@/components/ui/InvitarUsuarioForm";
 import { EliminarEmpresaButton } from "@/components/ui/EliminarEmpresaButton";
+import { EquipoAsignado } from "@/components/ui/EquipoAsignado";
 
-// Pantalla de detalle de una empresa (HU-02 y verificación visual de RN-011).
-// Por ahora muestra: datos generales, equipo asignado (usuario_empresa) y
-// un resumen de los catálogos clonados desde el rubro. Los módulos
-// operativos (Ventas, Inventario, Caja...) llegan en los próximos sprints
-// como nuevas secciones/pestañas de esta misma pantalla.
+// Pantalla de detalle de una empresa. Muestra los accesos directos al
+// registro y control financiero (lo que se usa día a día) y la gestión
+// del equipo asignado a esta empresa (HU-02).
 export default async function EmpresaDetallePage({ params }: { params: { id: string } }) {
   const usuarioActual = await getUsuarioActual();
   if (!usuarioActual) redirect("/login");
@@ -24,21 +23,15 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
 
   const empresa = await prisma.empresa.findUnique({
     where: { id: empresaId },
-    include: { rubro: true, tipoNegocio: true, modulos: { where: { activo: true } } },
+    include: { rubro: true, tipoNegocio: true },
   });
   if (!empresa) notFound();
 
-  const [equipo, categoriasInsumo, categoriasProducto, tiposGasto, metodosPago] = await Promise.all([
-    prisma.usuarioEmpresa.findMany({
-      where: { empresaId, estado: "activo" },
-      include: { usuario: true, rolOperativo: true },
-      orderBy: { fechaAsignacion: "asc" },
-    }),
-    prisma.categoriaInsumo.findMany({ where: { empresaId } }),
-    prisma.categoriaProducto.findMany({ where: { empresaId } }),
-    prisma.tipoGasto.findMany({ where: { empresaId } }),
-    prisma.metodoPago.findMany({ where: { empresaId } }),
-  ]);
+  const equipo = await prisma.usuarioEmpresa.findMany({
+    where: { empresaId, estado: "activo" },
+    include: { usuario: true, rolOperativo: true },
+    orderBy: { fechaAsignacion: "asc" },
+  });
 
   return (
     <main style={{ maxWidth: 800, margin: "0 auto", padding: "32px 24px" }}>
@@ -59,32 +52,8 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
         {empresa.aplicaIgv ? `IGV ${empresa.tasaIgv}%` : "Sin IGV"}
       </p>
 
-      <div className="card" style={{ marginBottom: 28 }}>
-        <h2 style={{ fontSize: 15, marginBottom: 12 }}>Módulos activos</h2>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {empresa.modulos.map((m) => (
-            <span
-              key={m.id.toString()}
-              className="mono"
-              style={{
-                fontSize: 11,
-                padding: "4px 10px",
-                background: "var(--teal-bg, #dceae6)",
-                color: "var(--teal, #20554e)",
-                borderRadius: 20,
-              }}
-            >
-              {m.modulo}
-            </span>
-          ))}
-        </div>
-      </div>
-
       <div style={{ marginBottom: 28 }}>
-        <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginBottom: 8 }}>
-          REGISTRO Y CONTROL FINANCIERO
-        </p>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <Link href={`/empresas/${params.id}/estado-resultados`} className="btn-primary" style={{ textDecoration: "none" }}>
             Estado de Resultados
           </Link>
@@ -104,109 +73,23 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
             Locales
           </Link>
         </div>
-
-        <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginBottom: 8 }}>
-          ANÁLISIS DETALLADO (para más adelante)
-        </p>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <Link href={`/empresas/${params.id}/ventas`} className="btn-ghost" style={{ textDecoration: "none" }}>
-            Ventas por producto (POS)
-          </Link>
-          <Link href={`/empresas/${params.id}/productos`} className="btn-ghost" style={{ textDecoration: "none" }}>
-            Productos y Recetas
-          </Link>
-          <Link href={`/empresas/${params.id}/insumos`} className="btn-ghost" style={{ textDecoration: "none" }}>
-            Insumos
-          </Link>
-          <Link href={`/empresas/${params.id}/mermas`} className="btn-ghost" style={{ textDecoration: "none" }}>
-            Mermas
-          </Link>
-        </div>
       </div>
 
       <h2 style={{ fontSize: 18, marginBottom: 12 }}>Equipo asignado</h2>
       <InvitarUsuarioForm empresaId={params.id} />
 
-      <div style={{ marginTop: 16, marginBottom: 32 }}>
-        {equipo.length === 0 ? (
-          <p style={{ color: "var(--ink-soft)", fontSize: 14 }}>
-            Todavía no hay nadie asignado a esta empresa además de ti.
-          </p>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 16 }}>
-            {equipo.map((a) => (
-              <div
-                key={a.id.toString()}
-                className="card"
-                style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 14 }}
-              >
-                <div>
-                  <p style={{ fontSize: 14, fontWeight: 500 }}>
-                    {a.usuario.nombres} {a.usuario.apellidos}
-                  </p>
-                  <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
-                    {a.usuario.email}
-                  </p>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <p className="mono" style={{ fontSize: 11, textTransform: "capitalize" }}>
-                    {a.tipoActor}
-                  </p>
-                  <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
-                    {a.rolOperativo.nombre}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <h2 style={{ fontSize: 18, marginBottom: 12 }}>Catálogos (clonados desde el rubro)</h2>
-      <div className="card">
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-          <div>
-            <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginBottom: 6 }}>
-              CATEGORÍAS DE INSUMO
-            </p>
-            {categoriasInsumo.map((c) => (
-              <p key={c.id.toString()} style={{ fontSize: 13 }}>
-                {c.nombre}
-              </p>
-            ))}
-          </div>
-          <div>
-            <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginBottom: 6 }}>
-              CATEGORÍAS DE PRODUCTO
-            </p>
-            {categoriasProducto.map((c) => (
-              <p key={c.id.toString()} style={{ fontSize: 13 }}>
-                {c.nombre}
-              </p>
-            ))}
-          </div>
-          <div>
-            <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginBottom: 6 }}>
-              TIPOS DE GASTO
-            </p>
-            {tiposGasto.map((c) => (
-              <p key={c.id.toString()} style={{ fontSize: 13 }}>
-                {c.nombre}
-              </p>
-            ))}
-          </div>
-          <div>
-            <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginBottom: 6 }}>
-              MÉTODOS DE PAGO
-            </p>
-            {metodosPago.map((c) => (
-              <p key={c.id.toString()} style={{ fontSize: 13 }}>
-                {c.nombre}
-              </p>
-            ))}
-          </div>
-        </div>
-      </div>
+      <EquipoAsignado
+        empresaId={params.id}
+        equipoInicial={equipo.map((a) => ({
+          asignacionId: a.id.toString(),
+          usuarioId: a.usuario.id,
+          nombres: a.usuario.nombres,
+          apellidos: a.usuario.apellidos,
+          email: a.usuario.email,
+          tipoActor: a.tipoActor,
+          rolOperativo: a.rolOperativo.nombre,
+        }))}
+      />
     </main>
   );
 }
