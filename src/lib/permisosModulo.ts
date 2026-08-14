@@ -14,6 +14,7 @@ export const MODULOS_DISPONIBLES = [
   { key: "mermas", label: "Registrar mermas" },
   { key: "rrhh", label: "Gestionar RRHH (empleados y adelantos de sueldo)" },
   { key: "flujo_caja", label: "Gestionar flujo de caja y cuentas bancarias" },
+  { key: "caja_chica", label: "Registrar gastos de caja chica" },
 ] as const;
 
 export type ModuloKey = (typeof MODULOS_DISPONIBLES)[number]["key"];

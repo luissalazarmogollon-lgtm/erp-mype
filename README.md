@@ -228,3 +228,50 @@ Las **ventas diarias** (Efectivo/Yape/Plin/Tarjeta) no se conectan automáticame
 3. Espera el redeploy automático de Vercel.
 4. Prueba: ve a **Flujo de Caja** en una empresa → crea una cuenta ("BCP" o "Caja Efectivo") con un saldo inicial → ve a **RRHH** → registra un trabajador → regístrale un adelanto de sueldo eligiendo esa cuenta → vuelve a Flujo de Caja y confirma que el saldo bajó y aparece el movimiento.
 5. Prueba también: registra un gasto al contado eligiendo esa misma cuenta, y confirma que el saldo se actualiza igual.
+
+---
+
+## Conciliación de ventas con el banco + Caja Chica + Estado de Resultados con EBITDA
+
+### 1. Conciliar ventas diarias con el flujo de caja
+
+En cada registro del historial de **Ventas diarias**, ahora aparece un botón **"Actualizar flujo de caja"** (solo si ya tienes cuentas bancarias creadas) que te deja indicar a qué cuenta entró el Efectivo, el Yape, el Plin y la Tarjeta del día — cada uno puede ir a una cuenta distinta. Al confirmar, se genera el movimiento de ingreso y el saldo de esa cuenta sube automáticamente. Es a prueba de duplicados: un método de pago que ya conciliaste no se vuelve a procesar aunque abras el formulario de nuevo.
+
+**Nota:** dejé afuera la conciliación automática — tú decides manualmente a qué cuenta fue cada monto, porque en la práctica el banco deposita en lotes (no venta por venta) y esa decisión la tienes que tomar tú mirando tu extracto real.
+
+### 2. Caja Chica
+
+Nueva sección completa, pensada para la segregación de funciones que pediste:
+
+- **Crear una caja chica** con un fondo inicial, opcionalmente descontado de una cuenta bancaria (genera el egreso en el Flujo de Caja, pero *no* es un Gasto).
+- **Reponer el fondo** cuando se agota.
+- **Registrar gastos chicos** (quien maneja la caja) — esto reduce el fondo disponible, pero *no aparece en Gastos y Costos todavía*.
+- **Clasificar y trasladar** (el administrador, cuando "cuadra" la caja): recién en este paso eliges la naturaleza del egreso y la categoría específica, y el sistema crea el Gasto real — ahí sí empieza a afectar el Estado de Resultados.
+
+Para que esta separación funcione de verdad, usa el sistema de permisos granulares (pantalla "Usuarios y accesos"): dale a la persona que maneja la caja el permiso **"Registrar gastos de caja chica"** únicamente (sin el permiso "Gastos y Costos"), y al administrador el permiso de "Gastos y Costos" para que pueda clasificar y trasladar.
+
+### 3. Estado de Resultados con EBITDA
+
+La pantalla ahora muestra la estructura completa:
+
+```
+Ventas totales
+(−) Costo de Ventas
+= Utilidad Bruta               (con margen %)
+(−) Gasto Operativo
+= EBITDA                        (con margen %)
+(−) Depreciación y Amortización (en S/ 0.00 hasta que exista Activos Fijos)
+= Utilidad Operativa (EBIT)     (con margen %)
+(−) Gasto Financiero
+= Utilidad Antes de Impuestos (EBT)
+(−) Gasto Tributario
+(−) Otros Egresos
+= Utilidad Neta                 (con margen %)
+```
+
+### Pasos para aplicar
+
+1. **Sube el código a GitHub** — arrastra todos los archivos de este zip (Add file → Upload files), sobrescribiendo lo existente.
+2. **Corre el SQL de migración en Supabase**: SQL Editor → New query → pega `prisma/conciliacion_caja_chica.sql` → Run.
+3. Espera el redeploy automático de Vercel.
+4. Prueba: en Ventas diarias, concilia un registro existente con una cuenta → confirma que el saldo sube en Flujo de Caja. Luego ve a Caja Chica, crea una con fondo desde una cuenta bancaria, registra un gasto chico, y como administrador clasifícalo y traslada — confirma que aparece en Gastos y Costos y en el Estado de Resultados. Finalmente revisa que el Estado de Resultados muestre la línea de EBITDA.

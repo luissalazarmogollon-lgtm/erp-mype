@@ -29,7 +29,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
   const registros = await prisma.registroVentaDiaria.findMany({
     where: { empresaId },
-    include: { local: true },
+    include: { local: true, efectivoCuenta: true, yapeCuenta: true, plinCuenta: true, tarjetaCuenta: true },
     orderBy: { fecha: "desc" },
     take: 90,
   });
@@ -47,6 +47,12 @@ export async function GET(request: Request, { params }: { params: { id: string }
         Number(r.montoEfectivo) + Number(r.montoYape) + Number(r.montoPlin) + Number(r.montoTarjeta)
       ).toFixed(2),
       observacion: r.observacion,
+      conciliacion: {
+        efectivoCuenta: r.efectivoCuenta?.bancoNombre ?? null,
+        yapeCuenta: r.yapeCuenta?.bancoNombre ?? null,
+        plinCuenta: r.plinCuenta?.bancoNombre ?? null,
+        tarjetaCuenta: r.tarjetaCuenta?.bancoNombre ?? null,
+      },
     }))
   );
 }

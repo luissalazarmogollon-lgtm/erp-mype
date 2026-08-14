@@ -131,6 +131,7 @@ model Empresa {
   empleados              Empleado[]
   adelantosSueldo        AdelantoSueldo[]
   cuentasBancarias       CuentaBancaria[]
+  cajasChicas            CajaChica[]
 
   @@map("empresas")
 }
@@ -484,6 +485,16 @@ model RegistroVentaDiaria {
   montoYape      Decimal  @default(0) @map("monto_yape") @db.Decimal(12, 2)
   montoPlin      Decimal  @default(0) @map("monto_plin") @db.Decimal(12, 2)
   montoTarjeta   Decimal  @default(0) @map("monto_tarjeta") @db.Decimal(12, 2)
+  // Conciliación con el flujo de caja: a qué cuenta bancaria entró cada
+  // método de pago. Nulo = todavía no conciliado (no se generó movimiento).
+  efectivoCuentaId  BigInt? @map("efectivo_cuenta_id")
+  efectivoCuenta    CuentaBancaria? @relation("EfectivoCuenta", fields: [efectivoCuentaId], references: [id])
+  yapeCuentaId      BigInt? @map("yape_cuenta_id")
+  yapeCuenta        CuentaBancaria? @relation("YapeCuenta", fields: [yapeCuentaId], references: [id])
+  plinCuentaId      BigInt? @map("plin_cuenta_id")
+  plinCuenta        CuentaBancaria? @relation("PlinCuenta", fields: [plinCuentaId], references: [id])
+  tarjetaCuentaId   BigInt? @map("tarjeta_cuenta_id")
+  tarjetaCuenta     CuentaBancaria? @relation("TarjetaCuenta", fields: [tarjetaCuentaId], references: [id])
   observacion    String?
   usuarioId      String   @map("usuario_id") @db.Uuid
   fechaRegistro  DateTime @default(now()) @map("fecha_registro")
@@ -557,6 +568,7 @@ model Gasto {
   usuarioId            String    @map("usuario_id") @db.Uuid
 
   cuentaPorPagar       CuentaPorPagar?
+  gastoCajaChica       GastoCajaChica?
 
   @@map("gastos")
 }
@@ -656,6 +668,11 @@ model CuentaBancaria {
   gastos        Gasto[]
   pagosCxp      PagoCxp[]
   cobrosCxc     CobroCxc[]
+  ventasEfectivo RegistroVentaDiaria[] @relation("EfectivoCuenta")
+  ventasYape     RegistroVentaDiaria[] @relation("YapeCuenta")
+  ventasPlin     RegistroVentaDiaria[] @relation("PlinCuenta")
+  ventasTarjeta  RegistroVentaDiaria[] @relation("TarjetaCuenta")
+  cajasChicas    CajaChica[]
 
   @@map("cuentas_bancarias")
 }
@@ -673,4 +690,61 @@ model MovimientoBancario {
   usuarioId        String         @map("usuario_id") @db.Uuid
 
   @@map("movimientos_bancarios")
+}
+
+// ---------------------------------------------------------------------
+// 6. Caja Chica — segregación de funciones: quien maneja la caja chica
+// solo registra sus gastos ahí (no toca Gastos y Costos). El administrador,
+// al cuadrarla, clasifica cada gasto y recién ahí lo traslada a Gastos y
+// Costos (donde impacta el Estado de Resultados).
+// ---------------------------------------------------------------------
+
+model CajaChica {
+  id               BigInt   @id @default(autoincrement())
+  empresaId        BigInt   @map("empresa_id")
+  empresa          Empresa  @relation(fields: [empresaId], references: [id])
+  nombre           String
+  cuentaBancariaId BigInt?  @map("cuenta_bancaria_id") // de qué cuenta se nutre el fondo
+  cuentaBancaria   CuentaBancaria? @relation(fields: [cuentaBancariaId], references: [id])
+  montoFondo       Decimal  @default(0) @map("monto_fondo") @db.Decimal(12, 2)
+  estado           String   @default("activo")
+
+  movimientos      MovimientoCajaChica[]
+  gastos           GastoCajaChica[]
+
+  @@map("cajas_chicas")
+}
+
+// Fondeo o reposición de la caja chica — sale de una cuenta bancaria.
+model MovimientoCajaChica {
+  id           BigInt    @id @default(autoincrement())
+  cajaChicaId  BigInt    @map("caja_chica_id")
+  cajaChica    CajaChica @relation(fields: [cajaChicaId], references: [id])
+  tipo         String    // fondo | reposicion
+  monto        Decimal   @db.Decimal(12, 2)
+  fecha        DateTime  @default(now())
+  usuarioId    String    @map("usuario_id") @db.Uuid
+
+  @@map("movimientos_caja_chica")
+}
+
+// Gasto chico registrado por quien maneja la caja (estado "pendiente").
+// El administrador lo clasifica (naturaleza/categoría) y lo traslada a
+// Gastos y Costos — recién ahí se crea el Gasto real y afecta resultados.
+model GastoCajaChica {
+  id                   BigInt    @id @default(autoincrement())
+  cajaChicaId          BigInt    @map("caja_chica_id")
+  cajaChica            CajaChica @relation(fields: [cajaChicaId], references: [id])
+  descripcion          String
+  monto                Decimal   @db.Decimal(10, 2)
+  fecha                DateTime  @db.Date
+  tipoComprobante      String    @default("sin_comprobante") @map("tipo_comprobante")
+  naturaleza           String?   // se define recién al trasladar
+  categoriaEspecifica  String?   @map("categoria_especifica")
+  estado               String    @default("pendiente") // pendiente | trasladado
+  gastoId              BigInt?   @unique @map("gasto_id")
+  gasto                Gasto?    @relation(fields: [gastoId], references: [id])
+  usuarioId            String    @map("usuario_id") @db.Uuid
+
+  @@map("gastos_caja_chica")
 }

@@ -45,6 +45,7 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
     { modulo: "creditos", href: "creditos", label: "Créditos (CxC)" },
     { modulo: "cuentas_por_pagar", href: "cuentas-por-pagar", label: "Cuentas por pagar" },
     { modulo: "rrhh", href: "rrhh", label: "RRHH" },
+    { modulo: "caja_chica", href: "caja-chica", label: "Caja Chica" },
     { modulo: "locales", href: "locales", label: "Locales" },
   ];
 

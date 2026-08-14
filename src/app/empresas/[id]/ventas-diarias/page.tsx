@@ -13,19 +13,36 @@ type Registro = {
   montoTarjeta: string;
   total: string;
   observacion: string | null;
+  conciliacion: {
+    efectivoCuenta: string | null;
+    yapeCuenta: string | null;
+    plinCuenta: string | null;
+    tarjetaCuenta: string | null;
+  };
 };
 type LocalOpcion = { id: string; nombre: string };
+type CuentaOpcion = { id: string; bancoNombre: string };
 
 function hoyISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+const LEGS = [
+  { campo: "efectivoCuentaId" as const, conciliacionCampo: "efectivoCuenta" as const, monto: "montoEfectivo" as const, label: "Efectivo" },
+  { campo: "yapeCuentaId" as const, conciliacionCampo: "yapeCuenta" as const, monto: "montoYape" as const, label: "Yape" },
+  { campo: "plinCuentaId" as const, conciliacionCampo: "plinCuenta" as const, monto: "montoPlin" as const, label: "Plin" },
+  { campo: "tarjetaCuentaId" as const, conciliacionCampo: "tarjetaCuenta" as const, monto: "montoTarjeta" as const, label: "Tarjeta" },
+];
+
 export default function VentasDiariasPage({ params }: { params: { id: string } }) {
   const empresaId = params.id;
   const [registros, setRegistros] = useState<Registro[]>([]);
   const [locales, setLocales] = useState<LocalOpcion[]>([]);
+  const [cuentasBancarias, setCuentasBancarias] = useState<CuentaOpcion[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const [conciliando, setConciliando] = useState<string | null>(null);
+  const [formConciliar, setFormConciliar] = useState<Record<string, string>>({});
 
   const [form, setForm] = useState({
     localId: "",
@@ -44,6 +61,7 @@ export default function VentasDiariasPage({ params }: { params: { id: string } }
     ]);
     setRegistros(resRegistros);
     setLocales(resCatalogos.locales ?? []);
+    setCuentasBancarias(resCatalogos.cuentasBancarias ?? []);
   }
 
   useEffect(() => {
@@ -76,6 +94,23 @@ export default function VentasDiariasPage({ params }: { params: { id: string } }
     cargar();
   }
 
+  async function handleConciliar(registroId: string) {
+    setError(null);
+    const res = await fetch(`/api/empresas/${empresaId}/ventas-diarias/${registroId}/conciliar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(formConciliar),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error?.toString() ?? "No se pudo actualizar el flujo de caja.");
+      return;
+    }
+    setConciliando(null);
+    setFormConciliar({});
+    cargar();
+  }
+
   return (
     <main style={{ maxWidth: 700, margin: "0 auto", padding: "32px 24px" }}>
       <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 6 }}>
@@ -87,16 +122,8 @@ export default function VentasDiariasPage({ params }: { params: { id: string } }
       <h1 style={{ fontSize: 26, marginBottom: 6 }}>Ventas diarias</h1>
       <p style={{ color: "var(--ink-soft)", fontSize: 13, marginBottom: 20 }}>
         Registra el total que te reporta el punto de venta del cliente, por método de pago
-        {locales.length > 0 ? " y por local" : ""}. Si ya existe un registro para esa fecha
-        {locales.length > 0 ? " y local" : ""}, se actualiza (no se duplica).
-        {locales.length === 0 && (
-          <>
-            {" "}¿El cliente tiene más de un local?{" "}
-            <Link href={`/empresas/${empresaId}/locales`} style={{ color: "inherit", textDecoration: "underline" }}>
-              Créalos aquí
-            </Link>.
-          </>
-        )}
+        {locales.length > 0 ? " y por local" : ""}. Después, desde cada registro, puedes indicar a qué cuenta
+        bancaria entró cada método de pago para que se refleje en el Flujo de Caja.
       </p>
 
       <form onSubmit={handleGuardar} className="card" style={{ marginBottom: 24 }}>
@@ -148,20 +175,66 @@ export default function VentasDiariasPage({ params }: { params: { id: string } }
 
       <h2 style={{ fontSize: 16, marginBottom: 12 }}>Historial</h2>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {registros.map((r) => (
-          <div key={r.id} className="card" style={{ padding: 14 }}>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span style={{ fontWeight: 500, fontSize: 14 }}>
-                {new Date(r.fecha).toLocaleDateString("es-PE", { weekday: "short", day: "2-digit", month: "short" })}
-                {r.local && <span className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}> · {r.local}</span>}
-              </span>
-              <span className="mono" style={{ fontWeight: 500 }}>S/ {Number(r.total).toFixed(2)}</span>
+        {registros.map((r) => {
+          const legsPendientes = LEGS.filter(
+            (leg) => Number(r[leg.monto]) > 0 && !r.conciliacion[leg.conciliacionCampo]
+          );
+          return (
+            <div key={r.id} className="card" style={{ padding: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ fontWeight: 500, fontSize: 14 }}>
+                  {new Date(r.fecha).toLocaleDateString("es-PE", { weekday: "short", day: "2-digit", month: "short" })}
+                  {r.local && <span className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}> · {r.local}</span>}
+                </span>
+                <span className="mono" style={{ fontWeight: 500 }}>S/ {Number(r.total).toFixed(2)}</span>
+              </div>
+              <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 4 }}>
+                Efectivo S/{Number(r.montoEfectivo).toFixed(2)}{r.conciliacion.efectivoCuenta ? ` → ${r.conciliacion.efectivoCuenta}` : ""} ·
+                {" "}Yape S/{Number(r.montoYape).toFixed(2)}{r.conciliacion.yapeCuenta ? ` → ${r.conciliacion.yapeCuenta}` : ""} ·
+                {" "}Plin S/{Number(r.montoPlin).toFixed(2)}{r.conciliacion.plinCuenta ? ` → ${r.conciliacion.plinCuenta}` : ""} ·
+                {" "}Tarjeta S/{Number(r.montoTarjeta).toFixed(2)}{r.conciliacion.tarjetaCuenta ? ` → ${r.conciliacion.tarjetaCuenta}` : ""}
+              </p>
+
+              {cuentasBancarias.length > 0 && legsPendientes.length > 0 && (
+                conciliando === r.id ? (
+                  <div style={{ marginTop: 10, borderTop: "1px solid var(--line)", paddingTop: 10 }}>
+                    {legsPendientes.map((leg) => (
+                      <div key={leg.campo} className="field" style={{ marginBottom: 8 }}>
+                        <label>{leg.label} (S/ {Number(r[leg.monto]).toFixed(2)}) entró a:</label>
+                        <select
+                          value={formConciliar[leg.campo] ?? ""}
+                          onChange={(e) => setFormConciliar({ ...formConciliar, [leg.campo]: e.target.value })}
+                        >
+                          <option value="">Sin registrar</option>
+                          {cuentasBancarias.map((c) => (
+                            <option key={c.id} value={c.id}>{c.bancoNombre}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ))}
+                    {error && <p className="field error">{error}</p>}
+                    <div style={{ display: "flex", gap: 10 }}>
+                      <button className="btn-primary" style={{ fontSize: 12, padding: "8px 14px" }} onClick={() => handleConciliar(r.id)}>
+                        Guardar
+                      </button>
+                      <button className="btn-ghost" style={{ fontSize: 12, padding: "8px 14px" }} onClick={() => setConciliando(null)}>
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    className="btn-ghost"
+                    style={{ marginTop: 10, fontSize: 12, padding: "6px 12px" }}
+                    onClick={() => { setConciliando(r.id); setFormConciliar({}); setError(null); }}
+                  >
+                    Actualizar flujo de caja
+                  </button>
+                )
+              )}
             </div>
-            <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 4 }}>
-              Efectivo S/{Number(r.montoEfectivo).toFixed(2)} · Yape S/{Number(r.montoYape).toFixed(2)} · Plin S/{Number(r.montoPlin).toFixed(2)} · Tarjeta S/{Number(r.montoTarjeta).toFixed(2)}
-            </p>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </main>
   );

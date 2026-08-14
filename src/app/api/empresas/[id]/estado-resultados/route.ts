@@ -6,18 +6,26 @@ export const dynamic = "force-dynamic";
 
 // GET /api/empresas/[id]/estado-resultados?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&localId=123
 //
-// Calcula el Estado de Resultados EN VIVO. Consolida automáticamente
-// todos los locales de la empresa salvo que se pase `localId` para ver
-// uno en particular.
+// Estado de Resultados completo, calculado EN VIVO (sin cierre de período):
 //
-// LÓGICA CONTABLE CLAVE (separación egreso de caja vs. impacto en resultado):
-// - costo_directo + mano_obra_directa  → Costo de Ventas
-// - gasto_operativo                    → Gasto Operativo
-// - gasto_financiero                   → Gasto Financiero (incluye intereses de deuda)
-// - gasto_tributario                   → Gasto Tributario
-// - otros                              → Otros Egresos
-// - activo, deuda (capital), retiro_socios → NO afectan el resultado, pero
-//   sí se cuentan en "egresoCajaTotal" (cuánto dinero salió de la empresa).
+//   Ventas totales
+//   (−) Costo de Ventas                    [costo_directo + mano_obra_directa]
+//   = Utilidad Bruta
+//   (−) Gasto Operativo                    [gasto_operativo]
+//   = EBITDA                               (utilidad antes de intereses,
+//                                            impuestos, depreciación y
+//                                            amortización)
+//   (−) Depreciación y Amortización        [0 por ahora — se activa cuando
+//                                            exista el módulo de Activos Fijos]
+//   = Utilidad Operativa (EBIT)
+//   (−) Gasto Financiero                   [gasto_financiero, incluye intereses]
+//   = Utilidad Antes de Impuestos (EBT)
+//   (−) Gasto Tributario                   [gasto_tributario]
+//   (−) Otros Egresos                      [otros]
+//   = Utilidad Neta
+//
+// Aparte, un bloque de "egreso de caja total" (todo lo que salió,
+// incluyendo activo/deuda/retiro de socios, que NO afectan este estado).
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   const usuarioActual = await getUsuarioActual();
   if (!usuarioActual) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
@@ -42,9 +50,6 @@ export async function GET(request: Request, { params }: { params: { id: string }
     prisma.registroVentaDiaria.findMany({
       where: { empresaId, fecha: { gte: desde, lte: hasta }, ...(localId ? { localId } : {}) },
     }),
-    // Los créditos a clientes no tienen local hoy (son por cliente, no por
-    // punto de venta) — se incluyen completos salvo que se filtre por local,
-    // caso en el que se excluyen (no hay forma de saber a qué local pertenecen).
     localId
       ? Promise.resolve([])
       : prisma.cuentaPorCobrar.findMany({ where: { empresaId, fechaEmision: { gte: desde, lte: hasta } } }),
@@ -77,12 +82,16 @@ export async function GET(request: Request, { params }: { params: { id: string }
   const gastoTributario = sumaPorNaturaleza(["gasto_tributario"]);
   const otrosEgresos = sumaPorNaturaleza(["otros"]);
 
-  const utilidadBruta = ventasTotales - costoVentas;
-  const utilidadOperativa = utilidadBruta - gastoOperativo;
-  const utilidadNeta = utilidadOperativa - gastoFinanciero - gastoTributario - otrosEgresos;
+  // Depreciación y amortización: placeholder hasta que exista el módulo
+  // de Activos Fijos con cálculo automático de depreciación mensual.
+  const depreciacionAmortizacion = 0;
 
-  // La pregunta "¿cuánto dinero salió de la empresa?" — TODO egreso de
-  // caja, sin importar si afecta o no el resultado.
+  const utilidadBruta = ventasTotales - costoVentas;
+  const ebitda = utilidadBruta - gastoOperativo;
+  const utilidadOperativa = ebitda - depreciacionAmortizacion; // EBIT
+  const utilidadAntesImpuestos = utilidadOperativa - gastoFinanciero; // EBT
+  const utilidadNeta = utilidadAntesImpuestos - gastoTributario - otrosEgresos;
+
   const egresoCajaTotal = gastos.reduce((acc, g) => acc + Number(g.montoTotal), 0);
   const egresoCajaNoOperativo = sumaPorNaturaleza(["activo", "deuda", "retiro_socios"]);
 
@@ -90,6 +99,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
   for (const g of gastos) {
     detallePorNaturaleza[g.naturaleza] = (detallePorNaturaleza[g.naturaleza] ?? 0) + Number(g.montoTotal);
   }
+
+  const pct = (valor: number) => (ventasTotales > 0 ? (valor / ventasTotales) * 100 : 0);
 
   return NextResponse.json({
     rango: { desde: desde.toISOString().slice(0, 10), hasta: hasta.toISOString().slice(0, 10) },
@@ -100,13 +111,19 @@ export async function GET(request: Request, { params }: { params: { id: string }
     },
     costoVentas,
     utilidadBruta,
+    margenBrutoPct: pct(utilidadBruta),
     gastoOperativo,
+    ebitda,
+    margenEbitdaPct: pct(ebitda),
+    depreciacionAmortizacion,
     utilidadOperativa,
+    margenOperativoPct: pct(utilidadOperativa),
     gastoFinanciero,
+    utilidadAntesImpuestos,
     gastoTributario,
     otrosEgresos,
     utilidadNeta,
-    margenNetoPct: ventasTotales > 0 ? (utilidadNeta / ventasTotales) * 100 : 0,
+    margenNetoPct: pct(utilidadNeta),
     egresoCajaTotal,
     egresoCajaNoOperativo,
     detallePorNaturaleza,

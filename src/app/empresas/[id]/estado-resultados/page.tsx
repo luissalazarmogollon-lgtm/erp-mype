@@ -8,9 +8,15 @@ type EstadoResultados = {
   ventas: { porMetodoPago: { efectivo: number; yape: number; plin: number; tarjeta: number }; creditos: number; total: number };
   costoVentas: number;
   utilidadBruta: number;
+  margenBrutoPct: number;
   gastoOperativo: number;
+  ebitda: number;
+  margenEbitdaPct: number;
+  depreciacionAmortizacion: number;
   utilidadOperativa: number;
+  margenOperativoPct: number;
   gastoFinanciero: number;
+  utilidadAntesImpuestos: number;
   gastoTributario: number;
   otrosEgresos: number;
   utilidadNeta: number;
@@ -28,20 +34,24 @@ function hoyISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function Linea({ label, valor, negativo = false, destacado = false, borde = false }: { label: string; valor: number; negativo?: boolean; destacado?: boolean; borde?: boolean }) {
+function Linea({
+  label, valor, negativo = false, destacado = false, borde = false, sub = false,
+}: { label: string; valor: number; negativo?: boolean; destacado?: boolean; borde?: boolean; sub?: boolean }) {
   return (
     <div
       style={{
         display: "flex",
         justifyContent: "space-between",
-        padding: destacado ? "12px 0" : "8px 0",
-        borderTop: borde ? "2px solid var(--ink)" : "1px solid var(--line)",
+        padding: destacado ? "10px 0" : "7px 0",
+        paddingLeft: sub ? 14 : 0,
+        borderTop: borde ? "2px solid var(--ink)" : sub ? "none" : "1px solid var(--line)",
         fontWeight: destacado ? 600 : 400,
-        fontSize: destacado ? 16 : 14,
+        fontSize: destacado ? 15 : sub ? 12.5 : 13.5,
+        color: sub ? "var(--ink-soft)" : "var(--ink)",
       }}
     >
       <span>{label}</span>
-      <span className="mono" style={{ color: negativo ? "var(--alert)" : destacado ? (valor >= 0 ? "var(--teal)" : "var(--alert)") : "var(--ink)" }}>
+      <span className="mono" style={{ color: negativo ? "var(--alert)" : destacado ? (valor >= 0 ? "var(--teal)" : "var(--alert)") : undefined }}>
         {negativo && valor > 0 ? "− " : ""}S/ {valor.toFixed(2)}
       </span>
     </div>
@@ -90,7 +100,6 @@ export default function EstadoResultadosPage({ params }: { params: { id: string 
       <h1 style={{ fontSize: 26, marginBottom: 6 }}>Estado de Resultados</h1>
       <p style={{ color: "var(--ink-soft)", fontSize: 13, marginBottom: 20 }}>
         Se calcula en tiempo real sumando lo que ya registraste — sin esperar a un cierre de mes.
-        {locales.length > 0 && " Por defecto consolida todos los locales; puedes filtrar por uno específico abajo."}
       </p>
 
       <div className="card" style={{ marginBottom: 20, display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
@@ -132,15 +141,33 @@ export default function EstadoResultadosPage({ params }: { params: { id: string 
 
             <Linea label="(−) Costo de ventas" valor={data.costoVentas} negativo />
             <Linea label="Utilidad bruta" valor={data.utilidadBruta} destacado borde />
+            <Linea label="Margen bruto" valor={data.margenBrutoPct} sub />
 
             <Linea label="(−) Gasto operativo" valor={data.gastoOperativo} negativo />
-            <Linea label="Utilidad operativa" valor={data.utilidadOperativa} destacado borde />
+            <Linea label="EBITDA" valor={data.ebitda} destacado borde />
+            <Linea label="Margen EBITDA" valor={data.margenEbitdaPct} sub />
+
+            <Linea label="(−) Depreciación y amortización" valor={data.depreciacionAmortizacion} negativo />
+            <Linea label="Utilidad operativa (EBIT)" valor={data.utilidadOperativa} destacado borde />
+            <Linea label="Margen operativo" valor={data.margenOperativoPct} sub />
 
             <Linea label="(−) Gasto financiero" valor={data.gastoFinanciero} negativo />
+            <Linea label="Utilidad antes de impuestos (EBT)" valor={data.utilidadAntesImpuestos} destacado borde />
+
             <Linea label="(−) Gasto tributario" valor={data.gastoTributario} negativo />
             <Linea label="(−) Otros egresos" valor={data.otrosEgresos} negativo />
 
-            <Linea label="Utilidad neta" valor={data.utilidadNeta} destacado borde />
+            <div
+              style={{
+                display: "flex", justifyContent: "space-between", padding: "12px 0",
+                borderTop: "2px solid var(--ink)", fontWeight: 600, fontSize: 16,
+              }}
+            >
+              <span>Utilidad neta</span>
+              <span className="mono" style={{ color: data.utilidadNeta >= 0 ? "var(--teal)" : "var(--alert)" }}>
+                S/ {data.utilidadNeta.toFixed(2)}
+              </span>
+            </div>
             <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", textAlign: "right" }}>
               Margen neto: {data.margenNetoPct.toFixed(1)}%
             </p>
@@ -153,8 +180,8 @@ export default function EstadoResultadosPage({ params }: { params: { id: string 
             <Linea label="Egreso de caja total" valor={data.egresoCajaTotal} />
             <Linea label="De lo cual, no afecta el resultado (activos, pago de deuda, retiros)" valor={data.egresoCajaNoOperativo} />
             <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 8 }}>
-              La diferencia entre el egreso de caja total y el gasto que sí afecta el resultado es normal:
-              comprar un activo o pagar el capital de un préstamo consume caja pero no es una pérdida del negocio.
+              La depreciación y amortización todavía está en S/ 0.00 — se activará automáticamente cuando esté
+              listo el módulo de Activos Fijos.
             </p>
           </div>
         </>
