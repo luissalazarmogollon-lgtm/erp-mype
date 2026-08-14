@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { InvitarUsuarioForm } from "@/components/ui/InvitarUsuarioForm";
+import { EliminarEmpresaButton } from "@/components/ui/EliminarEmpresaButton";
 
 // Pantalla de detalle de una empresa (HU-02 y verificación visual de RN-011).
 // Por ahora muestra: datos generales, equipo asignado (usuario_empresa) y
@@ -47,7 +48,12 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
         </Link>{" "}
         → <b>{empresa.nombreComercial}</b>
       </p>
-      <h1 style={{ fontSize: 26, marginBottom: 6 }}>{empresa.nombreComercial}</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <h1 style={{ fontSize: 26, marginBottom: 6 }}>{empresa.nombreComercial}</h1>
+        {usuarioActual.esSuperadminPlataforma && (
+          <EliminarEmpresaButton empresaId={params.id} nombreComercial={empresa.nombreComercial} />
+        )}
+      </div>
       <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 28 }}>
         {empresa.rubro.nombre} · {empresa.tipoNegocio.nombre} · {empresa.monedaOperacion} ·{" "}
         {empresa.aplicaIgv ? `IGV ${empresa.tasaIgv}%` : "Sin IGV"}
