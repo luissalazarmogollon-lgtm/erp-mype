@@ -94,6 +94,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
   }
 
   const localId = datos.localId ? BigInt(datos.localId) : null;
+  const usuarioId = usuarioActual.id;
 
   const gastosCreados = await prisma.$transaction(async (tx) => {
     async function crearGastoConCxp(naturaleza: string, monto: number, descripcionExtra?: string) {
@@ -110,7 +111,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
           fecha: new Date(datos.fecha),
           condicion: datos.condicion,
           medioPago: datos.condicion === "contado" ? datos.medioPago : null,
-          usuarioId: usuarioActual.id,
+          usuarioId,
         },
       });
 
@@ -129,7 +130,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
       await tx.auditoria.create({
         data: {
-          usuarioId: usuarioActual.id,
+          usuarioId,
           empresaId,
           tablaAfectada: "gastos",
           registroId: nuevoGasto.id,
