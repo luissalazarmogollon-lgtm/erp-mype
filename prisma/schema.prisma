@@ -117,6 +117,12 @@ model Empresa {
   tiposGasto             TipoGasto[]
   metodosPago            MetodoPago[]
   conceptosMovimientoCaja ConceptoMovimientoCaja[]
+  clientes               Cliente[]
+  insumos                Insumo[]
+  productos              Producto[]
+  ventas                 Venta[]
+  movimientosInventario  MovimientoInventario[]
+  mermas                 Merma[]
 
   @@map("empresas")
 }
@@ -212,6 +218,7 @@ model CategoriaInsumo {
   empresaId  BigInt  @map("empresa_id")
   empresa    Empresa @relation(fields: [empresaId], references: [id])
   nombre     String
+  insumos    Insumo[]
 
   @@unique([empresaId, nombre])
   @@map("categorias_insumo")
@@ -223,6 +230,8 @@ model UnidadMedida {
   empresa      Empresa @relation(fields: [empresaId], references: [id])
   nombre       String
   abreviatura  String
+  insumos      Insumo[]
+  fichasTecnicas FichaTecnica[]
 
   @@unique([empresaId, nombre])
   @@map("unidades_medida")
@@ -233,6 +242,7 @@ model CategoriaProducto {
   empresaId  BigInt  @map("empresa_id")
   empresa    Empresa @relation(fields: [empresaId], references: [id])
   nombre     String
+  productos  Producto[]
 
   @@unique([empresaId, nombre])
   @@map("categorias_producto")
@@ -255,6 +265,7 @@ model MetodoPago {
   empresaId  BigInt  @map("empresa_id")
   empresa    Empresa @relation(fields: [empresaId], references: [id])
   nombre     String
+  ventas     Venta[]
 
   @@unique([empresaId, nombre])
   @@map("metodos_pago")
@@ -268,4 +279,154 @@ model ConceptoMovimientoCaja {
   tipo       String  // ingreso | egreso
 
   @@map("conceptos_movimiento_caja")
+}
+
+// ---------------------------------------------------------------------
+// 3. Ventas, Inventario y Fichas Técnicas (Sprint 3)
+// Implementa las secciones B y C de la arquitectura, y las reglas
+// RN-020 a RN-042 de reglas_negocio_erp_mype.md.
+// ---------------------------------------------------------------------
+
+model Cliente {
+  id                BigInt  @id @default(autoincrement())
+  empresaId         BigInt  @map("empresa_id")
+  empresa           Empresa @relation(fields: [empresaId], references: [id])
+  nombre            String
+  docIdentidad      String? @map("doc_identidad")
+  telefono          String?
+  tipo              String  @default("consumidor_final") // consumidor_final | frecuente
+  creditoHabilitado Boolean @default(false) @map("credito_habilitado")
+  limiteCredito     Decimal @default(0) @map("limite_credito") @db.Decimal(12, 2)
+
+  ventas            Venta[]
+
+  @@map("clientes")
+}
+
+model Insumo {
+  id                   BigInt   @id @default(autoincrement())
+  empresaId            BigInt   @map("empresa_id")
+  empresa              Empresa  @relation(fields: [empresaId], references: [id])
+  codigo               String?
+  nombre               String
+  categoriaId          BigInt?  @map("categoria_id")
+  categoria            CategoriaInsumo? @relation(fields: [categoriaId], references: [id])
+  unidadMedidaId       BigInt?  @map("unidad_medida_id")
+  unidadMedida         UnidadMedida?    @relation(fields: [unidadMedidaId], references: [id])
+  stockMinimo          Decimal  @default(0) @map("stock_minimo") @db.Decimal(10, 3)
+  stockActual          Decimal  @default(0) @map("stock_actual") @db.Decimal(10, 3)
+  costoPromedioActual  Decimal  @default(0) @map("costo_promedio_actual") @db.Decimal(10, 4)
+
+  fichasTecnicas       FichaTecnica[]
+  movimientos          MovimientoInventario[]
+  mermas               Merma[]
+
+  @@unique([empresaId, codigo])
+  @@map("insumos")
+}
+
+model Producto {
+  id              BigInt   @id @default(autoincrement())
+  empresaId       BigInt   @map("empresa_id")
+  empresa         Empresa  @relation(fields: [empresaId], references: [id])
+  codigo          String?
+  nombre          String
+  categoriaId     BigInt?  @map("categoria_id")
+  categoria       CategoriaProducto? @relation(fields: [categoriaId], references: [id])
+  tipo            String   // producto | servicio
+  precioVenta     Decimal  @map("precio_venta") @db.Decimal(10, 2)
+  requiereReceta  Boolean  @default(false) @map("requiere_receta")
+  estado          String   @default("activo")
+
+  fichaTecnica    FichaTecnica[]
+  ventasDetalle   VentaDetalle[]
+
+  @@unique([empresaId, codigo])
+  @@map("productos")
+}
+
+// La "receta" de un producto: cuánto de cada insumo lleva (RN-020).
+model FichaTecnica {
+  id                  BigInt   @id @default(autoincrement())
+  productoId          BigInt   @map("producto_id")
+  producto            Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  insumoId            BigInt   @map("insumo_id")
+  insumo              Insumo   @relation(fields: [insumoId], references: [id])
+  cantidadRequerida   Decimal  @map("cantidad_requerida") @db.Decimal(10, 4)
+  unidadMedidaId      BigInt?  @map("unidad_medida_id")
+  unidadMedida        UnidadMedida? @relation(fields: [unidadMedidaId], references: [id])
+  mermaEstandarPct    Decimal  @default(0) @map("merma_estandar_pct") @db.Decimal(5, 2)
+
+  @@map("fichas_tecnicas")
+}
+
+model MovimientoInventario {
+  id              BigInt   @id @default(autoincrement())
+  empresaId       BigInt   @map("empresa_id")
+  empresa         Empresa  @relation(fields: [empresaId], references: [id])
+  insumoId        BigInt   @map("insumo_id")
+  insumo          Insumo   @relation(fields: [insumoId], references: [id])
+  tipo            String   // entrada_compra | salida_venta | merma | ajuste_manual
+  cantidad        Decimal  @db.Decimal(10, 3)
+  costoUnitario   Decimal  @map("costo_unitario") @db.Decimal(10, 4)
+  fecha           DateTime @default(now())
+  referenciaTipo  String?  @map("referencia_tipo")
+  referenciaId    BigInt?  @map("referencia_id")
+  usuarioId       String   @map("usuario_id") @db.Uuid
+
+  @@index([insumoId, fecha])
+  @@map("movimientos_inventario")
+}
+
+model Merma {
+  id             BigInt   @id @default(autoincrement())
+  empresaId      BigInt   @map("empresa_id")
+  empresa        Empresa  @relation(fields: [empresaId], references: [id])
+  insumoId       BigInt   @map("insumo_id")
+  insumo         Insumo   @relation(fields: [insumoId], references: [id])
+  cantidad       Decimal  @db.Decimal(10, 3)
+  motivo         String   // vencimiento | desperdicio_preparacion | robo_diferencia | otro
+  costoEstimado  Decimal  @map("costo_estimado") @db.Decimal(12, 2)
+  fecha          DateTime @default(now())
+  usuarioId      String   @map("usuario_id") @db.Uuid
+  observacion    String?
+
+  @@map("mermas")
+}
+
+model Venta {
+  id            BigInt    @id @default(autoincrement())
+  empresaId     BigInt    @map("empresa_id")
+  empresa       Empresa   @relation(fields: [empresaId], references: [id])
+  numero        String
+  fecha         DateTime  @default(now())
+  clienteId     BigInt?   @map("cliente_id")
+  cliente       Cliente?  @relation(fields: [clienteId], references: [id])
+  usuarioId     String    @map("usuario_id") @db.Uuid
+  metodoPagoId  BigInt?   @map("metodo_pago_id")
+  metodoPago    MetodoPago? @relation(fields: [metodoPagoId], references: [id])
+  subtotal      Decimal   @default(0) @db.Decimal(12, 2)
+  descuento     Decimal   @default(0) @db.Decimal(12, 2)
+  igv           Decimal   @default(0) @db.Decimal(12, 2)
+  total         Decimal   @default(0) @db.Decimal(12, 2)
+  estado        String    @default("cobrada") // cobrada | pendiente | anulada
+
+  detalle       VentaDetalle[]
+
+  @@unique([empresaId, numero])
+  @@map("ventas")
+}
+
+model VentaDetalle {
+  id                       BigInt   @id @default(autoincrement())
+  ventaId                  BigInt   @map("venta_id")
+  venta                    Venta    @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  productoId               BigInt   @map("producto_id")
+  producto                 Producto @relation(fields: [productoId], references: [id])
+  cantidad                 Decimal  @db.Decimal(10, 3)
+  precioUnitario           Decimal  @map("precio_unitario") @db.Decimal(10, 2)
+  costoUnitarioCalculado   Decimal  @default(0) @map("costo_unitario_calculado") @db.Decimal(10, 4)
+  subtotal                 Decimal  @db.Decimal(12, 2)
+
+  @@map("ventas_detalle")
 }

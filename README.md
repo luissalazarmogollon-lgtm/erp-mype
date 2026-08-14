@@ -81,6 +81,32 @@ Agregado sobre el Sprint 1:
 4. Entra a tu app, ve a una empresa que ya tenías creada (como "Heladería Dolas") — **como se creó antes de este sprint, no va a tener catálogos clonados** (esa parte del código no existía todavía). Para probar el flujo completo, crea una empresa nueva de prueba y entra a su detalle — ahí sí deberías ver las categorías, tipos de gasto y métodos de pago ya cargados.
 5. Prueba el botón **"+ Asignar persona"** dentro del detalle de una empresa, creando un usuario de prueba tipo "Cliente" con rol "Admin Local".
 
+---
+
+## Sprint 3 — Ventas, Inventario, Fichas Técnicas y Mermas
+
+El módulo más grande hasta ahora — el corazón operativo del sistema. Agregado sobre el Sprint 2:
+
+- **Insumos**: alta de insumos por empresa, con **ajuste manual de stock** (mecanismo temporal: como el módulo de Compras llega recién en el Sprint 4, esta es la única forma de cargar stock inicial por ahora).
+- **Productos con Ficha Técnica**: al crear un producto puedes marcar "requiere receta" y armar su lista de insumos con cantidades — el sistema calcula el costo real del producto en vivo (RN-020).
+- **Ventas**: pantalla tipo punto de venta. Al confirmar una venta: calcula el costo de cada producto según su receta, lo **congela** en el detalle (RN-021, no se recalcula después aunque cambien los costos), **valida stock suficiente y bloquea la venta por defecto si falta** (RN-022 — decisión que tomé por ti, ver nota abajo), descuenta el inventario automáticamente (RN-023), y calcula el IGV según la configuración de la empresa (RN-025).
+- **Mermas**: registro de pérdidas de insumos (vencimiento, desperdicio, robo/diferencia, otro), con su impacto económico calculado automáticamente y visible como total en la parte superior de la pantalla.
+
+### ⚠️ Decisión que tomé por ti (RN-022)
+
+Quedó pendiente desde el principio si el sistema debía **bloquear** o solo **alertar** cuando falta stock para vender un producto. Elegí **bloquear por defecto** (es la opción más segura, evita que el inventario quede en números negativos sin que nadie se dé cuenta), pero dejé una salida: si aparece el error de stock insuficiente al registrar una venta, sale un botón para **"Registrar de todas formas"** — así el cajero no queda trabado en medio de una venta real, pero la decisión de forzarla queda explícita y auditada. Si prefieres que sea al revés (alertar pero no bloquear nunca), dímelo y lo ajustamos.
+
+### Pasos para aplicar el Sprint 3
+
+1. **Sube el código nuevo a GitHub** — arrastra todos los archivos de este zip actualizado (Add file → Upload files), sobrescribiendo lo existente.
+2. **Corre el SQL nuevo en Supabase**: SQL Editor → New query → pega `prisma/sprint3_ventas_inventario.sql` → Run → si sale el aviso de RLS, "Run and enable RLS".
+3. Espera el redeploy automático de Vercel.
+4. Entra a una empresa (mejor una nueva, para probar de cero) → **Insumos** → crea 2-3 insumos → usa "Ajustar stock" para cargarles cantidad inicial y costo.
+5. Ve a **Productos** → crea uno marcando "requiere receta" → arma la receta con los insumos que acabas de cargar → confirma que el costo estimado se calcula solo.
+6. Ve a **Ventas → Nueva venta** → agrega el producto al carrito → confirma la venta → verifica que el stock del insumo bajó (vuelve a Insumos y revisa).
+7. Prueba **Mermas** con uno de tus insumos y confirma que también descuenta stock.
+
+
 
 ## Estructura del proyecto
 

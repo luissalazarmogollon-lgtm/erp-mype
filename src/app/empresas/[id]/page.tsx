@@ -74,6 +74,21 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
         </div>
       </div>
 
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 28 }}>
+        <Link href={`/empresas/${params.id}/ventas`} className="btn-primary" style={{ textDecoration: "none" }}>
+          Ventas
+        </Link>
+        <Link href={`/empresas/${params.id}/productos`} className="btn-ghost" style={{ textDecoration: "none" }}>
+          Productos
+        </Link>
+        <Link href={`/empresas/${params.id}/insumos`} className="btn-ghost" style={{ textDecoration: "none" }}>
+          Insumos
+        </Link>
+        <Link href={`/empresas/${params.id}/mermas`} className="btn-ghost" style={{ textDecoration: "none" }}>
+          Mermas
+        </Link>
+      </div>
+
       <h2 style={{ fontSize: 18, marginBottom: 12 }}>Equipo asignado</h2>
       <InvitarUsuarioForm empresaId={params.id} />
 
