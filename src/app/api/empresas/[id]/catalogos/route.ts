@@ -5,10 +5,15 @@ import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
 export const dynamic = "force-dynamic";
 
 // GET /api/empresas/[id]/catalogos — devuelve en un solo request todos los
-// catálogos que necesitan los formularios de Insumos, Productos y Ventas
-// (categorías, unidades, métodos de pago, y listados livianos de insumos/
-// productos/clientes para selects). Evita que cada pantalla tenga que
-// hacer 5-6 requests separados.
+// catálogos que necesitan los formularios de Insumos, Productos, Ventas,
+// Ventas diarias y Gastos.
+//
+// IMPORTANTE: cada fila de Prisma trae campos BigInt (id, empresaId, y a
+// veces otras llaves foráneas) que NextResponse.json() NO puede serializar
+// directamente — lanza "Do not know how to serialize a BigInt" y la
+// petición completa falla con 500. Por eso aquí NUNCA se hace `{...x}`
+// (spread) sobre una fila de Prisma; siempre se listan explícitamente
+// los campos que se necesitan, ya convertidos a string donde aplica.
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   const usuarioActual = await getUsuarioActual();
   if (!usuarioActual) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
@@ -42,15 +47,12 @@ export async function GET(request: Request, { params }: { params: { id: string }
     prisma.local.findMany({ where: { empresaId, estado: "activo" }, orderBy: { nombre: "asc" } }),
   ]);
 
-  const bigintToStr = <T extends { id: bigint }>(arr: T[]) =>
-    arr.map((x) => ({ ...x, id: x.id.toString() }));
-
   return NextResponse.json({
-    categoriasInsumo: bigintToStr(categoriasInsumo),
-    categoriasProducto: bigintToStr(categoriasProducto),
-    unidadesMedida: bigintToStr(unidadesMedida),
-    tiposGasto: bigintToStr(tiposGasto),
-    metodosPago: bigintToStr(metodosPago),
+    categoriasInsumo: categoriasInsumo.map((c) => ({ id: c.id.toString(), nombre: c.nombre })),
+    categoriasProducto: categoriasProducto.map((c) => ({ id: c.id.toString(), nombre: c.nombre })),
+    unidadesMedida: unidadesMedida.map((u) => ({ id: u.id.toString(), nombre: u.nombre, abreviatura: u.abreviatura })),
+    tiposGasto: tiposGasto.map((t) => ({ id: t.id.toString(), nombre: t.nombre })),
+    metodosPago: metodosPago.map((m) => ({ id: m.id.toString(), nombre: m.nombre })),
     insumos: insumos.map((i) => ({
       id: i.id.toString(),
       nombre: i.nombre,
