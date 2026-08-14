@@ -350,3 +350,11 @@ Si alguien tiene el permiso "Registrar gastos de caja chica" pero no es superadm
 2. **Corre el SQL de migración en Supabase**: SQL Editor → New query → pega `prisma/numero_comprobante.sql` → Run.
 3. Espera el redeploy automático de Vercel.
 4. Prueba: registra un gasto de caja chica con tipo "Boleta" y número "B001-00123" → clasifícalo y traslada → confirma que en Gastos y Costos aparece con ese mismo número.
+
+---
+
+## Caja Chica: crear/reponer fondo restringido a Asesor/superadmin
+
+Los botones **"+ Nueva caja chica"** y **"Reponer fondo"** ya no aparecen para quien solo tiene el permiso "Registrar gastos de caja chica" — esas dos acciones mueven dinero real de una cuenta bancaria, así que quedan reservadas a quien tenga acceso a "Flujo de Caja" (Asesor/superadmin, o cualquiera con acceso total). Antes el botón se veía pero fallaba al hacer clic; ahora directamente no aparece para quien no puede usarlo.
+
+No hay SQL nuevo — solo un cambio de interfaz. Sube el zip completo a GitHub y espera el redeploy.

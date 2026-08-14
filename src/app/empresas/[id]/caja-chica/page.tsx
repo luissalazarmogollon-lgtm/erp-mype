@@ -35,6 +35,7 @@ export default function CajaChicaPage({ params }: { params: { id: string } }) {
   const [clasificando, setClasificando] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [puedeClasificar, setPuedeClasificar] = useState(false);
+  const [puedeGestionarFondos, setPuedeGestionarFondos] = useState(false);
 
   const [formCaja, setFormCaja] = useState({ nombre: "", cuentaBancariaId: "", montoFondo: 0 });
   const [formReponer, setFormReponer] = useState({ monto: 0, cuentaBancariaId: "" });
@@ -50,6 +51,14 @@ export default function CajaChicaPage({ params }: { params: { id: string } }) {
     setCajas(resCajas);
     setCuentasBancarias(resCatalogos.cuentasBancarias ?? []);
     setPuedeClasificar(Boolean(resAcceso.esSuperadminPlataforma) || resAcceso.tipoActor === "asesor");
+    // Crear cajas chicas y reponer fondo mueve dinero real de una cuenta
+    // bancaria — eso es trabajo de asesor/superadmin, no de quien solo
+    // registra los gastos chicos del día a día.
+    setPuedeGestionarFondos(
+      Boolean(resAcceso.esSuperadminPlataforma) ||
+        Boolean(resAcceso.accesoTotal) ||
+        (resAcceso.permisos ?? []).includes("flujo_caja")
+    );
     if (resCajas.length > 0 && !cajaSeleccionada) setCajaSeleccionada(resCajas[0].id);
   }
 
@@ -157,39 +166,41 @@ export default function CajaChicaPage({ params }: { params: { id: string } }) {
         clasifica y los traslada cuando corresponda.
       </p>
 
-      {!mostrarFormCaja ? (
-        <button className="btn-primary" onClick={() => setMostrarFormCaja(true)} style={{ marginBottom: 20 }}>
-          + Nueva caja chica
-        </button>
-      ) : (
-        <form onSubmit={handleCrearCaja} className="card" style={{ marginBottom: 20 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div className="field">
-              <label>Nombre</label>
-              <input value={formCaja.nombre} onChange={(e) => setFormCaja({ ...formCaja, nombre: e.target.value })} placeholder="Ej: Caja Chica Local Centro" required />
-            </div>
-            <div className="field">
-              <label>Fondo inicial (S/)</label>
-              <input type="number" step="0.01" value={formCaja.montoFondo} onChange={(e) => setFormCaja({ ...formCaja, montoFondo: Number(e.target.value) })} />
-            </div>
-            {cuentasBancarias.length > 0 && (
-              <div className="field" style={{ gridColumn: "span 2" }}>
-                <label>¿De qué cuenta sale el fondo? (opcional)</label>
-                <select value={formCaja.cuentaBancariaId} onChange={(e) => setFormCaja({ ...formCaja, cuentaBancariaId: e.target.value })}>
-                  <option value="">No descontar de ninguna cuenta</option>
-                  {cuentasBancarias.map((c) => (
-                    <option key={c.id} value={c.id}>{c.bancoNombre} (S/ {Number(c.saldoActual).toFixed(2)})</option>
-                  ))}
-                </select>
+      {puedeGestionarFondos && (
+        !mostrarFormCaja ? (
+          <button className="btn-primary" onClick={() => setMostrarFormCaja(true)} style={{ marginBottom: 20 }}>
+            + Nueva caja chica
+          </button>
+        ) : (
+          <form onSubmit={handleCrearCaja} className="card" style={{ marginBottom: 20 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div className="field">
+                <label>Nombre</label>
+                <input value={formCaja.nombre} onChange={(e) => setFormCaja({ ...formCaja, nombre: e.target.value })} placeholder="Ej: Caja Chica Local Centro" required />
               </div>
-            )}
-          </div>
-          {error && <p className="field error">{error}</p>}
-          <div style={{ display: "flex", gap: 10 }}>
-            <button type="submit" className="btn-primary">Crear</button>
-            <button type="button" className="btn-ghost" onClick={() => setMostrarFormCaja(false)}>Cancelar</button>
-          </div>
+              <div className="field">
+                <label>Fondo inicial (S/)</label>
+                <input type="number" step="0.01" value={formCaja.montoFondo} onChange={(e) => setFormCaja({ ...formCaja, montoFondo: Number(e.target.value) })} />
+              </div>
+              {cuentasBancarias.length > 0 && (
+                <div className="field" style={{ gridColumn: "span 2" }}>
+                  <label>¿De qué cuenta sale el fondo? (opcional)</label>
+                  <select value={formCaja.cuentaBancariaId} onChange={(e) => setFormCaja({ ...formCaja, cuentaBancariaId: e.target.value })}>
+                    <option value="">No descontar de ninguna cuenta</option>
+                    {cuentasBancarias.map((c) => (
+                      <option key={c.id} value={c.id}>{c.bancoNombre} (S/ {Number(c.saldoActual).toFixed(2)})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+            {error && <p className="field error">{error}</p>}
+            <div style={{ display: "flex", gap: 10 }}>
+              <button type="submit" className="btn-primary">Crear</button>
+              <button type="button" className="btn-ghost" onClick={() => setMostrarFormCaja(false)}>Cancelar</button>
+            </div>
         </form>
+        )
       )}
 
       {cajas.length === 0 ? (
@@ -217,37 +228,39 @@ export default function CajaChicaPage({ params }: { params: { id: string } }) {
                 <p className="mono" style={{ fontSize: 18, fontWeight: 500 }}>S/ {Number(caja.montoFondo).toFixed(2)}</p>
               </div>
 
-              {reponiendo ? (
-                <div style={{ marginTop: 10, borderTop: "1px solid var(--line)", paddingTop: 10 }}>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <input
-                      type="number" step="0.01" placeholder="Monto a reponer"
-                      value={formReponer.monto}
-                      onChange={(e) => setFormReponer({ ...formReponer, monto: Number(e.target.value) })}
-                      style={{ flex: 1, padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 2 }}
-                    />
-                    {cuentasBancarias.length > 0 && (
-                      <select
-                        value={formReponer.cuentaBancariaId}
-                        onChange={(e) => setFormReponer({ ...formReponer, cuentaBancariaId: e.target.value })}
-                        style={{ flex: 1 }}
-                      >
-                        <option value="">Cuenta por defecto</option>
-                        {cuentasBancarias.map((c) => (
-                          <option key={c.id} value={c.id}>{c.bancoNombre}</option>
-                        ))}
-                      </select>
-                    )}
+              {puedeGestionarFondos && (
+                reponiendo ? (
+                  <div style={{ marginTop: 10, borderTop: "1px solid var(--line)", paddingTop: 10 }}>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <input
+                        type="number" step="0.01" placeholder="Monto a reponer"
+                        value={formReponer.monto}
+                        onChange={(e) => setFormReponer({ ...formReponer, monto: Number(e.target.value) })}
+                        style={{ flex: 1, padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 2 }}
+                      />
+                      {cuentasBancarias.length > 0 && (
+                        <select
+                          value={formReponer.cuentaBancariaId}
+                          onChange={(e) => setFormReponer({ ...formReponer, cuentaBancariaId: e.target.value })}
+                          style={{ flex: 1 }}
+                        >
+                          <option value="">Cuenta por defecto</option>
+                          {cuentasBancarias.map((c) => (
+                            <option key={c.id} value={c.id}>{c.bancoNombre}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+                      <button className="btn-primary" style={{ fontSize: 12, padding: "8px 14px" }} onClick={handleReponer}>Confirmar</button>
+                      <button className="btn-ghost" style={{ fontSize: 12, padding: "8px 14px" }} onClick={() => setReponiendo(false)}>Cancelar</button>
+                    </div>
                   </div>
-                  <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-                    <button className="btn-primary" style={{ fontSize: 12, padding: "8px 14px" }} onClick={handleReponer}>Confirmar</button>
-                    <button className="btn-ghost" style={{ fontSize: 12, padding: "8px 14px" }} onClick={() => setReponiendo(false)}>Cancelar</button>
-                  </div>
-                </div>
-              ) : (
-                <button className="btn-ghost" style={{ marginTop: 10, fontSize: 12, padding: "6px 12px" }} onClick={() => setReponiendo(true)}>
-                  Reponer fondo
-                </button>
+                ) : (
+                  <button className="btn-ghost" style={{ marginTop: 10, fontSize: 12, padding: "6px 12px" }} onClick={() => setReponiendo(true)}>
+                    Reponer fondo
+                  </button>
+                )
               )}
             </div>
           )}
