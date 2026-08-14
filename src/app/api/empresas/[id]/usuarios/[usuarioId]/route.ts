@@ -1,10 +1,14 @@
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getUsuarioActual, requiereSuperadmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { MODULOS_DISPONIBLES } from "@/lib/permisosModulo";
 
 export const dynamic = "force-dynamic";
+
+const CLAVES_VALIDAS = MODULOS_DISPONIBLES.map((m) => m.key) as [string, ...string[]];
 
 const editarUsuarioSchema = z.object({
   nombres: z.string().min(2),
@@ -14,6 +18,8 @@ const editarUsuarioSchema = z.object({
   password: z.string().min(8).optional().or(z.literal("")),
   tipoActor: z.enum(["asesor", "asistente", "cliente"]),
   rolOperativoNombre: z.enum(["Gerencial", "Admin Local", "Cajero", "Almacén-Cocina"]),
+  accesoTotal: z.boolean().default(true),
+  permisos: z.array(z.enum(CLAVES_VALIDAS)).default([]),
 });
 
 // PATCH /api/empresas/[id]/usuarios/[usuarioId]
@@ -72,7 +78,12 @@ export async function PATCH(
     }),
     prisma.usuarioEmpresa.update({
       where: { usuarioId_empresaId: { usuarioId, empresaId } },
-      data: { tipoActor: datos.tipoActor, rolOperativoId: rolOperativo.id },
+      data: {
+        tipoActor: datos.tipoActor,
+        rolOperativoId: rolOperativo.id,
+        accesoTotal: datos.accesoTotal,
+        permisos: datos.accesoTotal ? Prisma.JsonNull : datos.permisos,
+      },
     }),
     prisma.auditoria.create({
       data: {

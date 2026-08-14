@@ -15,7 +15,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
   const empresaId = BigInt(params.id);
   try {
-    await verificarAccesoEmpresa(usuarioActual.id, empresaId);
+    await verificarAccesoEmpresa(usuarioActual.id, empresaId, "locales");
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 403 });
   }
@@ -37,7 +37,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
   const empresaId = BigInt(params.id);
   try {
-    await verificarAccesoEmpresa(usuarioActual.id, empresaId);
+    await verificarAccesoEmpresa(usuarioActual.id, empresaId, "locales");
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 403 });
   }

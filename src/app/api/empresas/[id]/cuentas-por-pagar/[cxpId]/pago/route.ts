@@ -20,7 +20,7 @@ export async function POST(
 
   const empresaId = BigInt(params.id);
   try {
-    await verificarAccesoEmpresa(usuarioActual.id, empresaId);
+    await verificarAccesoEmpresa(usuarioActual.id, empresaId, "cuentas_por_pagar");
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 403 });
   }

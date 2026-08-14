@@ -1,10 +1,14 @@
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getUsuarioActual, requiereSuperadmin, verificarAccesoEmpresa } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { MODULOS_DISPONIBLES } from "@/lib/permisosModulo";
 
 export const dynamic = "force-dynamic";
+
+const CLAVES_VALIDAS = MODULOS_DISPONIBLES.map((m) => m.key) as [string, ...string[]];
 
 const invitarUsuarioSchema = z.object({
   nombres: z.string().min(2),
@@ -13,6 +17,8 @@ const invitarUsuarioSchema = z.object({
   password: z.string().min(8, "La contraseña temporal debe tener al menos 8 caracteres"),
   tipoActor: z.enum(["asesor", "asistente", "cliente"]),
   rolOperativoNombre: z.enum(["Gerencial", "Admin Local", "Cajero", "Almacén-Cocina"]),
+  accesoTotal: z.boolean().default(true),
+  permisos: z.array(z.enum(CLAVES_VALIDAS)).default([]),
 });
 
 // GET /api/empresas/[id]/usuarios — lista el equipo asignado a esta empresa.
@@ -144,6 +150,8 @@ export async function POST(request: Request, { params }: { params: { id: string 
       empresaId,
       tipoActor: datos.tipoActor,
       rolOperativoId: rolOperativo.id,
+      accesoTotal: datos.accesoTotal,
+      permisos: datos.accesoTotal ? Prisma.JsonNull : datos.permisos,
     },
   });
 

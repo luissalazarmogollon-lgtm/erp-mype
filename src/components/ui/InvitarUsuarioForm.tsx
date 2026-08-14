@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { MODULOS_DISPONIBLES } from "@/lib/permisosModulo";
 
 export function InvitarUsuarioForm({ empresaId }: { empresaId: string }) {
   const router = useRouter();
@@ -16,7 +17,16 @@ export function InvitarUsuarioForm({ empresaId }: { empresaId: string }) {
     password: "",
     tipoActor: "cliente",
     rolOperativoNombre: "Admin Local",
+    accesoTotal: true,
+    permisos: [] as string[],
   });
+
+  function togglePermiso(clave: string) {
+    setForm((f) => ({
+      ...f,
+      permisos: f.permisos.includes(clave) ? f.permisos.filter((p) => p !== clave) : [...f.permisos, clave],
+    }));
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -37,7 +47,16 @@ export function InvitarUsuarioForm({ empresaId }: { empresaId: string }) {
       return;
     }
 
-    setForm({ nombres: "", apellidos: "", email: "", password: "", tipoActor: "cliente", rolOperativoNombre: "Admin Local" });
+    setForm({
+      nombres: "",
+      apellidos: "",
+      email: "",
+      password: "",
+      tipoActor: "cliente",
+      rolOperativoNombre: "Admin Local",
+      accesoTotal: true,
+      permisos: [],
+    });
     setAbierto(false);
     router.refresh();
   }
@@ -108,6 +127,28 @@ export function InvitarUsuarioForm({ empresaId }: { empresaId: string }) {
           </select>
         </div>
       </div>
+
+      <div className="field">
+        <label>Nivel de acceso en esta empresa</label>
+        <select
+          value={form.accesoTotal ? "total" : "limitado"}
+          onChange={(e) => setForm({ ...form, accesoTotal: e.target.value === "total" })}
+        >
+          <option value="total">Acceso total (ve y hace todo en esta empresa)</option>
+          <option value="limitado">Acceso limitado (elegir qué puede hacer)</option>
+        </select>
+      </div>
+
+      {!form.accesoTotal && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 14 }}>
+          {MODULOS_DISPONIBLES.map((m) => (
+            <label key={m.key} className="checkbox-row" style={{ fontSize: 12 }}>
+              <input type="checkbox" checked={form.permisos.includes(m.key)} onChange={() => togglePermiso(m.key)} />
+              {m.label}
+            </label>
+          ))}
+        </div>
+      )}
 
       {error && <p className="field error">{error}</p>}
 

@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -54,7 +55,7 @@ export async function POST(request: Request, { params }: { params: { usuarioId: 
       rolOperativoId: rolOperativo.id,
       estado: "activo",
       accesoTotal: datos.accesoTotal,
-      permisos: datos.accesoTotal ? null : datos.permisos,
+      permisos: datos.accesoTotal ? Prisma.JsonNull : datos.permisos,
     },
     create: {
       usuarioId,
@@ -62,7 +63,7 @@ export async function POST(request: Request, { params }: { params: { usuarioId: 
       tipoActor: datos.tipoActor,
       rolOperativoId: rolOperativo.id,
       accesoTotal: datos.accesoTotal,
-      permisos: datos.accesoTotal ? null : datos.permisos,
+      permisos: datos.accesoTotal ? Prisma.JsonNull : datos.permisos,
     },
   });
 

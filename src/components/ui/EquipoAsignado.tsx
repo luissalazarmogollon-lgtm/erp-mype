@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { MODULOS_DISPONIBLES } from "@/lib/permisosModulo";
 
 type MiembroEquipo = {
   asignacionId: string;
@@ -11,14 +12,18 @@ type MiembroEquipo = {
   email: string;
   tipoActor: string;
   rolOperativo: string;
+  accesoTotal: boolean;
+  permisos: string[];
 };
 
 export function EquipoAsignado({
   empresaId,
   equipoInicial,
+  puedeEditar,
 }: {
   empresaId: string;
   equipoInicial: MiembroEquipo[];
+  puedeEditar: boolean;
 }) {
   const router = useRouter();
   const [editando, setEditando] = useState<string | null>(null);
@@ -32,6 +37,8 @@ export function EquipoAsignado({
     password: "",
     tipoActor: "cliente",
     rolOperativoNombre: "Admin Local",
+    accesoTotal: true,
+    permisos: [] as string[],
   });
 
   function abrirEdicion(m: MiembroEquipo) {
@@ -44,7 +51,16 @@ export function EquipoAsignado({
       password: "",
       tipoActor: m.tipoActor,
       rolOperativoNombre: m.rolOperativo,
+      accesoTotal: m.accesoTotal,
+      permisos: m.permisos,
     });
+  }
+
+  function togglePermiso(clave: string) {
+    setForm((f) => ({
+      ...f,
+      permisos: f.permisos.includes(clave) ? f.permisos.filter((p) => p !== clave) : [...f.permisos, clave],
+    }));
   }
 
   async function guardarEdicion(usuarioId: string) {
@@ -128,6 +144,32 @@ export function EquipoAsignado({
                   </div>
                 </div>
 
+                <div className="field" style={{ marginTop: 10 }}>
+                  <label>Nivel de acceso en esta empresa</label>
+                  <select
+                    value={form.accesoTotal ? "total" : "limitado"}
+                    onChange={(e) => setForm({ ...form, accesoTotal: e.target.value === "total" })}
+                  >
+                    <option value="total">Acceso total (ve y hace todo en esta empresa)</option>
+                    <option value="limitado">Acceso limitado (elegir qué puede hacer)</option>
+                  </select>
+                </div>
+
+                {!form.accesoTotal && (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 10 }}>
+                    {MODULOS_DISPONIBLES.map((mod) => (
+                      <label key={mod.key} className="checkbox-row" style={{ fontSize: 12 }}>
+                        <input
+                          type="checkbox"
+                          checked={form.permisos.includes(mod.key)}
+                          onChange={() => togglePermiso(mod.key)}
+                        />
+                        {mod.label}
+                      </label>
+                    ))}
+                  </div>
+                )}
+
                 {error && <p className="field error" style={{ marginTop: 10 }}>{error}</p>}
 
                 <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
@@ -148,6 +190,13 @@ export function EquipoAsignado({
                   <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
                     {m.email}
                   </p>
+                  <p className="mono" style={{ fontSize: 10, color: "var(--ink-soft)", marginTop: 2 }}>
+                    {m.accesoTotal
+                      ? "Acceso total"
+                      : m.permisos.length > 0
+                      ? m.permisos.map((p) => MODULOS_DISPONIBLES.find((mod) => mod.key === p)?.label ?? p).join(", ")
+                      : "Sin permisos asignados"}
+                  </p>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
                   <div style={{ textAlign: "right" }}>
@@ -158,9 +207,11 @@ export function EquipoAsignado({
                       {m.rolOperativo}
                     </p>
                   </div>
-                  <button className="btn-ghost" style={{ fontSize: 12, padding: "6px 12px" }} onClick={() => abrirEdicion(m)}>
-                    Editar
-                  </button>
+                  {puedeEditar && (
+                    <button className="btn-ghost" style={{ fontSize: 12, padding: "6px 12px" }} onClick={() => abrirEdicion(m)}>
+                      Editar
+                    </button>
+                  )}
                 </div>
               </div>
             )}
