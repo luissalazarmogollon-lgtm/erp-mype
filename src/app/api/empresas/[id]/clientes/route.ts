@@ -23,7 +23,9 @@ export async function GET(request: Request, { params }: { params: { id: string }
   }
 
   const clientes = await prisma.cliente.findMany({ where: { empresaId }, orderBy: { nombre: "asc" } });
-  return NextResponse.json(clientes.map((c) => ({ id: c.id.toString(), nombre: c.nombre, telefono: c.telefono })));
+  return NextResponse.json(
+    clientes.map((c) => ({ id: c.id.toString(), nombre: c.nombre, docIdentidad: c.docIdentidad, telefono: c.telefono }))
+  );
 }
 
 export async function POST(request: Request, { params }: { params: { id: string } }) {

@@ -358,3 +358,21 @@ Si alguien tiene el permiso "Registrar gastos de caja chica" pero no es superadm
 Los botones **"+ Nueva caja chica"** y **"Reponer fondo"** ya no aparecen para quien solo tiene el permiso "Registrar gastos de caja chica" — esas dos acciones mueven dinero real de una cuenta bancaria, así que quedan reservadas a quien tenga acceso a "Flujo de Caja" (Asesor/superadmin, o cualquiera con acceso total). Antes el botón se veía pero fallaba al hacer clic; ahora directamente no aparece para quien no puede usarlo.
 
 No hay SQL nuevo — solo un cambio de interfaz. Sube el zip completo a GitHub y espera el redeploy.
+
+---
+
+## Cuentas por Cobrar completas: RUC, N° de factura, medio de pago al cobrar
+
+### Qué se agregó
+
+- **RUC del cliente**: al crear un cliente nuevo desde Créditos, ahora hay un campo "RUC / DNI" (reutiliza un campo que ya existía en el sistema, `doc_identidad`, solo faltaba mostrarlo).
+- **N° de factura**: al registrar un nuevo crédito, puedes indicar el número de la factura que lo sustenta (ej. `F001-00234`).
+- **Medio de pago al cobrar**: al registrar un cobro, ahora eliges explícitamente Efectivo, Tarjeta, Plin, Yape o Transferencia — antes solo existía el selector de "a qué cuenta entra", sin especificar el medio.
+- **Validación de montos**: los campos de monto ya no permiten quedar en negativo (como viste en tu captura con "-0.03") — se corrigen automáticamente a 0 como mínimo, y además valido que no se pueda enviar el formulario con un monto en 0 o negativo.
+
+### Pasos para aplicar
+
+1. **Sube el código a GitHub** — arrastra todos los archivos de este zip (Add file → Upload files), sobrescribiendo lo existente.
+2. **Corre el SQL de migración en Supabase**: SQL Editor → New query → pega `prisma/numero_factura_cxc.sql` → Run.
+3. Espera el redeploy automático de Vercel.
+4. Prueba: crea un cliente nuevo con RUC → registra un crédito con número de factura → cóbralo eligiendo "Yape" como medio de pago y una cuenta bancaria → confirma que el saldo de esa cuenta sube en Flujo de Caja.

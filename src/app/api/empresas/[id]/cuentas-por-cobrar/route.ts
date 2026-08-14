@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 
 const crearCxcSchema = z.object({
   clienteId: z.string(),
+  numeroFactura: z.string().optional(),
   montoTotal: z.number().positive(),
   descripcion: z.string().optional(),
   fechaVencimiento: z.string().optional(),
@@ -34,20 +35,27 @@ export async function GET(request: Request, { params }: { params: { id: string }
     cxcs.map((c) => ({
       id: c.id.toString(),
       cliente: c.cliente.nombre,
+      clienteRuc: c.cliente.docIdentidad,
+      numeroFactura: c.numeroFactura,
       descripcion: c.descripcion,
       montoTotal: c.montoTotal.toString(),
       saldoPendiente: c.saldoPendiente.toString(),
       fechaEmision: c.fechaEmision,
       fechaVencimiento: c.fechaVencimiento,
       estado: c.estado,
-      cobros: c.cobros.map((p) => ({ monto: p.monto.toString(), fecha: p.fecha, medioPago: p.medioPago })),
+      cobros: c.cobros.map((p) => ({
+        monto: p.monto.toString(),
+        fecha: p.fecha,
+        medioPago: p.medioPago,
+      })),
     }))
   );
 }
 
 // POST /api/empresas/[id]/cuentas-por-cobrar — registra un nuevo crédito
-// a un cliente ("fiado"). Se acumula: un mismo cliente puede tener varias
-// filas abiertas si se le da crédito varias veces.
+// a un cliente ("fiado"), con su factura de referencia. Se acumula: un
+// mismo cliente puede tener varias filas abiertas si se le da crédito
+// varias veces.
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   const usuarioActual = await getUsuarioActual();
   if (!usuarioActual) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
@@ -68,6 +76,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
     data: {
       empresaId,
       clienteId: BigInt(datos.clienteId),
+      numeroFactura: datos.numeroFactura || null,
       montoTotal: datos.montoTotal,
       saldoPendiente: datos.montoTotal,
       descripcion: datos.descripcion || null,
@@ -83,7 +92,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
       tablaAfectada: "cuentas_por_cobrar",
       registroId: cxc.id,
       accion: "crear",
-      valorNuevo: { montoTotal: cxc.montoTotal.toString() },
+      valorNuevo: { montoTotal: cxc.montoTotal.toString(), numeroFactura: datos.numeroFactura ?? null },
     },
   });
 

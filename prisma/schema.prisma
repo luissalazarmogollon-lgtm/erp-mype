@@ -512,6 +512,7 @@ model CuentaPorCobrar {
   empresa          Empresa   @relation(fields: [empresaId], references: [id])
   clienteId        BigInt    @map("cliente_id")
   cliente          Cliente   @relation(fields: [clienteId], references: [id])
+  numeroFactura    String?   @map("numero_factura")
   descripcion      String?
   montoTotal       Decimal   @map("monto_total") @db.Decimal(12, 2)
   saldoPendiente   Decimal   @map("saldo_pendiente") @db.Decimal(12, 2)
