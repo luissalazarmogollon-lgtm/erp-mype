@@ -194,7 +194,7 @@ export default function FlujoCajaPage({ params }: { params: { id: string } }) {
                     <div key={dia.fecha} style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                         <span className="mono" style={{ fontSize: 11, fontWeight: 500, color: "var(--ink-soft)" }}>
-                          {new Date(dia.fecha).toLocaleDateString("es-PE", { weekday: "short", day: "2-digit", month: "short" })}
+                          {new Date(dia.fecha).toLocaleDateString("es-PE", { weekday: "short", day: "2-digit", month: "short", timeZone: "UTC" })}
                         </span>
                         <span className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
                           + S/{dia.totalIngreso.toFixed(2)} / − S/{dia.totalEgreso.toFixed(2)}

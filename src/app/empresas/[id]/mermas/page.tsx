@@ -131,7 +131,7 @@ export default function MermasPage({ params }: { params: { id: string } }) {
             <div>
               <p style={{ fontSize: 14 }}>{m.cantidad} × {m.insumo}</p>
               <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
-                {MOTIVOS.find((x) => x.value === m.motivo)?.label} · {new Date(m.fecha).toLocaleDateString("es-PE")}
+                {MOTIVOS.find((x) => x.value === m.motivo)?.label} · {new Date(m.fecha).toLocaleDateString("es-PE", { timeZone: "UTC" })}
               </p>
             </div>
             <p className="mono" style={{ fontSize: 13, color: "var(--alert)" }}>S/ {Number(m.costoEstimado).toFixed(2)}</p>

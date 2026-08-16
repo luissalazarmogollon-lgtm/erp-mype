@@ -35,6 +35,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
   return NextResponse.json(
     adelantos.map((a) => ({
       id: a.id.toString(),
+      empleadoId: a.empleadoId.toString(),
       empleado: `${a.empleado.nombres} ${a.empleado.apellidos}`,
       monto: a.monto.toString(),
       fecha: a.fecha,

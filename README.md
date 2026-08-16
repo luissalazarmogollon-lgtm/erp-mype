@@ -390,3 +390,39 @@ No hay SQL nuevo — solo cambio de interfaz.
 1. Sube el zip completo a GitHub.
 2. Espera el redeploy de Vercel.
 3. Entra a Gastos y Costos de una empresa con varios egresos y confirma que se ven agrupados por naturaleza, no en una lista larga.
+
+---
+
+## Corrección de fecha + Documentos con varios ítems + Detalle de trabajador
+
+### 1. Bug corregido: las fechas se veían un día antes
+
+Afectaba 9 pantallas (Ventas diarias, Créditos, Flujo de Caja, Cuentas por pagar, Gastos, RRHH, Caja Chica, Mermas). La causa: al mostrar una fecha guardada, el navegador la convertía a tu hora local (Perú, UTC-5), y esa diferencia hacía caer la fecha en el día anterior. **El dato guardado en la base de datos siempre estuvo correcto** — era solo un problema de cómo se mostraba en pantalla. Ya corregido en todos los casos.
+
+### 2. Documentos de compra con varios ítems
+
+En **Gastos y Costos**, junto al botón de siempre, ahora hay un segundo botón: **"+ Documento con varios ítems"**. Úsalo cuando una factura del proveedor trae varios productos o conceptos distintos (por ejemplo, insumos de cocina + un artículo de limpieza en la misma factura):
+
+1. Agregas cada ítem por separado (descripción, naturaleza, categoría, monto) a una lista.
+2. Al final, llenas los datos del documento **una sola vez** (proveedor, tipo y número de comprobante, fecha, si es al contado o crédito).
+3. Al confirmar, el sistema crea un registro de gasto por cada ítem (cada uno clasificado correctamente y visible en el listado agrupado por naturaleza), pero genera **una sola Cuenta por Pagar** por el total (si es a crédito) y **un solo movimiento bancario** por el total (si es al contado) — no uno por cada línea.
+
+El "Registrar egreso" simple de siempre sigue funcionando igual, sin cambios, para cuando solo necesitas registrar un gasto de una línea.
+
+### 3. RRHH: detalle de trabajador
+
+Cada trabajador en la lista de RRHH ahora es un enlace a su propia pantalla, donde puedes:
+- Ver y **editar** todos sus datos (nombres, cargo, sueldo, cuenta bancaria, etc.).
+- **Registrar adelantos** directamente ahí (ya no hace falta elegirlo de una lista aparte).
+- Ver el **saldo pendiente por recibir** — sueldo básico + otros ingresos, menos los adelantos que todavía no se han descontado — tanto en la lista general (de un vistazo) como en el detalle (con el desglose completo).
+
+### Sobre "FABRICA" y "PALEDOLAS" como locales
+
+Esto no necesita código nuevo — ya tienes la función lista. Ve a la empresa → **Locales** → **"+ Crear local"**, y créalos ahí tú mismo (uno se llama "FABRICA", el otro "PALEDOLAS"). En cuanto existan, van a aparecer automáticamente como opción en el selector de "Local" dentro de Gastos y Costos, Ventas diarias, etc.
+
+### Pasos para aplicar
+
+1. **Sube el código a GitHub** — arrastra todos los archivos de este zip (Add file → Upload files), sobrescribiendo lo existente.
+2. **Corre el SQL de migración en Supabase**: SQL Editor → New query → pega `prisma/documentos_compra.sql` → Run.
+3. Espera el redeploy automático de Vercel.
+4. Prueba: registra un documento con 2-3 ítems de distinta naturaleza → confirma que aparecen clasificados por separado en Gastos y Costos, pero que solo se generó una Cuenta por Pagar (si fue a crédito). Luego entra a un trabajador en RRHH, edítalo, regístrale un adelanto, y confirma que el "saldo por recibir" baja correctamente. Por último, revisa cualquier fecha en el sistema y confirma que ya no aparece un día antes.

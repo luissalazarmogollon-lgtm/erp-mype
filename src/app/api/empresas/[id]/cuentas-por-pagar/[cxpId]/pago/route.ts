@@ -34,8 +34,17 @@ export async function POST(
   const datos = parsed.data;
 
   const cxpId = BigInt(params.cxpId);
-  const cxp = await prisma.cuentaPorPagar.findFirst({ where: { id: cxpId, empresaId }, include: { gasto: true } });
+  const cxp = await prisma.cuentaPorPagar.findFirst({
+    where: { id: cxpId, empresaId },
+    include: { gasto: true, documentoCompra: true },
+  });
   if (!cxp) return NextResponse.json({ error: "Cuenta por pagar no encontrada" }, { status: 404 });
+
+  const descripcionCxp = cxp.gasto
+    ? cxp.gasto.descripcion
+    : cxp.documentoCompra
+    ? `documento ${cxp.documentoCompra.numeroComprobante ?? "sin número"}`
+    : "compra";
 
   const saldoActual = Number(cxp.saldoPendiente);
   if (datos.monto > saldoActual) {
@@ -65,7 +74,7 @@ export async function POST(
           cuentaBancariaId,
           tipo: "egreso",
           monto: datos.monto,
-          concepto: `Pago a ${cxp.proveedorNombre ?? "proveedor"} — ${cxp.gasto.descripcion}`,
+          concepto: `Pago a ${cxp.proveedorNombre ?? "proveedor"} — ${descripcionCxp}`,
           referenciaTipo: "pago_cxp",
           referenciaId: cxpId,
           usuarioId,

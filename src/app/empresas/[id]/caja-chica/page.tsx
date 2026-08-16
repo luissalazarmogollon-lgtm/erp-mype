@@ -313,7 +313,7 @@ export default function CajaChicaPage({ params }: { params: { id: string } }) {
                   <div>
                     <p style={{ fontSize: 14 }}>{g.descripcion}</p>
                     <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
-                      {new Date(g.fecha).toLocaleDateString("es-PE")}
+                      {new Date(g.fecha).toLocaleDateString("es-PE", { timeZone: "UTC" })}
                       {g.numeroComprobante ? ` · ${g.numeroComprobante}` : g.tipoComprobante !== "sin_comprobante" ? ` · ${g.tipoComprobante}` : ""}
                       {g.estado === "trasladado" && ` · ${g.naturaleza} · ${g.categoriaEspecifica}`}
                     </p>

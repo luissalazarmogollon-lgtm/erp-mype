@@ -132,6 +132,7 @@ model Empresa {
   adelantosSueldo        AdelantoSueldo[]
   cuentasBancarias       CuentaBancaria[]
   cajasChicas            CajaChica[]
+  documentosCompra       DocumentoCompra[]
 
   @@map("empresas")
 }
@@ -286,6 +287,7 @@ model Local {
   estado                String   @default("activo")
   registrosVentaDiaria  RegistroVentaDiaria[]
   gastos                Gasto[]
+  documentosCompra      DocumentoCompra[]
 
   @@map("locales")
 }
@@ -567,6 +569,10 @@ model Gasto {
   medioPago            String?   @map("medio_pago") // solo si condicion = contado
   cuentaBancariaId     BigInt?   @map("cuenta_bancaria_id") // de qué cuenta salió, si fue contado
   cuentaBancaria       CuentaBancaria? @relation(fields: [cuentaBancariaId], references: [id])
+  // Si este gasto es UNO de varios ítems del mismo documento (factura con
+  // varias líneas), aquí queda el vínculo al documento que los agrupa.
+  documentoCompraId    BigInt?   @map("documento_compra_id")
+  documentoCompra      DocumentoCompra? @relation(fields: [documentoCompraId], references: [id])
   usuarioId            String    @map("usuario_id") @db.Uuid
 
   cuentaPorPagar       CuentaPorPagar?
@@ -579,8 +585,13 @@ model CuentaPorPagar {
   id               BigInt    @id @default(autoincrement())
   empresaId        BigInt    @map("empresa_id")
   empresa          Empresa   @relation(fields: [empresaId], references: [id])
-  gastoId          BigInt    @unique @map("gasto_id")
-  gasto            Gasto     @relation(fields: [gastoId], references: [id])
+  // Exactamente uno de los dos está lleno: gastoId (egreso simple, un solo
+  // ítem) o documentoCompraId (documento con varios ítems — la CxP
+  // representa el total del documento, no cada línea por separado).
+  gastoId          BigInt?   @unique @map("gasto_id")
+  gasto            Gasto?    @relation(fields: [gastoId], references: [id])
+  documentoCompraId BigInt?  @unique @map("documento_compra_id")
+  documentoCompra  DocumentoCompra? @relation(fields: [documentoCompraId], references: [id])
   proveedorNombre  String?   @map("proveedor_nombre")
   montoTotal       Decimal   @map("monto_total") @db.Decimal(12, 2)
   saldoPendiente   Decimal   @map("saldo_pendiente") @db.Decimal(12, 2)
@@ -675,6 +686,7 @@ model CuentaBancaria {
   ventasPlin     RegistroVentaDiaria[] @relation("PlinCuenta")
   ventasTarjeta  RegistroVentaDiaria[] @relation("TarjetaCuenta")
   cajasChicas    CajaChica[]
+  documentosCompra DocumentoCompra[]
 
   @@map("cuentas_bancarias")
 }
@@ -750,4 +762,32 @@ model GastoCajaChica {
   usuarioId            String    @map("usuario_id") @db.Uuid
 
   @@map("gastos_caja_chica")
+}
+
+// Cabecera de un documento de compra (factura/boleta/nota) que agrupa
+// varios ítems (líneas de Gasto) bajo el mismo comprobante — para cuando
+// una sola factura del proveedor trae varios productos/conceptos distintos,
+// cada uno con su propia naturaleza/categoría, pero un único monto total
+// y una única Cuenta por Pagar (si es a crédito), en vez de una CxP por línea.
+model DocumentoCompra {
+  id                BigInt   @id @default(autoincrement())
+  empresaId         BigInt   @map("empresa_id")
+  empresa           Empresa  @relation(fields: [empresaId], references: [id])
+  localId           BigInt?  @map("local_id")
+  local             Local?   @relation(fields: [localId], references: [id])
+  proveedorNombre   String?  @map("proveedor_nombre")
+  tipoComprobante   String   @default("sin_comprobante") @map("tipo_comprobante")
+  numeroComprobante String?  @map("numero_comprobante")
+  fecha             DateTime @db.Date
+  condicion         String   // contado | credito
+  medioPago         String?  @map("medio_pago")
+  cuentaBancariaId  BigInt?  @map("cuenta_bancaria_id")
+  cuentaBancaria    CuentaBancaria? @relation(fields: [cuentaBancariaId], references: [id])
+  montoTotal        Decimal  @map("monto_total") @db.Decimal(12, 2)
+  usuarioId         String   @map("usuario_id") @db.Uuid
+
+  items             Gasto[]
+  cuentaPorPagar    CuentaPorPagar?
+
+  @@map("documentos_compra")
 }

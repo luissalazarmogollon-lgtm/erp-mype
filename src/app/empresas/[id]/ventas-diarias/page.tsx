@@ -186,7 +186,7 @@ export default function VentasDiariasPage({ params }: { params: { id: string } }
             <div key={r.id} className="card" style={{ padding: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <span style={{ fontWeight: 500, fontSize: 14 }}>
-                  {new Date(r.fecha).toLocaleDateString("es-PE", { weekday: "short", day: "2-digit", month: "short" })}
+                  {new Date(r.fecha).toLocaleDateString("es-PE", { weekday: "short", day: "2-digit", month: "short", timeZone: "UTC" })}
                   {r.local && <span className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}> · {r.local}</span>}
                 </span>
                 <span className="mono" style={{ fontWeight: 500 }}>S/ {Number(r.total).toFixed(2)}</span>

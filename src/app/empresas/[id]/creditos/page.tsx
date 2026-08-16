@@ -210,7 +210,7 @@ export default function CreditosPage({ params }: { params: { id: string } }) {
                 </p>
                 <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
                   {c.numeroFactura ? `Factura ${c.numeroFactura} · ` : ""}
-                  {c.descripcion ?? "-"} · {new Date(c.fechaEmision).toLocaleDateString("es-PE")}
+                  {c.descripcion ?? "-"} · {new Date(c.fechaEmision).toLocaleDateString("es-PE", { timeZone: "UTC" })}
                 </p>
               </div>
               <div style={{ textAlign: "right" }}>

@@ -83,7 +83,7 @@ export default function CuentasPorPagarPage({ params }: { params: { id: string }
                 <div>
                   <p style={{ fontSize: 14, fontWeight: 500 }}>{c.proveedorNombre ?? "Proveedor sin nombre"}</p>
                   <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
-                    {c.descripcionGasto} · {new Date(c.fechaEmision).toLocaleDateString("es-PE")}
+                    {c.descripcionGasto} · {new Date(c.fechaEmision).toLocaleDateString("es-PE", { timeZone: "UTC" })}
                   </p>
                 </div>
                 <div style={{ textAlign: "right" }}>
