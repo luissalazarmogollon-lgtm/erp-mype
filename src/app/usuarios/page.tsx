@@ -28,6 +28,7 @@ export default function UsuariosPage() {
   const [empresas, setEmpresas] = useState<EmpresaOpcion[]>([]);
   const [mostrarFormNuevo, setMostrarFormNuevo] = useState(false);
   const [asignandoEn, setAsignandoEn] = useState<string | null>(null);
+  const [editando, setEditando] = useState<{ asignacionId: string; empresaNombre: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
 
@@ -96,8 +97,29 @@ export default function UsuariosPage() {
       return;
     }
     setAsignandoEn(null);
+    setEditando(null);
     setFormAsignar({ empresaId: "", tipoActor: "cliente", rolOperativoNombre: "Admin Local", accesoTotal: true, permisos: [] });
     cargar();
+  }
+
+  function abrirEdicion(usuarioId: string, a: Asignacion) {
+    setFormAsignar({
+      empresaId: a.empresaId,
+      tipoActor: a.tipoActor,
+      rolOperativoNombre: a.rolOperativo,
+      accesoTotal: a.accesoTotal,
+      permisos: a.permisos,
+    });
+    setEditando({ asignacionId: a.asignacionId, empresaNombre: a.empresaNombre });
+    setAsignandoEn(usuarioId);
+    setError(null);
+  }
+
+  function abrirNuevaAsignacion(usuarioId: string) {
+    setFormAsignar({ empresaId: "", tipoActor: "cliente", rolOperativoNombre: "Admin Local", accesoTotal: true, permisos: [] });
+    setEditando(null);
+    setAsignandoEn(asignandoEn === usuarioId && !editando ? null : usuarioId);
+    setError(null);
   }
 
   function togglePermiso(clave: string) {
@@ -195,7 +217,7 @@ export default function UsuariosPage() {
                 <button
                   className="btn-ghost"
                   style={{ fontSize: 12, padding: "6px 12px" }}
-                  onClick={() => { setAsignandoEn(asignandoEn === u.id ? null : u.id); setError(null); }}
+                  onClick={() => abrirNuevaAsignacion(u.id)}
                 >
                   + Asignar a empresa
                 </button>
@@ -217,12 +239,20 @@ export default function UsuariosPage() {
                             : "Sin permisos asignados"}
                         </p>
                       </div>
-                      <button
-                        onClick={() => handleQuitarAcceso(u.id, a.asignacionId)}
-                        style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "var(--alert)" }}
-                      >
-                        Quitar acceso
-                      </button>
+                      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                        <button
+                          onClick={() => abrirEdicion(u.id, a)}
+                          style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "var(--ink-soft)" }}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => handleQuitarAcceso(u.id, a.asignacionId)}
+                          style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "var(--alert)" }}
+                        >
+                          Quitar acceso
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -230,16 +260,21 @@ export default function UsuariosPage() {
 
               {asignandoEn === u.id && (
                 <div style={{ marginTop: 12, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-                    <div className="field" style={{ marginBottom: 0 }}>
-                      <label>Empresa</label>
-                      <select value={formAsignar.empresaId} onChange={(e) => setFormAsignar({ ...formAsignar, empresaId: e.target.value })}>
-                        <option value="">Selecciona...</option>
-                        {empresas.map((e) => (
-                          <option key={e.id} value={e.id}>{e.nombreComercial}</option>
-                        ))}
-                      </select>
-                    </div>
+                  <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginBottom: 10, textTransform: "uppercase" }}>
+                    {editando ? `Editando acceso — ${editando.empresaNombre}` : "Nueva asignación"}
+                  </p>
+                  <div style={{ display: "grid", gridTemplateColumns: editando ? "1fr 1fr" : "1fr 1fr 1fr", gap: 10 }}>
+                    {!editando && (
+                      <div className="field" style={{ marginBottom: 0 }}>
+                        <label>Empresa</label>
+                        <select value={formAsignar.empresaId} onChange={(e) => setFormAsignar({ ...formAsignar, empresaId: e.target.value })}>
+                          <option value="">Selecciona...</option>
+                          {empresas.map((e) => (
+                            <option key={e.id} value={e.id}>{e.nombreComercial}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     <div className="field" style={{ marginBottom: 0 }}>
                       <label>Tipo de actor</label>
                       <select value={formAsignar.tipoActor} onChange={(e) => setFormAsignar({ ...formAsignar, tipoActor: e.target.value })}>
@@ -288,9 +323,9 @@ export default function UsuariosPage() {
 
                   <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
                     <button className="btn-primary" onClick={() => handleAsignar(u.id)}>
-                      Confirmar asignación
+                      {editando ? "Guardar cambios" : "Confirmar asignación"}
                     </button>
-                    <button className="btn-ghost" onClick={() => setAsignandoEn(null)}>
+                    <button className="btn-ghost" onClick={() => { setAsignandoEn(null); setEditando(null); }}>
                       Cancelar
                     </button>
                   </div>

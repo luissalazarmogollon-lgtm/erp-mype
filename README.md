@@ -470,3 +470,17 @@ No hay SQL nuevo — solo cambio de interfaz.
 1. Sube el zip completo a GitHub (sobrescribe lo existente).
 2. Espera el redeploy de Vercel.
 3. Entra a Ventas diarias de una empresa con varios locales y confirma que el historial se ve agrupado por fecha, con el total del día visible de un vistazo.
+
+---
+
+## Usuarios y accesos: editar un acceso existente
+
+Cada empresa asignada a un usuario ahora tiene un botón **"Editar"** junto a "Quitar acceso" — te lleva al mismo formulario de asignación, pero precargado con lo que esa persona ya tiene (tipo de actor, rol, acceso total o los permisos específicos marcados). Modificas lo que necesites y guardas, sin tener que quitarle el acceso primero y volver a asignarlo desde cero.
+
+No hay SQL nuevo — solo cambio de interfaz.
+
+### Pasos
+
+1. Sube el zip completo a GitHub (sobrescribe lo existente).
+2. Espera el redeploy de Vercel.
+3. Entra a **Usuarios y accesos**, busca a Iriani (o cualquier usuario con acceso asignado), haz clic en "Editar" sobre su acceso a Heladería Dolas, agrégale otro permiso (por ejemplo "Flujo de Caja"), guarda, y confirma que se actualizó sin duplicar la asignación.
