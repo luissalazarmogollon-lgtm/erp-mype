@@ -22,6 +22,7 @@ export default function CuentasPorPagarPage({ params }: { params: { id: string }
   const [montoPago, setMontoPago] = useState(0);
   const [cuentaPago, setCuentaPago] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [mostrarPagadas, setMostrarPagadas] = useState(false);
 
   async function cargar() {
     const [resCxp, resCatalogos] = await Promise.all([
@@ -38,6 +39,8 @@ export default function CuentasPorPagarPage({ params }: { params: { id: string }
   }, [empresaId]);
 
   const totalPorPagar = cxps.filter((c) => c.estado !== "pagada").reduce((acc, c) => acc + Number(c.saldoPendiente), 0);
+  const cxpsVisibles = mostrarPagadas ? cxps : cxps.filter((c) => c.estado !== "pagada");
+  const cantidadPagadas = cxps.filter((c) => c.estado === "pagada").length;
 
   async function handlePago(cxpId: string) {
     setError(null);
@@ -68,16 +71,25 @@ export default function CuentasPorPagarPage({ params }: { params: { id: string }
       <p className="mono" style={{ fontSize: 12, color: "var(--alert)", marginBottom: 20 }}>
         Total por pagar: S/ {totalPorPagar.toFixed(2)}
       </p>
-      <p style={{ color: "var(--ink-soft)", fontSize: 13, marginBottom: 20 }}>
+      <p style={{ color: "var(--ink-soft)", fontSize: 13, marginBottom: 12 }}>
         Estas cuentas se generan automáticamente al registrar un gasto "al crédito" en la pantalla de Gastos y Costos.
         Puedes pagarlas de una sola vez o en varios abonos.
       </p>
 
-      {cxps.length === 0 ? (
-        <p style={{ color: "var(--ink-soft)", fontSize: 14 }}>No hay cuentas por pagar registradas.</p>
+      {cantidadPagadas > 0 && (
+        <label className="checkbox-row mono" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 20 }}>
+          <input type="checkbox" checked={mostrarPagadas} onChange={(e) => setMostrarPagadas(e.target.checked)} />
+          Mostrar también las {cantidadPagadas} ya pagadas
+        </label>
+      )}
+
+      {cxpsVisibles.length === 0 ? (
+        <p style={{ color: "var(--ink-soft)", fontSize: 14 }}>
+          {cxps.length === 0 ? "No hay cuentas por pagar registradas." : "No tienes cuentas por pagar pendientes."}
+        </p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {cxps.map((c) => (
+          {cxpsVisibles.map((c) => (
             <div key={c.id} className="card" style={{ padding: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <div>

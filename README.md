@@ -440,3 +440,19 @@ No hay SQL nuevo — solo código.
 1. Sube el zip completo a GitHub (sobrescribe lo existente).
 2. Espera el redeploy de Vercel.
 3. Prueba: registra una venta diaria de prueba → confirma que aparece "Eliminar registro" → elimínala y confirma que desaparece del historial. Luego registra otra, concíliala con una cuenta, y confirma que esta vez el enlace de eliminar ya no aparece.
+
+---
+
+## Cuentas por pagar y Créditos: las pagadas/cobradas ya no estorban en la lista
+
+Una vez que una cuenta por pagar queda totalmente pagada (o un crédito totalmente cobrado), **ya no aparece en la lista por defecto** — así el listado se mantiene enfocado en lo que realmente está pendiente. Si alguna vez necesitas revisar el historial, aparece un interruptor **"Mostrar también las ya pagadas/cobradas"** que las trae de vuelta a la vista sin perder el dato.
+
+Apliqué el mismo criterio en ambas pantallas (Cuentas por pagar y Créditos a clientes) porque tenían exactamente el mismo problema.
+
+No hay SQL nuevo — solo cambio de interfaz.
+
+### Pasos
+
+1. Sube el zip completo a GitHub (sobrescribe lo existente).
+2. Espera el redeploy de Vercel.
+3. Entra a Cuentas por pagar y confirma que las que dicen "PAGADA" ya no aparecen (a menos que actives el interruptor). Revisa lo mismo en Créditos.

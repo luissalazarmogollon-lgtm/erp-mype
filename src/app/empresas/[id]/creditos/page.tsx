@@ -30,6 +30,7 @@ export default function CreditosPage({ params }: { params: { id: string } }) {
   const [cuentaCobro, setCuentaCobro] = useState("");
   const [cuentasBancarias, setCuentasBancarias] = useState<{ id: string; bancoNombre: string; saldoActual: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [mostrarPagadas, setMostrarPagadas] = useState(false);
 
   const [form, setForm] = useState({ clienteId: "", numeroFactura: "", montoTotal: 0, descripcion: "" });
   const [nuevoCliente, setNuevoCliente] = useState({ nombre: "", docIdentidad: "", telefono: "" });
@@ -51,6 +52,8 @@ export default function CreditosPage({ params }: { params: { id: string } }) {
   }, [empresaId]);
 
   const totalPorCobrar = cxcs.filter((c) => c.estado !== "pagada").reduce((acc, c) => acc + Number(c.saldoPendiente), 0);
+  const cxcsVisibles = mostrarPagadas ? cxcs : cxcs.filter((c) => c.estado !== "pagada");
+  const cantidadPagadas = cxcs.filter((c) => c.estado === "pagada").length;
 
   async function crearCliente() {
     const res = await fetch(`/api/empresas/${empresaId}/clientes`, {
@@ -200,8 +203,15 @@ export default function CreditosPage({ params }: { params: { id: string } }) {
         </form>
       )}
 
+      {cantidadPagadas > 0 && (
+        <label className="checkbox-row mono" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 20 }}>
+          <input type="checkbox" checked={mostrarPagadas} onChange={(e) => setMostrarPagadas(e.target.checked)} />
+          Mostrar también los {cantidadPagadas} créditos ya cobrados
+        </label>
+      )}
+
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {cxcs.map((c) => (
+        {cxcsVisibles.map((c) => (
           <div key={c.id} className="card" style={{ padding: 14 }}>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <div>
