@@ -114,6 +114,18 @@ export default function VentasDiariasPage({ params }: { params: { id: string } }
     cargar();
   }
 
+  async function handleEliminar(registroId: string) {
+    if (!confirm("¿Eliminar este registro de ventas diarias? Esta acción no se puede deshacer.")) return;
+    setError(null);
+    const res = await fetch(`/api/empresas/${empresaId}/ventas-diarias/${registroId}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error?.toString() ?? "No se pudo eliminar el registro.");
+      return;
+    }
+    cargar();
+  }
+
   return (
     <main style={{ maxWidth: 700, margin: "0 auto", padding: "32px 24px" }}>
       <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 6 }}>
@@ -182,6 +194,7 @@ export default function VentasDiariasPage({ params }: { params: { id: string } }
           const legsPendientes = LEGS.filter(
             (leg) => Number(r[leg.monto]) > 0 && !r.conciliacion[leg.conciliacionCampo]
           );
+          const tieneAlgoConciliado = LEGS.some((leg) => r.conciliacion[leg.conciliacionCampo]);
           return (
             <div key={r.id} className="card" style={{ padding: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -197,6 +210,18 @@ export default function VentasDiariasPage({ params }: { params: { id: string } }
                 {" "}Plin S/{Number(r.montoPlin).toFixed(2)}{r.conciliacion.plinCuenta ? ` ✓ ${r.conciliacion.plinCuenta}` : ""} ·
                 {" "}Tarjeta S/{Number(r.montoTarjeta).toFixed(2)}{r.conciliacion.tarjetaCuenta ? ` ✓ ${r.conciliacion.tarjetaCuenta}` : ""}
               </p>
+
+              {!tieneAlgoConciliado && (
+                <button
+                  onClick={() => handleEliminar(r.id)}
+                  style={{
+                    marginTop: 8, fontSize: 11, background: "none", border: "none", cursor: "pointer",
+                    color: "var(--alert)", padding: 0,
+                  }}
+                >
+                  Eliminar registro
+                </button>
+              )}
 
               {esSuperadmin && cuentasBancarias.length > 0 && legsPendientes.length > 0 && (
                 conciliando === r.id ? (

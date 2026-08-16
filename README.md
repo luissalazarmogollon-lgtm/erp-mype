@@ -426,3 +426,17 @@ Esto no necesita código nuevo — ya tienes la función lista. Ve a la empresa 
 2. **Corre el SQL de migración en Supabase**: SQL Editor → New query → pega `prisma/documentos_compra.sql` → Run.
 3. Espera el redeploy automático de Vercel.
 4. Prueba: registra un documento con 2-3 ítems de distinta naturaleza → confirma que aparecen clasificados por separado en Gastos y Costos, pero que solo se generó una Cuenta por Pagar (si fue a crédito). Luego entra a un trabajador en RRHH, edítalo, regístrale un adelanto, y confirma que el "saldo por recibir" baja correctamente. Por último, revisa cualquier fecha en el sistema y confirma que ya no aparece un día antes.
+
+---
+
+## Ventas diarias: eliminar registro antes de conciliar
+
+Cada registro del historial ahora tiene un enlace **"Eliminar registro"**, pero solo aparece **mientras ningún método de pago se haya conectado todavía a una cuenta bancaria** (es decir, antes de usar "Actualizar flujo de caja" sobre ese registro). En cuanto se concilia aunque sea un solo método de pago, el enlace desaparece — borrar en ese punto dejaría un movimiento bancario y un saldo de cuenta sin la venta que los originó.
+
+No hay SQL nuevo — solo código.
+
+### Pasos
+
+1. Sube el zip completo a GitHub (sobrescribe lo existente).
+2. Espera el redeploy de Vercel.
+3. Prueba: registra una venta diaria de prueba → confirma que aparece "Eliminar registro" → elimínala y confirma que desaparece del historial. Luego registra otra, concíliala con una cuenta, y confirma que esta vez el enlace de eliminar ya no aparece.
