@@ -456,3 +456,17 @@ No hay SQL nuevo — solo cambio de interfaz.
 1. Sube el zip completo a GitHub (sobrescribe lo existente).
 2. Espera el redeploy de Vercel.
 3. Entra a Cuentas por pagar y confirma que las que dicen "PAGADA" ya no aparecen (a menos que actives el interruptor). Revisa lo mismo en Créditos.
+
+---
+
+## Ventas diarias: historial consolidado por fecha
+
+El historial ya no muestra una tarjeta por cada local sin ningún orden — ahora cada **fecha** es una sección plegable, con el **total consolidado de todos los locales de ese día** visible en el encabezado (sin necesitar abrirlo). Al desplegar una fecha, ves el detalle de cada local por separado, con su desglose de métodos de pago, el estado de conciliación, y los botones de "Eliminar registro" / "Actualizar flujo de caja" — igual que antes, solo mejor organizado.
+
+No hay SQL nuevo — solo cambio de interfaz.
+
+### Pasos
+
+1. Sube el zip completo a GitHub (sobrescribe lo existente).
+2. Espera el redeploy de Vercel.
+3. Entra a Ventas diarias de una empresa con varios locales y confirma que el historial se ve agrupado por fecha, con el total del día visible de un vistazo.

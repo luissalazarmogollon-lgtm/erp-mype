@@ -44,6 +44,7 @@ export default function VentasDiariasPage({ params }: { params: { id: string } }
   const [conciliando, setConciliando] = useState<string | null>(null);
   const [formConciliar, setFormConciliar] = useState<Record<string, string>>({});
   const [esSuperadmin, setEsSuperadmin] = useState(false);
+  const [fechasAbiertas, setFechasAbiertas] = useState<Record<string, boolean>>({});
 
   const [form, setForm] = useState({
     localId: "",
@@ -189,80 +190,113 @@ export default function VentasDiariasPage({ params }: { params: { id: string } }
       </form>
 
       <h2 style={{ fontSize: 16, marginBottom: 12 }}>Historial</h2>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {registros.map((r) => {
-          const legsPendientes = LEGS.filter(
-            (leg) => Number(r[leg.monto]) > 0 && !r.conciliacion[leg.conciliacionCampo]
-          );
-          const tieneAlgoConciliado = LEGS.some((leg) => r.conciliacion[leg.conciliacionCampo]);
-          return (
-            <div key={r.id} className="card" style={{ padding: 14 }}>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ fontWeight: 500, fontSize: 14 }}>
-                  {new Date(r.fecha).toLocaleDateString("es-PE", { weekday: "short", day: "2-digit", month: "short", timeZone: "UTC" })}
-                  {r.local && <span className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}> · {r.local}</span>}
-                </span>
-                <span className="mono" style={{ fontWeight: 500 }}>S/ {Number(r.total).toFixed(2)}</span>
-              </div>
-              <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 4 }}>
-                Efectivo S/{Number(r.montoEfectivo).toFixed(2)}{r.conciliacion.efectivoCuenta ? ` ✓ ${r.conciliacion.efectivoCuenta}` : ""} ·
-                {" "}Yape S/{Number(r.montoYape).toFixed(2)}{r.conciliacion.yapeCuenta ? ` ✓ ${r.conciliacion.yapeCuenta}` : ""} ·
-                {" "}Plin S/{Number(r.montoPlin).toFixed(2)}{r.conciliacion.plinCuenta ? ` ✓ ${r.conciliacion.plinCuenta}` : ""} ·
-                {" "}Tarjeta S/{Number(r.montoTarjeta).toFixed(2)}{r.conciliacion.tarjetaCuenta ? ` ✓ ${r.conciliacion.tarjetaCuenta}` : ""}
-              </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {Array.from(new Set(registros.map((r) => r.fecha.slice(0, 10))))
+          .sort((a, b) => (a < b ? 1 : -1))
+          .map((fechaKey) => {
+            const registrosDelDia = registros.filter((r) => r.fecha.slice(0, 10) === fechaKey);
+            const totalDia = registrosDelDia.reduce((acc, r) => acc + Number(r.total), 0);
+            const abierta = fechasAbiertas[fechaKey] ?? false;
 
-              {!tieneAlgoConciliado && (
+            return (
+              <div key={fechaKey} className="card" style={{ padding: 0, overflow: "hidden" }}>
                 <button
-                  onClick={() => handleEliminar(r.id)}
+                  onClick={() => setFechasAbiertas({ ...fechasAbiertas, [fechaKey]: !abierta })}
                   style={{
-                    marginTop: 8, fontSize: 11, background: "none", border: "none", cursor: "pointer",
-                    color: "var(--alert)", padding: 0,
+                    width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
+                    padding: 14, background: "none", border: "none", cursor: "pointer", textAlign: "left",
                   }}
                 >
-                  Eliminar registro
+                  <span style={{ fontSize: 14, fontWeight: 500 }}>
+                    {abierta ? "▾" : "▸"}{" "}
+                    {new Date(fechaKey).toLocaleDateString("es-PE", { weekday: "short", day: "2-digit", month: "short", timeZone: "UTC" })}
+                    {registrosDelDia.length > 1 && (
+                      <span className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}> · {registrosDelDia.length} locales</span>
+                    )}
+                  </span>
+                  <span className="mono" style={{ fontSize: 14, fontWeight: 500 }}>S/ {totalDia.toFixed(2)}</span>
                 </button>
-              )}
 
-              {esSuperadmin && cuentasBancarias.length > 0 && legsPendientes.length > 0 && (
-                conciliando === r.id ? (
-                  <div style={{ marginTop: 10, borderTop: "1px solid var(--line)", paddingTop: 10 }}>
-                    {legsPendientes.map((leg) => (
-                      <div key={leg.campo} className="field" style={{ marginBottom: 8 }}>
-                        <label>{leg.label} (S/ {Number(r[leg.monto]).toFixed(2)}) entró a:</label>
-                        <select
-                          value={formConciliar[leg.campo] ?? ""}
-                          onChange={(e) => setFormConciliar({ ...formConciliar, [leg.campo]: e.target.value })}
-                        >
-                          <option value="">Sin registrar</option>
-                          {cuentasBancarias.map((c) => (
-                            <option key={c.id} value={c.id}>{c.bancoNombre}</option>
-                          ))}
-                        </select>
-                      </div>
-                    ))}
-                    {error && <p className="field error">{error}</p>}
-                    <div style={{ display: "flex", gap: 10 }}>
-                      <button className="btn-primary" style={{ fontSize: 12, padding: "8px 14px" }} onClick={() => handleConciliar(r.id)}>
-                        Guardar
-                      </button>
-                      <button className="btn-ghost" style={{ fontSize: 12, padding: "8px 14px" }} onClick={() => setConciliando(null)}>
-                        Cancelar
-                      </button>
-                    </div>
+                {abierta && (
+                  <div style={{ borderTop: "1px solid var(--line)", display: "flex", flexDirection: "column" }}>
+                    {registrosDelDia.map((r) => {
+                      const legsPendientes = LEGS.filter(
+                        (leg) => Number(r[leg.monto]) > 0 && !r.conciliacion[leg.conciliacionCampo]
+                      );
+                      const tieneAlgoConciliado = LEGS.some((leg) => r.conciliacion[leg.conciliacionCampo]);
+                      return (
+                        <div key={r.id} style={{ padding: 14, borderBottom: "1px solid var(--line)" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between" }}>
+                            <span style={{ fontSize: 13.5 }}>{r.local ?? "Consolidado"}</span>
+                            <span className="mono" style={{ fontSize: 13.5 }}>S/ {Number(r.total).toFixed(2)}</span>
+                          </div>
+                          <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 4 }}>
+                            Efectivo S/{Number(r.montoEfectivo).toFixed(2)}{r.conciliacion.efectivoCuenta ? ` ✓ ${r.conciliacion.efectivoCuenta}` : ""} ·
+                            {" "}Yape S/{Number(r.montoYape).toFixed(2)}{r.conciliacion.yapeCuenta ? ` ✓ ${r.conciliacion.yapeCuenta}` : ""} ·
+                            {" "}Plin S/{Number(r.montoPlin).toFixed(2)}{r.conciliacion.plinCuenta ? ` ✓ ${r.conciliacion.plinCuenta}` : ""} ·
+                            {" "}Tarjeta S/{Number(r.montoTarjeta).toFixed(2)}{r.conciliacion.tarjetaCuenta ? ` ✓ ${r.conciliacion.tarjetaCuenta}` : ""}
+                          </p>
+
+                          {!tieneAlgoConciliado && (
+                            <button
+                              onClick={() => handleEliminar(r.id)}
+                              style={{
+                                marginTop: 8, fontSize: 11, background: "none", border: "none", cursor: "pointer",
+                                color: "var(--alert)", padding: 0,
+                              }}
+                            >
+                              Eliminar registro
+                            </button>
+                          )}
+
+                          {esSuperadmin && cuentasBancarias.length > 0 && legsPendientes.length > 0 && (
+                            conciliando === r.id ? (
+                              <div style={{ marginTop: 10, borderTop: "1px solid var(--line)", paddingTop: 10 }}>
+                                {legsPendientes.map((leg) => (
+                                  <div key={leg.campo} className="field" style={{ marginBottom: 8 }}>
+                                    <label>{leg.label} (S/ {Number(r[leg.monto]).toFixed(2)}) entró a:</label>
+                                    <select
+                                      value={formConciliar[leg.campo] ?? ""}
+                                      onChange={(e) => setFormConciliar({ ...formConciliar, [leg.campo]: e.target.value })}
+                                    >
+                                      <option value="">Sin registrar</option>
+                                      {cuentasBancarias.map((c) => (
+                                        <option key={c.id} value={c.id}>{c.bancoNombre}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                ))}
+                                {error && <p className="field error">{error}</p>}
+                                <div style={{ display: "flex", gap: 10 }}>
+                                  <button className="btn-primary" style={{ fontSize: 12, padding: "8px 14px" }} onClick={() => handleConciliar(r.id)}>
+                                    Guardar
+                                  </button>
+                                  <button className="btn-ghost" style={{ fontSize: 12, padding: "8px 14px" }} onClick={() => setConciliando(null)}>
+                                    Cancelar
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                className="btn-ghost"
+                                style={{ marginTop: 10, fontSize: 12, padding: "6px 12px" }}
+                                onClick={() => { setConciliando(r.id); setFormConciliar({}); setError(null); }}
+                              >
+                                Actualizar flujo de caja
+                              </button>
+                            )
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                ) : (
-                  <button
-                    className="btn-ghost"
-                    style={{ marginTop: 10, fontSize: 12, padding: "6px 12px" }}
-                    onClick={() => { setConciliando(r.id); setFormConciliar({}); setError(null); }}
-                  >
-                    Actualizar flujo de caja
-                  </button>
-                )
-              )}
-            </div>
-          );
-        })}
+                )}
+              </div>
+            );
+          })}
+        {registros.length === 0 && (
+          <p style={{ color: "var(--ink-soft)", fontSize: 14 }}>Todavía no hay ventas registradas.</p>
+        )}
       </div>
     </main>
   );
