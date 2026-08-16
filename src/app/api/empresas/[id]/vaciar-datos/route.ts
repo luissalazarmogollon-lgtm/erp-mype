@@ -4,17 +4,22 @@ import { getUsuarioActual, requiereSuperadmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-// DELETE /api/empresas/[id] — elimina la empresa y TODOS sus datos
-// relacionados. Reservado a superadmin, igual que el alta de empresas (RN-004).
+// POST /api/empresas/[id]/vaciar-datos
 //
-// El borrado ocurre en una transacción, en el orden correcto (siempre los
-// hijos antes que los padres) para no violar las llaves foráneas. Algunas
-// tablas ya tienen ON DELETE CASCADE en la base de datos (ventas_detalle,
-// fichas_tecnicas, empresa_modulos) y se limpian solas; el resto se borra
-// explícitamente aquí. Esta lista debe mantenerse al día cada vez que se
-// agrega una tabla nueva vinculada a una empresa — si algo se olvida aquí,
-// el borrado de la empresa vuelve a fallar por una llave foránea pendiente.
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+// Borra TODOS los registros operativos/transaccionales de una empresa
+// (ventas, gastos, CxC, CxP, caja chica, RRHH, insumos, productos,
+// clientes, movimientos bancarios) para "empezar desde cero", pero
+// CONSERVA lo que es configuración, no dato de prueba:
+//   - La empresa misma (rubro, moneda, IGV, nombre...)
+//   - Los catálogos clonados del rubro (categorías, unidades, tipos de gasto...)
+//   - Los locales (centros de costo)
+//   - Las cuentas bancarias — se conservan como cuentas, pero su saldo se
+//     resetea a S/ 0 y se borra su historial de movimientos
+//   - El equipo asignado (usuarios y sus permisos en esta empresa)
+//
+// Reservado a superadmin, igual que eliminar una empresa — es igual de
+// destructivo para los datos que sí borra.
+export async function POST(request: Request, { params }: { params: { id: string } }) {
   const usuarioActual = await getUsuarioActual();
 
   try {
@@ -33,11 +38,11 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
     // Créditos a clientes (CxC)
     prisma.cobroCxc.deleteMany({ where: { cxc: { empresaId } } }),
     prisma.cuentaPorCobrar.deleteMany({ where: { empresaId } }),
-    // Caja Chica (antes de Gastos, porque puede referenciar un gasto trasladado)
+    // Caja Chica
     prisma.gastoCajaChica.deleteMany({ where: { cajaChica: { empresaId } } }),
     prisma.movimientoCajaChica.deleteMany({ where: { cajaChica: { empresaId } } }),
     prisma.cajaChica.deleteMany({ where: { empresaId } }),
-    // Cuentas por pagar (CxP) y Gastos / Documentos de compra
+    // Cuentas por pagar (CxP), Gastos, Documentos de compra
     prisma.pagoCxp.deleteMany({ where: { cxp: { empresaId } } }),
     prisma.cuentaPorPagar.deleteMany({ where: { empresaId } }),
     prisma.gasto.deleteMany({ where: { empresaId } }),
@@ -46,29 +51,31 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
     prisma.registroVentaDiaria.deleteMany({ where: { empresaId } }),
     prisma.adelantoSueldo.deleteMany({ where: { empresaId } }),
     prisma.empleado.deleteMany({ where: { empresaId } }),
-    // Flujo de caja (cuentas bancarias) — al final de lo que las referencia
+    // Flujo de caja: se borra el HISTORIAL, pero la cuenta se conserva con saldo en 0
     prisma.movimientoBancario.deleteMany({ where: { cuentaBancaria: { empresaId } } }),
-    prisma.cuentaBancaria.deleteMany({ where: { empresaId } }),
-    // Ventas (POS), inventario, catálogo de productos/insumos
+    prisma.cuentaBancaria.updateMany({ where: { empresaId }, data: { saldoActual: 0 } }),
+    // Ventas (POS), inventario, productos/insumos, clientes
     prisma.venta.deleteMany({ where: { empresaId } }), // cascada: ventas_detalle
     prisma.merma.deleteMany({ where: { empresaId } }),
     prisma.movimientoInventario.deleteMany({ where: { empresaId } }),
     prisma.producto.deleteMany({ where: { empresaId } }), // cascada: fichas_tecnicas
     prisma.insumo.deleteMany({ where: { empresaId } }),
     prisma.cliente.deleteMany({ where: { empresaId } }),
-    // Locales y catálogos base
-    prisma.local.deleteMany({ where: { empresaId } }),
-    prisma.categoriaInsumo.deleteMany({ where: { empresaId } }),
-    prisma.unidadMedida.deleteMany({ where: { empresaId } }),
-    prisma.categoriaProducto.deleteMany({ where: { empresaId } }),
-    prisma.tipoGasto.deleteMany({ where: { empresaId } }),
-    prisma.metodoPago.deleteMany({ where: { empresaId } }),
-    prisma.conceptoMovimientoCaja.deleteMany({ where: { empresaId } }),
-    // Equipo asignado, auditoría, y la empresa misma
-    prisma.usuarioEmpresa.deleteMany({ where: { empresaId } }),
-    prisma.auditoria.deleteMany({ where: { empresaId } }),
-    prisma.empresa.delete({ where: { id: empresaId } }), // cascada: empresa_modulos
+    // Se CONSERVAN: locales, cuentas_bancarias (como cuentas), catálogos
+    // (categorías/unidades/tipos_gasto/metodos_pago/conceptos), equipo
+    // asignado (usuario_empresa), y la empresa misma.
   ]);
+
+  await prisma.auditoria.create({
+    data: {
+      usuarioId: usuarioActual!.id,
+      empresaId,
+      tablaAfectada: "empresa",
+      registroId: empresaId,
+      accion: "eliminar",
+      valorAnterior: { accion: "vaciar_datos", nota: "Se borraron todos los registros operativos de prueba" },
+    },
+  });
 
   return NextResponse.json({ ok: true });
 }

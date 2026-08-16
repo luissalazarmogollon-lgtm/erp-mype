@@ -484,3 +484,29 @@ No hay SQL nuevo — solo cambio de interfaz.
 1. Sube el zip completo a GitHub (sobrescribe lo existente).
 2. Espera el redeploy de Vercel.
 3. Entra a **Usuarios y accesos**, busca a Iriani (o cualquier usuario con acceso asignado), haz clic en "Editar" sobre su acceso a Heladería Dolas, agrégale otro permiso (por ejemplo "Flujo de Caja"), guarda, y confirma que se actualizó sin duplicar la asignación.
+
+---
+
+## Corrección: "Eliminar empresa" + Nueva opción: "Vaciar datos de prueba"
+
+### Por qué no te dejaba eliminar la empresa
+
+La función de eliminar empresa se construyó en un sprint temprano, antes de que existieran Locales, Cuentas Bancarias, RRHH (Empleados/Adelantos), Caja Chica y Documentos de Compra. Nunca se actualizó para incluir esas tablas nuevas — así que al intentar borrar, el sistema se topaba con una referencia pendiente (por ejemplo, una cuenta bancaria que todavía "pertenecía" a la empresa) y fallaba. **Ya está corregido** — ahora el borrado de empresa cubre absolutamente todo lo que hemos construido.
+
+### Nueva opción, probablemente más útil para tu caso: "Vaciar datos de prueba"
+
+En vez de borrar la empresa completa (lo que te obligaría a recrearla, reconfigurar el rubro/moneda/IGV, y reasignar a todo tu equipo de nuevo), esta opción borra **solo los registros operativos** — ventas, gastos, créditos, cuentas por pagar, caja chica, trabajadores/adelantos, insumos, productos, clientes, y el historial de movimientos bancarios — pero **conserva**:
+- La configuración de la empresa (rubro, moneda, IGV).
+- Los catálogos clonados del rubro.
+- Los locales que ya creaste.
+- Las cuentas bancarias (se quedan, pero con su saldo reseteado a S/ 0).
+- El equipo ya asignado (Iriani, Andrea, y quien más tengas).
+
+Ambos botones (ahora uno junto al otro en la parte superior de la empresa) piden que escribas el nombre exacto de la empresa para confirmar, porque son igual de irreversibles.
+
+### Pasos para aplicar
+
+1. **Sube el código a GitHub** — arrastra todos los archivos de este zip (Add file → Upload files), sobrescribiendo lo existente.
+2. Este cambio es solo código — **no necesita SQL nuevo**.
+3. Espera el redeploy automático de Vercel.
+4. Entra a Heladería Dolas → verás dos botones nuevos arriba: "Vaciar datos de prueba" y "Eliminar empresa". Para tu caso, usa **"Vaciar datos de prueba"** — escribe el nombre exacto de la empresa cuando te lo pida, confirma, y la empresa quedará lista para que empieces a registrar datos reales desde cero.

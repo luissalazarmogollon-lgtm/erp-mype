@@ -4,6 +4,7 @@ import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { InvitarUsuarioForm } from "@/components/ui/InvitarUsuarioForm";
 import { EliminarEmpresaButton } from "@/components/ui/EliminarEmpresaButton";
+import { VaciarDatosButton } from "@/components/ui/VaciarDatosButton";
 import { EquipoAsignado } from "@/components/ui/EquipoAsignado";
 
 // Pantalla de detalle de una empresa. Muestra los accesos directos al
@@ -60,7 +61,10 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <h1 style={{ fontSize: 26, marginBottom: 6 }}>{empresa.nombreComercial}</h1>
         {usuarioActual.esSuperadminPlataforma && (
-          <EliminarEmpresaButton empresaId={params.id} nombreComercial={empresa.nombreComercial} />
+          <div style={{ display: "flex", gap: 10 }}>
+            <VaciarDatosButton empresaId={params.id} nombreComercial={empresa.nombreComercial} />
+            <EliminarEmpresaButton empresaId={params.id} nombreComercial={empresa.nombreComercial} />
+          </div>
         )}
       </div>
       <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 28 }}>
