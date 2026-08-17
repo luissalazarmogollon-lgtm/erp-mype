@@ -60,6 +60,7 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
       label: "Solicitudes de Pedido",
     },
     { modulos: ["compras"], href: "compras", label: "Compras" },
+    { modulos: ["compras"], href: "proveedores", label: "Proveedores" },
   ];
 
   return (
