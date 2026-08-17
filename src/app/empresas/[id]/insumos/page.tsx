@@ -104,7 +104,12 @@ export default function InsumosPage({ params }: { params: { id: string } }) {
         </Link>{" "}
         → <b>Insumos</b>
       </p>
-      <h1 style={{ fontSize: 26, marginBottom: 20 }}>Insumos</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <h1 style={{ fontSize: 26 }}>Insumos</h1>
+        <Link href={`/empresas/${empresaId}/insumos/importar`} className="mono" style={{ fontSize: 12, color: "var(--ink-soft)" }}>
+          Cargar por plantilla →
+        </Link>
+      </div>
 
       {!mostrarForm ? (
         <button className="btn-primary" onClick={() => setMostrarForm(true)} style={{ marginBottom: 20 }}>
