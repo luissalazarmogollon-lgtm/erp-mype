@@ -37,18 +37,22 @@ export async function GET(request: Request, { params }: { params: { id: string }
     locales,
     cuentasBancarias,
     empleados,
+    areas,
+    proveedores,
   ] = await Promise.all([
     prisma.categoriaInsumo.findMany({ where: { empresaId }, orderBy: { nombre: "asc" } }),
     prisma.categoriaProducto.findMany({ where: { empresaId }, orderBy: { nombre: "asc" } }),
     prisma.unidadMedida.findMany({ where: { empresaId }, orderBy: { nombre: "asc" } }),
     prisma.tipoGasto.findMany({ where: { empresaId }, orderBy: { nombre: "asc" } }),
     prisma.metodoPago.findMany({ where: { empresaId }, orderBy: { nombre: "asc" } }),
-    prisma.insumo.findMany({ where: { empresaId }, orderBy: { nombre: "asc" } }),
+    prisma.insumo.findMany({ where: { empresaId }, include: { unidadMedida: true }, orderBy: { nombre: "asc" } }),
     prisma.producto.findMany({ where: { empresaId, estado: "activo" }, orderBy: { nombre: "asc" } }),
     prisma.cliente.findMany({ where: { empresaId }, orderBy: { nombre: "asc" } }),
     prisma.local.findMany({ where: { empresaId, estado: "activo" }, orderBy: { nombre: "asc" } }),
     prisma.cuentaBancaria.findMany({ where: { empresaId, estado: "activo" }, orderBy: { bancoNombre: "asc" } }),
     prisma.empleado.findMany({ where: { empresaId, estado: "activo" }, orderBy: { nombres: "asc" } }),
+    prisma.area.findMany({ where: { empresaId, estado: "activo" }, orderBy: { nombre: "asc" } }),
+    prisma.proveedor.findMany({ where: { empresaId, estado: "activo" }, orderBy: { nombre: "asc" } }),
   ]);
 
   return NextResponse.json({
@@ -62,6 +66,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
       nombre: i.nombre,
       costoPromedioActual: i.costoPromedioActual.toString(),
       stockActual: i.stockActual.toString(),
+      unidadMedida: i.unidadMedida?.abreviatura ?? null,
     })),
     productos: productos.map((p) => ({
       id: p.id.toString(),
@@ -77,5 +82,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
       saldoActual: c.saldoActual.toString(),
     })),
     empleados: empleados.map((e) => ({ id: e.id.toString(), nombre: `${e.nombres} ${e.apellidos}` })),
+    areas: areas.map((a) => ({ id: a.id.toString(), nombre: a.nombre })),
+    proveedores: proveedores.map((p) => ({ id: p.id.toString(), nombre: p.nombre })),
   });
 }

@@ -54,14 +54,22 @@ export async function POST(request: Request, { params }: { params: { id: string 
     // Flujo de caja: se borra el HISTORIAL, pero la cuenta se conserva con saldo en 0
     prisma.movimientoBancario.deleteMany({ where: { cuentaBancaria: { empresaId } } }),
     prisma.cuentaBancaria.updateMany({ where: { empresaId }, data: { saldoActual: 0 } }),
+    // Solicitudes de Pedido / Compras — datos transaccionales, se borran.
+    // Las Áreas se CONSERVAN (son estructura organizativa, igual que Locales).
+    prisma.alertaAnomaliaCosto.deleteMany({ where: { empresaId } }),
+    prisma.pedidoCompraDetalle.deleteMany({ where: { pedidoCompra: { empresaId } } }),
+    prisma.pedidoCompra.deleteMany({ where: { empresaId } }),
+    prisma.solicitudPedido.deleteMany({ where: { empresaId } }), // cascada: solicitudes_pedido_detalle
     // Ventas (POS), inventario, productos/insumos, clientes
     prisma.venta.deleteMany({ where: { empresaId } }), // cascada: ventas_detalle
     prisma.merma.deleteMany({ where: { empresaId } }),
-    prisma.movimientoInventario.deleteMany({ where: { empresaId } }),
+    prisma.movimientoInventario.deleteMany({ where: { empresaId } }), // referencia lotes_compra
+    prisma.loteCompra.deleteMany({ where: { empresaId } }),
     prisma.producto.deleteMany({ where: { empresaId } }), // cascada: fichas_tecnicas
-    prisma.insumo.deleteMany({ where: { empresaId } }),
+    prisma.insumo.deleteMany({ where: { empresaId } }), // referencia proveedor preferido
     prisma.cliente.deleteMany({ where: { empresaId } }),
-    // Se CONSERVAN: locales, cuentas_bancarias (como cuentas), catálogos
+    prisma.proveedor.deleteMany({ where: { empresaId } }),
+    // Se CONSERVAN: locales, áreas, cuentas_bancarias (como cuentas), catálogos
     // (categorías/unidades/tipos_gasto/metodos_pago/conceptos), equipo
     // asignado (usuario_empresa), y la empresa misma.
   ]);

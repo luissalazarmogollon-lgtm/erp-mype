@@ -38,16 +38,24 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
     orderBy: { fechaAsignacion: "asc" },
   });
 
-  const ACCESOS_DIRECTOS = [
-    { modulo: "estado_resultados", href: "estado-resultados", label: "Estado de Resultados", primario: true },
-    { modulo: "flujo_caja", href: "flujo-caja", label: "Flujo de Caja" },
-    { modulo: "ventas_diarias", href: "ventas-diarias", label: "Ventas diarias" },
-    { modulo: "gastos", href: "gastos", label: "Gastos y Costos" },
-    { modulo: "creditos", href: "creditos", label: "Créditos (CxC)" },
-    { modulo: "cuentas_por_pagar", href: "cuentas-por-pagar", label: "Cuentas por pagar" },
-    { modulo: "rrhh", href: "rrhh", label: "RRHH" },
-    { modulo: "caja_chica", href: "caja-chica", label: "Caja Chica" },
-    { modulo: "locales", href: "locales", label: "Locales" },
+  const puedeVerAlguno = (modulos: string[]) => modulos.some((m) => puedeVer(m));
+
+  const ACCESOS_DIRECTOS: { modulos: string[]; href: string; label: string; primario?: boolean }[] = [
+    { modulos: ["estado_resultados"], href: "estado-resultados", label: "Estado de Resultados", primario: true },
+    { modulos: ["flujo_caja"], href: "flujo-caja", label: "Flujo de Caja" },
+    { modulos: ["ventas_diarias"], href: "ventas-diarias", label: "Ventas diarias" },
+    { modulos: ["gastos"], href: "gastos", label: "Gastos y Costos" },
+    { modulos: ["creditos"], href: "creditos", label: "Créditos (CxC)" },
+    { modulos: ["cuentas_por_pagar"], href: "cuentas-por-pagar", label: "Cuentas por pagar" },
+    { modulos: ["rrhh"], href: "rrhh", label: "RRHH" },
+    { modulos: ["caja_chica"], href: "caja-chica", label: "Caja Chica" },
+    { modulos: ["locales"], href: "locales", label: "Locales" },
+    {
+      modulos: ["solicitudes_pedido", "aprobar_solicitudes_pedido", "despachar_solicitudes_pedido"],
+      href: "solicitudes-pedido",
+      label: "Solicitudes de Pedido",
+    },
+    { modulos: ["compras"], href: "compras", label: "Compras" },
   ];
 
   return (
@@ -74,7 +82,7 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
 
       <div style={{ marginBottom: 28 }}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {ACCESOS_DIRECTOS.filter((a) => puedeVer(a.modulo)).map((a) => (
+          {ACCESOS_DIRECTOS.filter((a) => puedeVerAlguno(a.modulos)).map((a) => (
             <Link
               key={a.href}
               href={`/empresas/${params.id}/${a.href}`}
@@ -85,7 +93,7 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
             </Link>
           ))}
         </div>
-        {ACCESOS_DIRECTOS.filter((a) => puedeVer(a.modulo)).length === 0 && (
+        {ACCESOS_DIRECTOS.filter((a) => puedeVerAlguno(a.modulos)).length === 0 && (
           <p style={{ color: "var(--ink-soft)", fontSize: 13 }}>
             No tienes acceso a ningún módulo de esta empresa todavía. Pídele al superadmin que te lo asigne.
           </p>

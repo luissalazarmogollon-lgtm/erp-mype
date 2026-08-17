@@ -13,6 +13,8 @@ type Insumo = {
   stockActual: string;
   costoPromedioActual: string;
   bajoMinimo: boolean;
+  proveedorPreferidoId: string | null;
+  proveedorPreferidoNombre: string | null;
 };
 
 type Catalogo = { id: string; nombre: string };
@@ -22,8 +24,10 @@ export default function InsumosPage({ params }: { params: { id: string } }) {
   const [insumos, setInsumos] = useState<Insumo[]>([]);
   const [categorias, setCategorias] = useState<Catalogo[]>([]);
   const [unidades, setUnidades] = useState<Catalogo[]>([]);
+  const [proveedores, setProveedores] = useState<Catalogo[]>([]);
   const [mostrarForm, setMostrarForm] = useState(false);
   const [ajustando, setAjustando] = useState<string | null>(null);
+  const [asignandoProveedor, setAsignandoProveedor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [form, setForm] = useState({ nombre: "", codigo: "", categoriaId: "", unidadMedidaId: "", stockMinimo: 0 });
@@ -41,6 +45,7 @@ export default function InsumosPage({ params }: { params: { id: string } }) {
       .then((data) => {
         setCategorias(data.categoriasInsumo ?? []);
         setUnidades(data.unidadesMedida ?? []);
+        setProveedores(data.proveedores ?? []);
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -78,6 +83,16 @@ export default function InsumosPage({ params }: { params: { id: string } }) {
     }
     setAjustando(null);
     setAjuste({ cantidad: 0, costoUnitario: 0, observacion: "" });
+    cargarTodo();
+  }
+
+  async function handleAsignarProveedor(insumoId: string, proveedorId: string) {
+    await fetch(`/api/empresas/${empresaId}/insumos/${insumoId}/proveedor`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ proveedorId: proveedorId || null }),
+    });
+    setAsignandoProveedor(null);
     cargarTodo();
   }
 
@@ -153,6 +168,29 @@ export default function InsumosPage({ params }: { params: { id: string } }) {
                 <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
                   {i.categoria ?? "Sin categoría"} · {i.unidadMedida ?? "-"}
                 </p>
+                {asignandoProveedor === i.id ? (
+                  <select
+                    className="mono"
+                    style={{ fontSize: 11, marginTop: 4 }}
+                    defaultValue={i.proveedorPreferidoId ?? ""}
+                    onChange={(e) => handleAsignarProveedor(i.id, e.target.value)}
+                    onBlur={() => setAsignandoProveedor(null)}
+                    autoFocus
+                  >
+                    <option value="">Sin proveedor preferido</option>
+                    {proveedores.map((p) => (
+                      <option key={p.id} value={p.id}>{p.nombre}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <button
+                    onClick={() => setAsignandoProveedor(i.id)}
+                    className="mono"
+                    style={{ fontSize: 11, color: "var(--ink-soft)", background: "none", border: "none", cursor: "pointer", padding: 0, marginTop: 2 }}
+                  >
+                    {i.proveedorPreferidoNombre ? `Proveedor: ${i.proveedorPreferidoNombre} (editar)` : "+ Asignar proveedor preferido"}
+                  </button>
+                )}
               </div>
               <div style={{ textAlign: "right" }}>
                 <p className="mono" style={{ fontSize: 13 }}>Stock: {i.stockActual}</p>
@@ -191,13 +229,22 @@ export default function InsumosPage({ params }: { params: { id: string } }) {
                 </div>
               </div>
             ) : (
-              <button
-                className="btn-ghost"
-                style={{ marginTop: 10, fontSize: 12, padding: "6px 12px" }}
-                onClick={() => { setAjustando(i.id); setError(null); }}
-              >
-                Ajustar stock
-              </button>
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button
+                  className="btn-ghost"
+                  style={{ fontSize: 12, padding: "6px 12px" }}
+                  onClick={() => { setAjustando(i.id); setError(null); }}
+                >
+                  Ajustar stock
+                </button>
+                <Link
+                  href={`/empresas/${empresaId}/insumos/${i.id}/kardex`}
+                  className="btn-ghost"
+                  style={{ fontSize: 12, padding: "6px 12px", textDecoration: "none" }}
+                >
+                  Ver Kardex / Lotes
+                </Link>
+              </div>
             )}
           </div>
         ))}

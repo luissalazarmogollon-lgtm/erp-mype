@@ -1,8 +1,44 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { getUsuarioActual, requiereSuperadmin } from "@/lib/auth";
+import { getUsuarioActual, requiereSuperadmin, verificarAccesoEmpresa } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
+
+const patchSchema = z.object({
+  umbralAlertaAnomaliaPct: z.number().min(0).max(100),
+});
+
+// PATCH /api/empresas/[id] — por ahora solo permite ajustar el umbral de
+// alerta de anomalía de costo (Sprint 6). Reservado a quien tiene acceso
+// total a la empresa (superadmin o Asesor principal).
+export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+  const usuarioActual = await getUsuarioActual();
+  if (!usuarioActual) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  const empresaId = BigInt(params.id);
+  try {
+    const acceso = await verificarAccesoEmpresa(usuarioActual.id, empresaId);
+    if (!acceso.accesoTotal) {
+      return NextResponse.json({ error: "No tienes permiso para cambiar esta configuración" }, { status: 403 });
+    }
+  } catch (error) {
+    return NextResponse.json({ error: (error as Error).message }, { status: 403 });
+  }
+
+  const body = await request.json();
+  const parsed = patchSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+
+  await prisma.empresa.update({
+    where: { id: empresaId },
+    data: { umbralAlertaAnomaliaPct: parsed.data.umbralAlertaAnomaliaPct },
+  });
+
+  return NextResponse.json({ ok: true });
+}
 
 // DELETE /api/empresas/[id] — elimina la empresa y TODOS sus datos
 // relacionados. Reservado a superadmin, igual que el alta de empresas (RN-004).
@@ -10,10 +46,11 @@ export const dynamic = "force-dynamic";
 // El borrado ocurre en una transacción, en el orden correcto (siempre los
 // hijos antes que los padres) para no violar las llaves foráneas. Algunas
 // tablas ya tienen ON DELETE CASCADE en la base de datos (ventas_detalle,
-// fichas_tecnicas, empresa_modulos) y se limpian solas; el resto se borra
-// explícitamente aquí. Esta lista debe mantenerse al día cada vez que se
-// agrega una tabla nueva vinculada a una empresa — si algo se olvida aquí,
-// el borrado de la empresa vuelve a fallar por una llave foránea pendiente.
+// fichas_tecnicas, empresa_modulos, solicitudes_pedido_detalle) y se limpian
+// solas; el resto se borra explícitamente aquí. Esta lista debe mantenerse
+// al día cada vez que se agrega una tabla nueva vinculada a una empresa —
+// si algo se olvida aquí, el borrado de la empresa vuelve a fallar por una
+// llave foránea pendiente.
 export async function DELETE(request: Request, { params }: { params: { id: string } }) {
   const usuarioActual = await getUsuarioActual();
 
@@ -49,13 +86,23 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
     // Flujo de caja (cuentas bancarias) — al final de lo que las referencia
     prisma.movimientoBancario.deleteMany({ where: { cuentaBancaria: { empresaId } } }),
     prisma.cuentaBancaria.deleteMany({ where: { empresaId } }),
+    // Solicitudes de Pedido / Compras — ANTES de insumos y proveedores,
+    // porque pedidos_compra_detalle referencia insumo Y solicitud_detalle,
+    // y solicitud_pedido referencia área.
+    prisma.alertaAnomaliaCosto.deleteMany({ where: { empresaId } }),
+    prisma.pedidoCompraDetalle.deleteMany({ where: { pedidoCompra: { empresaId } } }),
+    prisma.pedidoCompra.deleteMany({ where: { empresaId } }),
+    prisma.solicitudPedido.deleteMany({ where: { empresaId } }), // cascada: solicitudes_pedido_detalle
     // Ventas (POS), inventario, catálogo de productos/insumos
     prisma.venta.deleteMany({ where: { empresaId } }), // cascada: ventas_detalle
     prisma.merma.deleteMany({ where: { empresaId } }),
-    prisma.movimientoInventario.deleteMany({ where: { empresaId } }),
+    prisma.movimientoInventario.deleteMany({ where: { empresaId } }), // referencia lotes_compra
+    prisma.loteCompra.deleteMany({ where: { empresaId } }),
     prisma.producto.deleteMany({ where: { empresaId } }), // cascada: fichas_tecnicas
-    prisma.insumo.deleteMany({ where: { empresaId } }),
+    prisma.insumo.deleteMany({ where: { empresaId } }), // referencia proveedor preferido
     prisma.cliente.deleteMany({ where: { empresaId } }),
+    prisma.proveedor.deleteMany({ where: { empresaId } }),
+    prisma.area.deleteMany({ where: { empresaId } }),
     // Locales y catálogos base
     prisma.local.deleteMany({ where: { empresaId } }),
     prisma.categoriaInsumo.deleteMany({ where: { empresaId } }),

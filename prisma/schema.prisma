@@ -133,6 +133,13 @@ model Empresa {
   cuentasBancarias       CuentaBancaria[]
   cajasChicas            CajaChica[]
   documentosCompra       DocumentoCompra[]
+  areas                  Area[]
+  solicitudesPedido      SolicitudPedido[]
+  lotesCompra            LoteCompra[]
+  proveedores            Proveedor[]
+  pedidosCompra          PedidoCompra[]
+  alertasAnomaliaCosto   AlertaAnomaliaCosto[]
+  umbralAlertaAnomaliaPct Decimal @default(15) @map("umbral_alerta_anomalia_pct") @db.Decimal(5, 2)
 
   @@map("empresas")
 }
@@ -355,6 +362,12 @@ model Insumo {
   fichasTecnicas       FichaTecnica[]
   movimientos          MovimientoInventario[]
   mermas               Merma[]
+  solicitudesPedidoDetalle SolicitudPedidoDetalle[]
+  lotes                LoteCompra[]
+  proveedorPreferidoId BigInt?  @map("proveedor_preferido_id")
+  proveedorPreferido   Proveedor? @relation(fields: [proveedorPreferidoId], references: [id])
+  pedidosCompraDetalle PedidoCompraDetalle[]
+  alertasAnomaliaCosto AlertaAnomaliaCosto[]
 
   @@unique([empresaId, codigo])
   @@map("insumos")
@@ -401,9 +414,11 @@ model MovimientoInventario {
   empresa         Empresa  @relation(fields: [empresaId], references: [id])
   insumoId        BigInt   @map("insumo_id")
   insumo          Insumo   @relation(fields: [insumoId], references: [id])
-  tipo            String   // entrada_compra | salida_venta | merma | ajuste_manual
+  tipo            String   // entrada_compra | salida_venta | salida_solicitud | merma | ajuste_manual
   cantidad        Decimal  @db.Decimal(10, 3)
   costoUnitario   Decimal  @map("costo_unitario") @db.Decimal(10, 4)
+  loteId          BigInt?  @map("lote_id")
+  lote            LoteCompra? @relation(fields: [loteId], references: [id])
   fecha           DateTime @default(now())
   referenciaTipo  String?  @map("referencia_tipo")
   referenciaId    BigInt?  @map("referencia_id")
@@ -790,4 +805,195 @@ model DocumentoCompra {
   cuentaPorPagar    CuentaPorPagar?
 
   @@map("documentos_compra")
+}
+
+// ---------------------------------------------------------------------
+// 7. Solicitudes de Pedido — Sprint 4 (Compras), parte 1.
+// Un responsable de área solicita insumos/materiales; el aprobador
+// (cualquier Asesor o superadmin, sin jerarquía) puede modificar
+// cantidades o eliminar ítems al decidir. Al aprobar, cada ítem se
+// separa automáticamente según el stock de Insumo:
+//   - lo que hay stock disponible → "por_despachar" (NO se descuenta
+//     todavía; el descuento real ocurre en el Despacho — Sprint B).
+//   - lo que falta → "pendiente_compra" (se consolidará en un Pedido
+//     de Compra por proveedor — Sprint C).
+// Un mismo ítem puede partirse en dos filas si el stock alcanza solo
+// parcialmente (ver lógica en la API de decisión).
+// El costeo de este módulo usa PEPS + Lotes (Sprint B en adelante); el
+// ajuste manual de stock de Insumo sigue usando promedio ponderado tal
+// como está hoy — son dos mecanismos de costeo que conviven a propósito.
+// ---------------------------------------------------------------------
+
+model Area {
+  id          BigInt   @id @default(autoincrement())
+  empresaId   BigInt   @map("empresa_id")
+  empresa     Empresa  @relation(fields: [empresaId], references: [id])
+  nombre      String
+  estado      String   @default("activo")
+
+  solicitudes SolicitudPedido[]
+
+  @@unique([empresaId, nombre])
+  @@map("areas")
+}
+
+model SolicitudPedido {
+  id                  BigInt    @id @default(autoincrement())
+  empresaId           BigInt    @map("empresa_id")
+  empresa             Empresa   @relation(fields: [empresaId], references: [id])
+  areaId              BigInt?   @map("area_id")
+  area                Area?     @relation(fields: [areaId], references: [id])
+  responsableId       String    @map("responsable_id") @db.Uuid
+  motivo              String?
+  // borrador | enviada | aprobada | rechazada
+  estado              String    @default("borrador")
+  aprobadorId         String?   @map("aprobador_id") @db.Uuid
+  fechaAprobacion     DateTime? @map("fecha_aprobacion")
+  comentarioAprobador String?   @map("comentario_aprobador")
+  fecha               DateTime  @default(now())
+
+  detalle             SolicitudPedidoDetalle[]
+
+  @@index([empresaId, estado])
+  @@map("solicitudes_pedido")
+}
+
+model SolicitudPedidoDetalle {
+  id                 BigInt          @id @default(autoincrement())
+  solicitudId        BigInt          @map("solicitud_id")
+  solicitud          SolicitudPedido @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
+  insumoId           BigInt          @map("insumo_id")
+  insumo             Insumo          @relation(fields: [insumoId], references: [id])
+  cantidadSolicitada Decimal         @map("cantidad_solicitada") @db.Decimal(10, 3)
+  cantidadAprobada   Decimal?        @map("cantidad_aprobada") @db.Decimal(10, 3)
+  // pendiente | eliminado | por_despachar | pendiente_compra | despachado
+  estadoItem         String          @default("pendiente") @map("estado_item")
+  fechaDespacho      DateTime?       @map("fecha_despacho")
+  observacion        String?
+  pedidoCompraDetalle PedidoCompraDetalle?
+
+  @@index([insumoId, estadoItem])
+  @@map("solicitudes_pedido_detalle")
+}
+
+// ---------------------------------------------------------------------
+// 8. Lotes de compra y Kardex por lote — Sprint 5 (Despacho).
+// Cada entrada de stock (compra, ajuste manual positivo, o la migración
+// de apertura) crea un LoteCompra con su propio costo. El Despacho
+// consume de estos lotes en orden PEPS (fechaIngreso ASC), y cada
+// consumo genera un movimiento de Kardex (MovimientoInventario) con
+// loteId — así el costo de cada salida es el costo real de ese lote,
+// no un promedio. `Insumo.costoPromedioActual` sigue existiendo como
+// KPI simplificado y no se toca por este mecanismo.
+// ---------------------------------------------------------------------
+
+model LoteCompra {
+  id                 BigInt   @id @default(autoincrement())
+  empresaId          BigInt   @map("empresa_id")
+  empresa            Empresa  @relation(fields: [empresaId], references: [id])
+  insumoId           BigInt   @map("insumo_id")
+  insumo             Insumo   @relation(fields: [insumoId], references: [id])
+  // apertura (migración inicial) | ajuste_manual | compra (Sprint 6+)
+  origen             String
+  fechaIngreso       DateTime @default(now()) @map("fecha_ingreso")
+  cantidadInicial    Decimal  @map("cantidad_inicial") @db.Decimal(10, 3)
+  cantidadDisponible Decimal  @map("cantidad_disponible") @db.Decimal(10, 3)
+  costoUnitario      Decimal  @map("costo_unitario") @db.Decimal(10, 4)
+  referenciaTipo     String?  @map("referencia_tipo")
+  referenciaId       BigInt?  @map("referencia_id")
+
+  movimientos        MovimientoInventario[]
+
+  @@index([insumoId, fechaIngreso])
+  @@map("lotes_compra")
+}
+
+// ---------------------------------------------------------------------
+// 9. Proveedores, Pedidos de Compra y Recepción — Sprint 6.
+// Consolidación: los ítems "pendiente_compra" de varias Solicitudes de
+// Pedido (posiblemente de distintas áreas) se agrupan por el proveedor
+// preferido del insumo y se emiten como un Pedido de Compra (OC) — un
+// documento por proveedor, exportable a PDF.
+// Al Recepcionar, cada línea crea un LoteCompra (origen "compra") con el
+// costo REAL pagado, compara contra el costo del lote anterior del mismo
+// insumo y genera una AlertaAnomaliaCosto si la variación supera el
+// umbral de la empresa. El ítem de la Solicitud vuelve a "por_despachar"
+// con la cantidad realmente recibida — así reutiliza el mismo mecanismo
+// de Despacho del Sprint 5, en vez de duplicar lógica.
+// ---------------------------------------------------------------------
+
+model Proveedor {
+  id        BigInt   @id @default(autoincrement())
+  empresaId BigInt   @map("empresa_id")
+  empresa   Empresa  @relation(fields: [empresaId], references: [id])
+  nombre    String
+  ruc       String?
+  contacto  String?
+  telefono  String?
+  email     String?
+  estado    String   @default("activo")
+
+  insumosPreferidos Insumo[]
+  pedidosCompra     PedidoCompra[]
+
+  @@unique([empresaId, nombre])
+  @@map("proveedores")
+}
+
+model PedidoCompra {
+  id          BigInt    @id @default(autoincrement())
+  empresaId   BigInt    @map("empresa_id")
+  empresa     Empresa   @relation(fields: [empresaId], references: [id])
+  proveedorId BigInt    @map("proveedor_id")
+  proveedor   Proveedor @relation(fields: [proveedorId], references: [id])
+  // emitida | recibida_parcial | recibida | cerrada
+  estado      String    @default("emitida")
+  fecha       DateTime  @default(now())
+  usuarioId   String    @map("usuario_id") @db.Uuid
+
+  detalle     PedidoCompraDetalle[]
+
+  @@index([empresaId, estado])
+  @@map("pedidos_compra")
+}
+
+model PedidoCompraDetalle {
+  id                    BigInt                 @id @default(autoincrement())
+  pedidoCompraId        BigInt                 @map("pedido_compra_id")
+  pedidoCompra          PedidoCompra           @relation(fields: [pedidoCompraId], references: [id], onDelete: Cascade)
+  // Un ítem de solicitud solo puede estar en UNA orden de compra a la vez.
+  solicitudDetalleId    BigInt                 @unique @map("solicitud_detalle_id")
+  solicitudDetalle      SolicitudPedidoDetalle @relation(fields: [solicitudDetalleId], references: [id])
+  insumoId              BigInt                 @map("insumo_id")
+  insumo                Insumo                 @relation(fields: [insumoId], references: [id])
+  cantidad              Decimal                @db.Decimal(10, 3)
+  costoUnitarioEstimado Decimal?               @map("costo_unitario_estimado") @db.Decimal(10, 4)
+  cantidadRecibida      Decimal?               @map("cantidad_recibida") @db.Decimal(10, 3)
+  costoUnitarioReal     Decimal?               @map("costo_unitario_real") @db.Decimal(10, 4)
+  fechaRecepcion        DateTime?              @map("fecha_recepcion")
+
+  @@map("pedidos_compra_detalle")
+}
+
+// Aviso cuando el costo de un lote recién recibido difiere del lote
+// anterior del mismo insumo más allá del umbral configurado por la
+// empresa. No bloquea la recepción — solo informa para que el asesor
+// pueda revisarlo (ej. el proveedor subió precio, o se cargó un error).
+model AlertaAnomaliaCosto {
+  id             BigInt   @id @default(autoincrement())
+  empresaId      BigInt   @map("empresa_id")
+  empresa        Empresa  @relation(fields: [empresaId], references: [id])
+  insumoId       BigInt   @map("insumo_id")
+  insumo         Insumo   @relation(fields: [insumoId], references: [id])
+  loteAnteriorId BigInt?  @map("lote_anterior_id") // referencia informativa, sin FK
+  loteNuevoId    BigInt   @map("lote_nuevo_id")    // referencia informativa, sin FK
+  costoAnterior  Decimal  @map("costo_anterior") @db.Decimal(10, 4)
+  costoNuevo     Decimal  @map("costo_nuevo") @db.Decimal(10, 4)
+  variacionPct   Decimal  @map("variacion_pct") @db.Decimal(6, 2)
+  fecha          DateTime @default(now())
+  // pendiente | revisado
+  estado         String   @default("pendiente")
+
+  @@index([empresaId, estado])
+  @@map("alertas_anomalia_costo")
 }

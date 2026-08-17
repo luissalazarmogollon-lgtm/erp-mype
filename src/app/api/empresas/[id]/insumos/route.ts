@@ -27,7 +27,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
   const insumos = await prisma.insumo.findMany({
     where: { empresaId },
-    include: { categoria: true, unidadMedida: true },
+    include: { categoria: true, unidadMedida: true, proveedorPreferido: true },
     orderBy: { nombre: "asc" },
   });
 
@@ -42,6 +42,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
       stockActual: i.stockActual.toString(),
       costoPromedioActual: i.costoPromedioActual.toString(),
       bajoMinimo: Number(i.stockActual) < Number(i.stockMinimo),
+      proveedorPreferidoId: i.proveedorPreferidoId?.toString() ?? null,
+      proveedorPreferidoNombre: i.proveedorPreferido?.nombre ?? null,
     }))
   );
 }
