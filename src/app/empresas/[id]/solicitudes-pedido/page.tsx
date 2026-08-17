@@ -35,9 +35,8 @@ export default function SolicitudesPedidoPage({ params }: { params: { id: string
 
   const [areaId, setAreaId] = useState("");
   const [motivo, setMotivo] = useState("");
-  const [items, setItems] = useState<{ insumoId: string; cantidad: number }[]>([]);
-  const [insumoActual, setInsumoActual] = useState("");
-  const [cantidadActual, setCantidadActual] = useState(1);
+  const [seleccionados, setSeleccionados] = useState<Record<string, number>>({});
+  const [busqueda, setBusqueda] = useState("");
 
   async function cargarAcceso() {
     const res = await fetch(`/api/empresas/${empresaId}/mi-acceso`).then((r) => r.json());
@@ -68,33 +67,27 @@ export default function SolicitudesPedidoPage({ params }: { params: { id: string
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [empresaId, vista]);
 
-  function agregarItem() {
+  function toggleInsumo(insumoId: string, checked: boolean) {
     setError(null);
-    if (!insumoActual) {
-      setError("Elige un insumo.");
-      return;
-    }
-    if (cantidadActual <= 0) {
-      setError("La cantidad debe ser mayor a 0.");
-      return;
-    }
-    if (items.some((i) => i.insumoId === insumoActual)) {
-      setError("Ese insumo ya está en la lista.");
-      return;
-    }
-    setItems([...items, { insumoId: insumoActual, cantidad: cantidadActual }]);
-    setInsumoActual("");
-    setCantidadActual(1);
+    setSeleccionados((prev) => {
+      const copia = { ...prev };
+      if (checked) copia[insumoId] = copia[insumoId] || 1;
+      else delete copia[insumoId];
+      return copia;
+    });
   }
 
-  function quitarItem(insumoId: string) {
-    setItems(items.filter((i) => i.insumoId !== insumoId));
+  function actualizarCantidad(insumoId: string, cantidad: number) {
+    setSeleccionados((prev) => ({ ...prev, [insumoId]: cantidad }));
   }
 
   async function handleEnviar() {
     setError(null);
+    const items = Object.entries(seleccionados)
+      .filter(([, cantidad]) => cantidad > 0)
+      .map(([insumoId, cantidad]) => ({ insumoId, cantidad }));
     if (items.length === 0) {
-      setError("Agrega al menos un ítem antes de enviar.");
+      setError("Marca al menos un insumo antes de enviar.");
       return;
     }
     setGuardando(true);
@@ -113,14 +106,14 @@ export default function SolicitudesPedidoPage({ params }: { params: { id: string
 
     setAreaId("");
     setMotivo("");
-    setItems([]);
+    setSeleccionados({});
+    setBusqueda("");
     setMostrarForm(false);
     cargarSolicitudes(vista);
   }
 
-  function nombreInsumo(id: string) {
-    return insumos.find((i) => i.id === id)?.nombre ?? id;
-  }
+  const insumosFiltrados = insumos.filter((i) => i.nombre.toLowerCase().includes(busqueda.toLowerCase()));
+  const totalSeleccionados = Object.keys(seleccionados).length;
 
   return (
     <main style={{ maxWidth: 800, margin: "0 auto", padding: "32px 24px" }}>
@@ -197,55 +190,53 @@ export default function SolicitudesPedidoPage({ params }: { params: { id: string
               </div>
 
               <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", margin: "10px 0", textTransform: "uppercase" }}>
-                Agregar ítems
+                Marca los insumos que necesitas ({totalSeleccionados} seleccionado{totalSeleccionados !== 1 ? "s" : ""})
               </p>
-              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12 }}>
-                <div className="field">
-                  <label>Insumo</label>
-                  <select value={insumoActual} onChange={(e) => setInsumoActual(e.target.value)}>
-                    <option value="">Selecciona...</option>
-                    {insumos.map((i) => (
-                      <option key={i.id} value={i.id}>
-                        {i.nombre} (stock: {Number(i.stockActual).toFixed(2)} {i.unidadMedida ?? ""})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label>Cantidad</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={cantidadActual}
-                    onChange={(e) => setCantidadActual(Number(e.target.value))}
-                  />
-                </div>
-              </div>
-              <button type="button" className="btn-ghost" onClick={agregarItem} style={{ fontSize: 12, padding: "6px 12px" }}>
-                + Agregar a la lista
-              </button>
-
-              {items.length > 0 && (
-                <div style={{ marginTop: 14, marginBottom: 4 }}>
-                  {items.map((item) => (
+              <input
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                placeholder="Buscar insumo..."
+                style={{ marginBottom: 8 }}
+              />
+              <div style={{ maxHeight: 320, overflowY: "auto", border: "1px solid var(--line)", borderRadius: "var(--radius)" }}>
+                {insumosFiltrados.map((i, idx) => {
+                  const marcado = i.id in seleccionados;
+                  return (
                     <div
-                      key={item.insumoId}
-                      style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid var(--line)" }}
+                      key={i.id}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 10, padding: "8px 12px",
+                        borderBottom: idx < insumosFiltrados.length - 1 ? "1px solid var(--line)" : "none",
+                        background: marcado ? "var(--paper-card)" : "transparent",
+                      }}
                     >
-                      <span style={{ fontSize: 13 }}>{nombreInsumo(item.insumoId)}</span>
-                      <span style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                        <span className="mono" style={{ fontSize: 13 }}>{item.cantidad}</span>
-                        <button
-                          onClick={() => quitarItem(item.insumoId)}
-                          style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ink-soft)" }}
-                        >
-                          ×
-                        </button>
+                      <input
+                        type="checkbox"
+                        checked={marcado}
+                        onChange={(e) => toggleInsumo(i.id, e.target.checked)}
+                      />
+                      <span style={{ fontSize: 13, flex: 1 }}>
+                        {i.nombre}
+                        <span className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
+                          {" "}(stock: {Number(i.stockActual).toFixed(2)} {i.unidadMedida ?? ""})
+                        </span>
                       </span>
+                      {marcado && (
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={seleccionados[i.id]}
+                          onChange={(e) => actualizarCantidad(i.id, Number(e.target.value))}
+                          style={{ width: 80, padding: "4px 6px", fontSize: 13 }}
+                        />
+                      )}
                     </div>
-                  ))}
-                </div>
-              )}
+                  );
+                })}
+                {insumosFiltrados.length === 0 && (
+                  <p style={{ padding: 12, fontSize: 13, color: "var(--ink-soft)" }}>No se encontraron insumos.</p>
+                )}
+              </div>
 
               {error && <p className="field error">{error}</p>}
               <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
@@ -256,7 +247,8 @@ export default function SolicitudesPedidoPage({ params }: { params: { id: string
                   className="btn-ghost"
                   onClick={() => {
                     setMostrarForm(false);
-                    setItems([]);
+                    setSeleccionados({});
+                    setBusqueda("");
                     setError(null);
                   }}
                 >
