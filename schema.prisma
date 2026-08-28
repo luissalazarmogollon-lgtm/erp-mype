@@ -1,0 +1,1027 @@
+// =====================================================================
+// ESQUEMA PRISMA — Sprint 1: Núcleo multiempresa, alta de empresa, seguridad
+// Traducción de modelo_datos_erp_mype.sql (secciones 0 y 1).
+// Los módulos operativos (ventas, compras, caja, planilla...) se agregan
+// en los siguientes sprints, siguiendo el orden de especificacion_mvp_erp_mype.md.
+//
+// NOTA DE DISEÑO: `Usuario.id` es UUID (no BIGSERIAL como en el SQL original)
+// porque coincide 1 a 1 con `auth.users.id` de Supabase Auth — así no
+// duplicamos lógica de login/password, Supabase la maneja por nosotros.
+// =====================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------------
+// 0. Catálogos globales de plataforma
+// ---------------------------------------------------------------------
+
+model TipoNegocio {
+  id      Int      @id @default(autoincrement())
+  nombre  String   @unique // 'Productos' | 'Servicios' | 'Productos y Servicios'
+  rubros  Rubro[]
+  empresas Empresa[]
+
+  @@map("tipos_negocio")
+}
+
+model Rubro {
+  id                       Int      @id @default(autoincrement())
+  nombre                   String   @unique
+  tipoNegocioSugeridoId    Int?     @map("tipo_negocio_sugerido_id")
+  tipoNegocioSugerido      TipoNegocio? @relation(fields: [tipoNegocioSugeridoId], references: [id])
+  requiereInventario       Boolean  @default(true) @map("requiere_inventario")
+  requiereFichasTecnicas   Boolean  @default(true) @map("requiere_fichas_tecnicas")
+  estado                   String   @default("activo") // activo | inactivo
+  plantillasCatalogo       RubroPlantillaCatalogo[]
+  empresas                 Empresa[]
+
+  @@map("rubros")
+}
+
+// Catálogo semilla: al crear una empresa de este rubro, estos ítems se
+// clonan hacia los catálogos propios de la empresa (RN-011).
+model RubroPlantillaCatalogo {
+  id            Int    @id @default(autoincrement())
+  rubroId       Int    @map("rubro_id")
+  rubro         Rubro  @relation(fields: [rubroId], references: [id])
+  tipoCatalogo  String @map("tipo_catalogo") // categoria_insumo | categoria_producto | tipo_gasto | unidad_medida
+  nombreItem    String @map("nombre_item")
+
+  @@map("rubro_plantilla_catalogo")
+}
+
+model Banco {
+  id     Int    @id @default(autoincrement())
+  nombre String @unique
+
+  @@map("bancos")
+}
+
+// ---------------------------------------------------------------------
+// 1. Núcleo: usuarios, empresas, seguridad
+// ---------------------------------------------------------------------
+
+model Usuario {
+  id                       String   @id @db.Uuid // = auth.users.id de Supabase Auth
+  nombres                  String
+  apellidos                String
+  email                    String   @unique
+  telefono                 String?
+  tipoActorBase            String   @map("tipo_actor_base") // asesor | asistente | cliente
+  esSuperadminPlataforma   Boolean  @default(false) @map("es_superadmin_plataforma")
+  estado                   String   @default("activo")
+  fechaCreacion            DateTime @default(now()) @map("fecha_creacion")
+
+  empresasComoAsesorPrincipal Empresa[]        @relation("AsesorPrincipal")
+  asignaciones                UsuarioEmpresa[]
+  auditorias                  Auditoria[]
+
+  @@map("usuarios")
+}
+
+model Empresa {
+  id                     BigInt   @id @default(autoincrement())
+  razonSocial            String   @map("razon_social")
+  nombreComercial        String   @map("nombre_comercial")
+  ruc                    String?
+  logoUrl                String?  @map("logo_url")
+  tipoNegocioId          Int      @map("tipo_negocio_id")
+  tipoNegocio            TipoNegocio @relation(fields: [tipoNegocioId], references: [id])
+  rubroId                Int      @map("rubro_id")
+  rubro                  Rubro    @relation(fields: [rubroId], references: [id])
+  monedaOperacion        String   @default("PEN") @map("moneda_operacion") // PEN | USD
+  aplicaIgv              Boolean  @default(true) @map("aplica_igv")
+  tasaIgv                Decimal  @default(18.00) @map("tasa_igv") @db.Decimal(5, 2)
+  regimenTributario      String?  @map("regimen_tributario") // NUEVO_RUS | RER | RMT | GENERAL
+  capitalSocialInicial   Decimal  @default(0) @map("capital_social_inicial") @db.Decimal(12, 2)
+  fechaAlta              DateTime @default(now()) @map("fecha_alta")
+  estadoServicio         String   @default("activo") @map("estado_servicio") // activo | pausado | finalizado
+  asesorPrincipalId      String?  @map("asesor_principal_id") @db.Uuid
+  asesorPrincipal        Usuario? @relation("AsesorPrincipal", fields: [asesorPrincipalId], references: [id])
+  estado                 String   @default("activo")
+
+  modulos                EmpresaModulo[]
+  asignaciones           UsuarioEmpresa[]
+  auditorias              Auditoria[]
+  categoriasInsumo       CategoriaInsumo[]
+  unidadesMedida         UnidadMedida[]
+  categoriasProducto     CategoriaProducto[]
+  tiposGasto             TipoGasto[]
+  metodosPago            MetodoPago[]
+  conceptosMovimientoCaja ConceptoMovimientoCaja[]
+  clientes               Cliente[]
+  insumos                Insumo[]
+  productos              Producto[]
+  ventas                 Venta[]
+  movimientosInventario  MovimientoInventario[]
+  mermas                 Merma[]
+  registrosVentaDiaria   RegistroVentaDiaria[]
+  cuentasPorCobrar       CuentaPorCobrar[]
+  gastos                 Gasto[]
+  cuentasPorPagar        CuentaPorPagar[]
+  locales                Local[]
+  empleados              Empleado[]
+  adelantosSueldo        AdelantoSueldo[]
+  cuentasBancarias       CuentaBancaria[]
+  cajasChicas            CajaChica[]
+  documentosCompra       DocumentoCompra[]
+  areas                  Area[]
+  solicitudesPedido      SolicitudPedido[]
+  lotesCompra            LoteCompra[]
+  proveedores            Proveedor[]
+  pedidosCompra          PedidoCompra[]
+  alertasAnomaliaCosto   AlertaAnomaliaCosto[]
+  umbralAlertaAnomaliaPct Decimal @default(15) @map("umbral_alerta_anomalia_pct") @db.Decimal(5, 2)
+
+  @@map("empresas")
+}
+
+// Qué módulos están activos para esta empresa (RN-012), predefinido según el rubro.
+model EmpresaModulo {
+  id         BigInt  @id @default(autoincrement())
+  empresaId  BigInt  @map("empresa_id")
+  empresa    Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  modulo     String  // inventario_insumos | fichas_tecnicas | compras | cxc | cxp | caja_bancos |
+                       // gastos | planilla | activos_fijos | prestamos_bancarios
+  activo     Boolean @default(true)
+
+  @@unique([empresaId, modulo])
+  @@map("empresa_modulos")
+}
+
+model RolOperativo {
+  id            Int    @id @default(autoincrement())
+  nombre        String @unique // Gerencial | Admin Local | Cajero | Almacén-Cocina
+  descripcion   String?
+
+  permisos      RolPermiso[]
+  asignaciones  UsuarioEmpresa[]
+
+  @@map("roles_operativos")
+}
+
+model Permiso {
+  id       Int    @id @default(autoincrement())
+  modulo   String
+  accion   String // ver | crear | editar | eliminar | aprobar
+
+  roles    RolPermiso[]
+
+  @@unique([modulo, accion])
+  @@map("permisos")
+}
+
+model RolPermiso {
+  rolOperativoId  Int
+  rolOperativo    RolOperativo @relation(fields: [rolOperativoId], references: [id])
+  permisoId       Int
+  permiso         Permiso      @relation(fields: [permisoId], references: [id])
+
+  @@id([rolOperativoId, permisoId])
+  @@map("rol_permisos")
+}
+
+// Tabla puente clave del modelo multiempresa (ver sección 4.A de la arquitectura).
+model UsuarioEmpresa {
+  id               BigInt   @id @default(autoincrement())
+  usuarioId        String   @map("usuario_id") @db.Uuid
+  usuario          Usuario  @relation(fields: [usuarioId], references: [id])
+  empresaId        BigInt   @map("empresa_id")
+  empresa          Empresa  @relation(fields: [empresaId], references: [id])
+  tipoActor        String   @map("tipo_actor") // asesor | asistente | cliente
+  rolOperativoId   Int      @map("rol_operativo_id")
+  rolOperativo     RolOperativo @relation(fields: [rolOperativoId], references: [id])
+  // Acceso granular por módulo (checkboxes), además del rol operativo:
+  // si accesoTotal = true, ve/hace todo en esta empresa (ignora `permisos`).
+  // Si es false, `permisos` es la lista de claves de módulo permitidas
+  // (ver MODULOS_DISPONIBLES en src/lib/permisosModulo.ts).
+  accesoTotal      Boolean  @default(true) @map("acceso_total")
+  permisos         Json?
+  estado           String   @default("activo")
+  fechaAsignacion  DateTime @default(now()) @map("fecha_asignacion")
+
+  @@unique([usuarioId, empresaId])
+  @@map("usuario_empresa")
+}
+
+model Auditoria {
+  id              BigInt   @id @default(autoincrement())
+  usuarioId       String?  @map("usuario_id") @db.Uuid
+  usuario         Usuario? @relation(fields: [usuarioId], references: [id])
+  empresaId       BigInt?  @map("empresa_id")
+  empresa         Empresa? @relation(fields: [empresaId], references: [id])
+  tablaAfectada   String   @map("tabla_afectada")
+  registroId      BigInt   @map("registro_id")
+  accion          String   // crear | editar | eliminar | aprobar
+  valorAnterior   Json?    @map("valor_anterior")
+  valorNuevo      Json?    @map("valor_nuevo")
+  fecha           DateTime @default(now())
+  ipOrigen        String?  @map("ip_origen")
+
+  @@index([empresaId, tablaAfectada, registroId])
+  @@map("auditoria")
+}
+
+// ---------------------------------------------------------------------
+// 2. Catálogos por empresa (sección 3 de la arquitectura)
+// Se pre-cargan al crear la empresa clonando rubro_plantilla_catalogo
+// (RN-011), y luego son 100% editables por el cliente.
+// ---------------------------------------------------------------------
+
+model CategoriaInsumo {
+  id         BigInt  @id @default(autoincrement())
+  empresaId  BigInt  @map("empresa_id")
+  empresa    Empresa @relation(fields: [empresaId], references: [id])
+  nombre     String
+  insumos    Insumo[]
+
+  @@unique([empresaId, nombre])
+  @@map("categorias_insumo")
+}
+
+model UnidadMedida {
+  id           BigInt  @id @default(autoincrement())
+  empresaId    BigInt  @map("empresa_id")
+  empresa      Empresa @relation(fields: [empresaId], references: [id])
+  nombre       String
+  abreviatura  String
+  insumos      Insumo[]
+  fichasTecnicas FichaTecnica[]
+
+  @@unique([empresaId, nombre])
+  @@map("unidades_medida")
+}
+
+model CategoriaProducto {
+  id         BigInt  @id @default(autoincrement())
+  empresaId  BigInt  @map("empresa_id")
+  empresa    Empresa @relation(fields: [empresaId], references: [id])
+  nombre     String
+  productos  Producto[]
+
+  @@unique([empresaId, nombre])
+  @@map("categorias_producto")
+}
+
+model TipoGasto {
+  id         BigInt  @id @default(autoincrement())
+  empresaId  BigInt  @map("empresa_id")
+  empresa    Empresa @relation(fields: [empresaId], references: [id])
+  nombre     String
+  gastos     Gasto[]
+
+  @@unique([empresaId, nombre])
+  @@map("tipos_gasto")
+}
+
+// Local / centro de costo — para clientes con más de un punto de venta.
+// Ventas diarias y Gastos pueden asociarse a un local específico; el
+// Estado de Resultados siempre consolida todos los locales de la empresa
+// por defecto (con opción de filtrar por local puntual si se necesita).
+model Local {
+  id                    BigInt   @id @default(autoincrement())
+  empresaId             BigInt   @map("empresa_id")
+  empresa               Empresa  @relation(fields: [empresaId], references: [id])
+  nombre                String
+  estado                String   @default("activo")
+  registrosVentaDiaria  RegistroVentaDiaria[]
+  gastos                Gasto[]
+  documentosCompra      DocumentoCompra[]
+
+  @@map("locales")
+}
+
+// No viene de plantilla de rubro — set estándar igual para toda empresa
+// (ver sección 3 de la arquitectura), se crea con valores fijos al alta.
+model MetodoPago {
+  id         BigInt  @id @default(autoincrement())
+  empresaId  BigInt  @map("empresa_id")
+  empresa    Empresa @relation(fields: [empresaId], references: [id])
+  nombre     String
+  ventas     Venta[]
+
+  @@unique([empresaId, nombre])
+  @@map("metodos_pago")
+}
+
+model ConceptoMovimientoCaja {
+  id         BigInt  @id @default(autoincrement())
+  empresaId  BigInt  @map("empresa_id")
+  empresa    Empresa @relation(fields: [empresaId], references: [id])
+  nombre     String
+  tipo       String  // ingreso | egreso
+
+  @@map("conceptos_movimiento_caja")
+}
+
+// ---------------------------------------------------------------------
+// 3. Ventas, Inventario y Fichas Técnicas (Sprint 3)
+// Implementa las secciones B y C de la arquitectura, y las reglas
+// RN-020 a RN-042 de reglas_negocio_erp_mype.md.
+// ---------------------------------------------------------------------
+
+model Cliente {
+  id                BigInt  @id @default(autoincrement())
+  empresaId         BigInt  @map("empresa_id")
+  empresa           Empresa @relation(fields: [empresaId], references: [id])
+  nombre            String
+  docIdentidad      String? @map("doc_identidad")
+  telefono          String?
+  tipo              String  @default("consumidor_final") // consumidor_final | frecuente
+  creditoHabilitado Boolean @default(false) @map("credito_habilitado")
+  limiteCredito     Decimal @default(0) @map("limite_credito") @db.Decimal(12, 2)
+
+  ventas            Venta[]
+  cuentasPorCobrar  CuentaPorCobrar[]
+
+  @@map("clientes")
+}
+
+model Insumo {
+  id                   BigInt   @id @default(autoincrement())
+  empresaId            BigInt   @map("empresa_id")
+  empresa              Empresa  @relation(fields: [empresaId], references: [id])
+  codigo               String?
+  nombre               String
+  categoriaId          BigInt?  @map("categoria_id")
+  categoria            CategoriaInsumo? @relation(fields: [categoriaId], references: [id])
+  unidadMedidaId       BigInt?  @map("unidad_medida_id")
+  unidadMedida         UnidadMedida?    @relation(fields: [unidadMedidaId], references: [id])
+  stockMinimo          Decimal  @default(0) @map("stock_minimo") @db.Decimal(10, 3)
+  stockActual          Decimal  @default(0) @map("stock_actual") @db.Decimal(10, 3)
+  costoPromedioActual  Decimal  @default(0) @map("costo_promedio_actual") @db.Decimal(10, 4)
+
+  fichasTecnicas       FichaTecnica[]
+  movimientos          MovimientoInventario[]
+  mermas               Merma[]
+  solicitudesPedidoDetalle SolicitudPedidoDetalle[]
+  lotes                LoteCompra[]
+  proveedorPreferidoId BigInt?  @map("proveedor_preferido_id")
+  proveedorPreferido   Proveedor? @relation(fields: [proveedorPreferidoId], references: [id])
+  pedidosCompraDetalle PedidoCompraDetalle[]
+  alertasAnomaliaCosto AlertaAnomaliaCosto[]
+
+  @@unique([empresaId, codigo])
+  @@map("insumos")
+}
+
+model Producto {
+  id              BigInt   @id @default(autoincrement())
+  empresaId       BigInt   @map("empresa_id")
+  empresa         Empresa  @relation(fields: [empresaId], references: [id])
+  codigo          String?
+  nombre          String
+  categoriaId     BigInt?  @map("categoria_id")
+  categoria       CategoriaProducto? @relation(fields: [categoriaId], references: [id])
+  tipo            String   // producto | servicio
+  precioVenta     Decimal  @map("precio_venta") @db.Decimal(10, 2)
+  requiereReceta  Boolean  @default(false) @map("requiere_receta")
+  estado          String   @default("activo")
+
+  fichaTecnica    FichaTecnica[]
+  ventasDetalle   VentaDetalle[]
+
+  @@unique([empresaId, codigo])
+  @@map("productos")
+}
+
+// La "receta" de un producto: cuánto de cada insumo lleva (RN-020).
+model FichaTecnica {
+  id                  BigInt   @id @default(autoincrement())
+  productoId          BigInt   @map("producto_id")
+  producto            Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  insumoId            BigInt   @map("insumo_id")
+  insumo              Insumo   @relation(fields: [insumoId], references: [id])
+  cantidadRequerida   Decimal  @map("cantidad_requerida") @db.Decimal(10, 4)
+  unidadMedidaId      BigInt?  @map("unidad_medida_id")
+  unidadMedida        UnidadMedida? @relation(fields: [unidadMedidaId], references: [id])
+  mermaEstandarPct    Decimal  @default(0) @map("merma_estandar_pct") @db.Decimal(5, 2)
+
+  @@map("fichas_tecnicas")
+}
+
+model MovimientoInventario {
+  id              BigInt   @id @default(autoincrement())
+  empresaId       BigInt   @map("empresa_id")
+  empresa         Empresa  @relation(fields: [empresaId], references: [id])
+  insumoId        BigInt   @map("insumo_id")
+  insumo          Insumo   @relation(fields: [insumoId], references: [id])
+  tipo            String   // entrada_compra | salida_venta | salida_solicitud | merma | ajuste_manual
+  cantidad        Decimal  @db.Decimal(10, 3)
+  costoUnitario   Decimal  @map("costo_unitario") @db.Decimal(10, 4)
+  loteId          BigInt?  @map("lote_id")
+  lote            LoteCompra? @relation(fields: [loteId], references: [id])
+  fecha           DateTime @default(now())
+  referenciaTipo  String?  @map("referencia_tipo")
+  referenciaId    BigInt?  @map("referencia_id")
+  usuarioId       String   @map("usuario_id") @db.Uuid
+
+  @@index([insumoId, fecha])
+  @@map("movimientos_inventario")
+}
+
+model Merma {
+  id             BigInt   @id @default(autoincrement())
+  empresaId      BigInt   @map("empresa_id")
+  empresa        Empresa  @relation(fields: [empresaId], references: [id])
+  insumoId       BigInt   @map("insumo_id")
+  insumo         Insumo   @relation(fields: [insumoId], references: [id])
+  cantidad       Decimal  @db.Decimal(10, 3)
+  motivo         String   // vencimiento | desperdicio_preparacion | robo_diferencia | otro
+  costoEstimado  Decimal  @map("costo_estimado") @db.Decimal(12, 2)
+  fecha          DateTime @default(now())
+  usuarioId      String   @map("usuario_id") @db.Uuid
+  observacion    String?
+
+  @@map("mermas")
+}
+
+model Venta {
+  id            BigInt    @id @default(autoincrement())
+  empresaId     BigInt    @map("empresa_id")
+  empresa       Empresa   @relation(fields: [empresaId], references: [id])
+  numero        String
+  fecha         DateTime  @default(now())
+  clienteId     BigInt?   @map("cliente_id")
+  cliente       Cliente?  @relation(fields: [clienteId], references: [id])
+  usuarioId     String    @map("usuario_id") @db.Uuid
+  metodoPagoId  BigInt?   @map("metodo_pago_id")
+  metodoPago    MetodoPago? @relation(fields: [metodoPagoId], references: [id])
+  subtotal      Decimal   @default(0) @db.Decimal(12, 2)
+  descuento     Decimal   @default(0) @db.Decimal(12, 2)
+  igv           Decimal   @default(0) @db.Decimal(12, 2)
+  total         Decimal   @default(0) @db.Decimal(12, 2)
+  estado        String    @default("cobrada") // cobrada | pendiente | anulada
+
+  detalle       VentaDetalle[]
+
+  @@unique([empresaId, numero])
+  @@map("ventas")
+}
+
+model VentaDetalle {
+  id                       BigInt   @id @default(autoincrement())
+  ventaId                  BigInt   @map("venta_id")
+  venta                    Venta    @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  productoId               BigInt   @map("producto_id")
+  producto                 Producto @relation(fields: [productoId], references: [id])
+  cantidad                 Decimal  @db.Decimal(10, 3)
+  precioUnitario           Decimal  @map("precio_unitario") @db.Decimal(10, 2)
+  costoUnitarioCalculado   Decimal  @default(0) @map("costo_unitario_calculado") @db.Decimal(10, 4)
+  subtotal                 Decimal  @db.Decimal(12, 2)
+
+  @@map("ventas_detalle")
+}
+
+// ---------------------------------------------------------------------
+// 4. Registro operativo real (lo que definiste como "Fase 1"):
+// ventas diarias agregadas por método de pago, gastos/costos clasificados
+// con generación de CxP, y créditos a clientes con seguimiento de CxC.
+// El "Estado de Resultados en tiempo real" se calcula sumando estas
+// tablas directamente (sin motor contable de partida doble todavía).
+// ---------------------------------------------------------------------
+
+// Resumen diario de ventas reportado por el POS del cliente — no es venta
+// por venta, es el total del día por método de pago.
+model RegistroVentaDiaria {
+  id             BigInt   @id @default(autoincrement())
+  empresaId      BigInt   @map("empresa_id")
+  empresa        Empresa  @relation(fields: [empresaId], references: [id])
+  localId        BigInt?  @map("local_id")
+  local          Local?   @relation(fields: [localId], references: [id])
+  fecha          DateTime @db.Date
+  montoEfectivo  Decimal  @default(0) @map("monto_efectivo") @db.Decimal(12, 2)
+  montoYape      Decimal  @default(0) @map("monto_yape") @db.Decimal(12, 2)
+  montoPlin      Decimal  @default(0) @map("monto_plin") @db.Decimal(12, 2)
+  montoTarjeta   Decimal  @default(0) @map("monto_tarjeta") @db.Decimal(12, 2)
+  // Conciliación con el flujo de caja: a qué cuenta bancaria entró cada
+  // método de pago. Nulo = todavía no conciliado (no se generó movimiento).
+  efectivoCuentaId  BigInt? @map("efectivo_cuenta_id")
+  efectivoCuenta    CuentaBancaria? @relation("EfectivoCuenta", fields: [efectivoCuentaId], references: [id])
+  yapeCuentaId      BigInt? @map("yape_cuenta_id")
+  yapeCuenta        CuentaBancaria? @relation("YapeCuenta", fields: [yapeCuentaId], references: [id])
+  plinCuentaId      BigInt? @map("plin_cuenta_id")
+  plinCuenta        CuentaBancaria? @relation("PlinCuenta", fields: [plinCuentaId], references: [id])
+  tarjetaCuentaId   BigInt? @map("tarjeta_cuenta_id")
+  tarjetaCuenta     CuentaBancaria? @relation("TarjetaCuenta", fields: [tarjetaCuentaId], references: [id])
+  observacion    String?
+  usuarioId      String   @map("usuario_id") @db.Uuid
+  fechaRegistro  DateTime @default(now()) @map("fecha_registro")
+
+  @@unique([empresaId, fecha, localId])
+  @@map("registros_venta_diaria")
+}
+
+// Ventas al crédito por cliente ("fiado") — acumula saldo, se puede
+// marcar como pagado (RN-053 aplicado de forma simplificada, sin
+// vincularse a una venta de punto de venta).
+model CuentaPorCobrar {
+  id               BigInt    @id @default(autoincrement())
+  empresaId        BigInt    @map("empresa_id")
+  empresa          Empresa   @relation(fields: [empresaId], references: [id])
+  clienteId        BigInt    @map("cliente_id")
+  cliente          Cliente   @relation(fields: [clienteId], references: [id])
+  numeroFactura    String?   @map("numero_factura")
+  descripcion      String?
+  montoTotal       Decimal   @map("monto_total") @db.Decimal(12, 2)
+  saldoPendiente   Decimal   @map("saldo_pendiente") @db.Decimal(12, 2)
+  fechaEmision     DateTime  @default(now()) @map("fecha_emision")
+  fechaVencimiento DateTime? @map("fecha_vencimiento")
+  estado           String    @default("pendiente") // pendiente | vencida | pagada
+  usuarioId        String    @map("usuario_id") @db.Uuid
+
+  cobros           CobroCxc[]
+
+  @@map("cuentas_por_cobrar")
+}
+
+model CobroCxc {
+  id                BigInt          @id @default(autoincrement())
+  cxcId             BigInt          @map("cxc_id")
+  cxc               CuentaPorCobrar @relation(fields: [cxcId], references: [id])
+  monto             Decimal         @db.Decimal(12, 2)
+  fecha             DateTime        @default(now())
+  medioPago         String?         @map("medio_pago")
+  cuentaBancariaId  BigInt?         @map("cuenta_bancaria_id")
+  cuentaBancaria    CuentaBancaria? @relation(fields: [cuentaBancariaId], references: [id])
+  usuarioId         String          @map("usuario_id") @db.Uuid
+
+  @@map("cobros_cxc")
+}
+
+// Gastos y costos registrados desde comprobantes recibidos (WhatsApp,
+// físico, etc.). CLAVE: `naturaleza` determina si el egreso impacta el
+// Estado de Resultados (costo/gasto) o no (activo, pago de deuda, retiro
+// de socios) — un egreso de caja no siempre es un gasto contable.
+model Gasto {
+  id                   BigInt    @id @default(autoincrement())
+  empresaId            BigInt    @map("empresa_id")
+  empresa              Empresa   @relation(fields: [empresaId], references: [id])
+  localId              BigInt?   @map("local_id")
+  local                Local?    @relation(fields: [localId], references: [id])
+  categoriaId          BigInt?   @map("categoria_id")
+  categoria            TipoGasto? @relation(fields: [categoriaId], references: [id])
+  // Naturaleza del egreso — determina el tratamiento contable (ver RN nuevas):
+  // costo_directo | mano_obra_directa | gasto_operativo | gasto_financiero |
+  // gasto_tributario | activo | deuda | retiro_socios | otros
+  naturaleza           String
+  categoriaEspecifica  String?   @map("categoria_especifica")
+  proveedorNombre      String?   @map("proveedor_nombre")
+  descripcion          String
+  tipoComprobante      String    @default("sin_comprobante") @map("tipo_comprobante")
+  numeroComprobante    String?   @map("numero_comprobante")
+  montoTotal           Decimal   @map("monto_total") @db.Decimal(12, 2)
+  fecha                DateTime  @db.Date
+  condicion            String    // contado | credito
+  medioPago            String?   @map("medio_pago") // solo si condicion = contado
+  cuentaBancariaId     BigInt?   @map("cuenta_bancaria_id") // de qué cuenta salió, si fue contado
+  cuentaBancaria       CuentaBancaria? @relation(fields: [cuentaBancariaId], references: [id])
+  // Si este gasto es UNO de varios ítems del mismo documento (factura con
+  // varias líneas), aquí queda el vínculo al documento que los agrupa.
+  documentoCompraId    BigInt?   @map("documento_compra_id")
+  documentoCompra      DocumentoCompra? @relation(fields: [documentoCompraId], references: [id])
+  usuarioId            String    @map("usuario_id") @db.Uuid
+
+  cuentaPorPagar       CuentaPorPagar?
+  gastoCajaChica       GastoCajaChica?
+
+  @@map("gastos")
+}
+
+model CuentaPorPagar {
+  id               BigInt    @id @default(autoincrement())
+  empresaId        BigInt    @map("empresa_id")
+  empresa          Empresa   @relation(fields: [empresaId], references: [id])
+  // Exactamente uno de los dos está lleno: gastoId (egreso simple, un solo
+  // ítem) o documentoCompraId (documento con varios ítems — la CxP
+  // representa el total del documento, no cada línea por separado).
+  gastoId          BigInt?   @unique @map("gasto_id")
+  gasto            Gasto?    @relation(fields: [gastoId], references: [id])
+  documentoCompraId BigInt?  @unique @map("documento_compra_id")
+  documentoCompra  DocumentoCompra? @relation(fields: [documentoCompraId], references: [id])
+  proveedorNombre  String?   @map("proveedor_nombre")
+  montoTotal       Decimal   @map("monto_total") @db.Decimal(12, 2)
+  saldoPendiente   Decimal   @map("saldo_pendiente") @db.Decimal(12, 2)
+  fechaEmision     DateTime  @default(now()) @map("fecha_emision")
+  fechaVencimiento DateTime? @map("fecha_vencimiento")
+  estado           String    @default("pendiente") // pendiente | vencida | pagada
+
+  pagos            PagoCxp[]
+
+  @@map("cuentas_por_pagar")
+}
+
+// Pago (abono) sobre una Cuenta por Pagar — soporta pagos parciales:
+// varios PagoCxp pueden apuntar a la misma CuentaPorPagar hasta cubrir
+// el saldoPendiente. `cuentaBancariaProveedorId` es opcional y registra
+// a qué cuenta bancaria DEL PROVEEDOR se hizo la transferencia (útil
+// para trazabilidad, no obligatorio si el pago fue en efectivo).
+model PagoCxp {
+  id                          BigInt                   @id @default(autoincrement())
+  cxpId                       BigInt                   @map("cxp_id")
+  cxp                         CuentaPorPagar           @relation(fields: [cxpId], references: [id])
+  monto                       Decimal                  @db.Decimal(12, 2)
+  fecha                       DateTime                 @default(now())
+  medioPago                   String?                  @map("medio_pago")
+  cuentaBancariaId            BigInt?                  @map("cuenta_bancaria_id")
+  cuentaBancaria               CuentaBancaria?         @relation(fields: [cuentaBancariaId], references: [id])
+  cuentaBancariaProveedorId   BigInt?                  @map("cuenta_bancaria_proveedor_id")
+  cuentaBancariaProveedor     CuentaBancariaProveedor? @relation(fields: [cuentaBancariaProveedorId], references: [id])
+  usuarioId                   String                   @map("usuario_id") @db.Uuid
+
+  @@map("pagos_cxp")
+}
+
+// ---------------------------------------------------------------------
+// 5. RRHH (Empleados y Adelantos) y Flujo de Caja por cuenta bancaria
+// ---------------------------------------------------------------------
+
+model Empleado {
+  id             BigInt   @id @default(autoincrement())
+  empresaId      BigInt   @map("empresa_id")
+  empresa        Empresa  @relation(fields: [empresaId], references: [id])
+  nombres        String
+  apellidos      String
+  docIdentidad   String   @map("doc_identidad")
+  cargo          String?
+  fechaIngreso   DateTime @map("fecha_ingreso") @db.Date
+  tipoContrato   String?  @map("tipo_contrato")
+  sueldoBasico   Decimal  @map("sueldo_basico") @db.Decimal(10, 2)
+  otrosIngresos  Decimal  @default(0) @map("otros_ingresos") @db.Decimal(10, 2)
+  cuentaBancaria String?  @map("cuenta_bancaria") // cuenta personal del trabajador, para transferir el sueldo
+  estado         String   @default("activo")
+
+  adelantos      AdelantoSueldo[]
+
+  @@map("empleados")
+}
+
+// Adelanto de sueldo — sale de caja/banco pero NO es un gasto (es dinero
+// que la empresa ya adelantó y se descontará del sueldo del trabajador
+// más adelante). Queda con estado "pendiente" hasta que se marque como
+// descontado (manualmente, hasta que exista el motor de planilla completo).
+model AdelantoSueldo {
+  id               BigInt          @id @default(autoincrement())
+  empresaId        BigInt          @map("empresa_id")
+  empresa          Empresa         @relation(fields: [empresaId], references: [id])
+  empleadoId       BigInt          @map("empleado_id")
+  empleado         Empleado        @relation(fields: [empleadoId], references: [id])
+  monto            Decimal         @db.Decimal(10, 2)
+  fecha            DateTime        @db.Date
+  motivo           String?
+  cuentaBancariaId BigInt?         @map("cuenta_bancaria_id")
+  cuentaBancaria   CuentaBancaria? @relation(fields: [cuentaBancariaId], references: [id])
+  estado           String          @default("pendiente") // pendiente | descontado
+  usuarioId        String          @map("usuario_id") @db.Uuid
+
+  @@map("adelantos_sueldo")
+}
+
+// Cuenta bancaria (o caja de efectivo, registrada igual) de la empresa.
+// El saldo se mantiene "vivo": cada egreso/ingreso vinculado a una cuenta
+// genera un movimiento y actualiza saldoActual automáticamente.
+model CuentaBancaria {
+  id            BigInt   @id @default(autoincrement())
+  empresaId     BigInt   @map("empresa_id")
+  empresa       Empresa  @relation(fields: [empresaId], references: [id])
+  bancoNombre   String   @map("banco_nombre") // ej. "BCP", "Caja Efectivo", "Interbank"
+  numeroCuenta  String?  @map("numero_cuenta")
+  moneda        String   @default("PEN")
+  saldoActual   Decimal  @default(0) @map("saldo_actual") @db.Decimal(12, 2)
+  estado        String   @default("activo")
+
+  movimientos   MovimientoBancario[]
+  adelantos     AdelantoSueldo[]
+  gastos        Gasto[]
+  pagosCxp      PagoCxp[]
+  cobrosCxc     CobroCxc[]
+  ventasEfectivo RegistroVentaDiaria[] @relation("EfectivoCuenta")
+  ventasYape     RegistroVentaDiaria[] @relation("YapeCuenta")
+  ventasPlin     RegistroVentaDiaria[] @relation("PlinCuenta")
+  ventasTarjeta  RegistroVentaDiaria[] @relation("TarjetaCuenta")
+  cajasChicas    CajaChica[]
+  documentosCompra DocumentoCompra[]
+
+  @@map("cuentas_bancarias")
+}
+
+model MovimientoBancario {
+  id               BigInt         @id @default(autoincrement())
+  cuentaBancariaId BigInt         @map("cuenta_bancaria_id")
+  cuentaBancaria   CuentaBancaria @relation(fields: [cuentaBancariaId], references: [id])
+  tipo             String         // ingreso | egreso | apertura
+  monto            Decimal        @db.Decimal(12, 2)
+  concepto         String
+  fecha            DateTime       @default(now())
+  referenciaTipo   String?        @map("referencia_tipo")
+  referenciaId     BigInt?        @map("referencia_id")
+  usuarioId        String         @map("usuario_id") @db.Uuid
+
+  @@map("movimientos_bancarios")
+}
+
+// ---------------------------------------------------------------------
+// 6. Caja Chica — segregación de funciones: quien maneja la caja chica
+// solo registra sus gastos ahí (no toca Gastos y Costos). El administrador,
+// al cuadrarla, clasifica cada gasto y recién ahí lo traslada a Gastos y
+// Costos (donde impacta el Estado de Resultados).
+// ---------------------------------------------------------------------
+
+model CajaChica {
+  id               BigInt   @id @default(autoincrement())
+  empresaId        BigInt   @map("empresa_id")
+  empresa          Empresa  @relation(fields: [empresaId], references: [id])
+  nombre           String
+  cuentaBancariaId BigInt?  @map("cuenta_bancaria_id") // de qué cuenta se nutre el fondo
+  cuentaBancaria   CuentaBancaria? @relation(fields: [cuentaBancariaId], references: [id])
+  montoFondo       Decimal  @default(0) @map("monto_fondo") @db.Decimal(12, 2)
+  estado           String   @default("activo")
+
+  movimientos      MovimientoCajaChica[]
+  gastos           GastoCajaChica[]
+
+  @@map("cajas_chicas")
+}
+
+// Fondeo o reposición de la caja chica — sale de una cuenta bancaria.
+model MovimientoCajaChica {
+  id           BigInt    @id @default(autoincrement())
+  cajaChicaId  BigInt    @map("caja_chica_id")
+  cajaChica    CajaChica @relation(fields: [cajaChicaId], references: [id])
+  tipo         String    // fondo | reposicion
+  monto        Decimal   @db.Decimal(12, 2)
+  fecha        DateTime  @default(now())
+  usuarioId    String    @map("usuario_id") @db.Uuid
+
+  @@map("movimientos_caja_chica")
+}
+
+// Gasto chico registrado por quien maneja la caja (estado "pendiente").
+// El administrador lo clasifica (naturaleza/categoría) y lo traslada a
+// Gastos y Costos — recién ahí se crea el Gasto real y afecta resultados.
+model GastoCajaChica {
+  id                   BigInt    @id @default(autoincrement())
+  cajaChicaId          BigInt    @map("caja_chica_id")
+  cajaChica            CajaChica @relation(fields: [cajaChicaId], references: [id])
+  descripcion          String
+  monto                Decimal   @db.Decimal(10, 2)
+  fecha                DateTime  @db.Date
+  tipoComprobante      String    @default("sin_comprobante") @map("tipo_comprobante")
+  numeroComprobante    String?   @map("numero_comprobante")
+  naturaleza           String?   // se define recién al trasladar
+  categoriaEspecifica  String?   @map("categoria_especifica")
+  estado               String    @default("pendiente") // pendiente | trasladado
+  gastoId              BigInt?   @unique @map("gasto_id")
+  gasto                Gasto?    @relation(fields: [gastoId], references: [id])
+  usuarioId            String    @map("usuario_id") @db.Uuid
+
+  @@map("gastos_caja_chica")
+}
+
+// Cabecera de un documento de compra (factura/boleta/nota) que agrupa
+// varios ítems (líneas de Gasto) bajo el mismo comprobante — para cuando
+// una sola factura del proveedor trae varios productos/conceptos distintos,
+// cada uno con su propia naturaleza/categoría, pero un único monto total
+// y una única Cuenta por Pagar (si es a crédito), en vez de una CxP por línea.
+model DocumentoCompra {
+  id                BigInt   @id @default(autoincrement())
+  empresaId         BigInt   @map("empresa_id")
+  empresa           Empresa  @relation(fields: [empresaId], references: [id])
+  localId           BigInt?  @map("local_id")
+  local             Local?   @relation(fields: [localId], references: [id])
+  proveedorNombre   String?  @map("proveedor_nombre")
+  tipoComprobante   String   @default("sin_comprobante") @map("tipo_comprobante")
+  numeroComprobante String?  @map("numero_comprobante")
+  fecha             DateTime @db.Date
+  condicion         String   // contado | credito
+  medioPago         String?  @map("medio_pago")
+  cuentaBancariaId  BigInt?  @map("cuenta_bancaria_id")
+  cuentaBancaria    CuentaBancaria? @relation(fields: [cuentaBancariaId], references: [id])
+  montoTotal        Decimal  @map("monto_total") @db.Decimal(12, 2)
+  usuarioId         String   @map("usuario_id") @db.Uuid
+
+  items             Gasto[]
+  cuentaPorPagar    CuentaPorPagar?
+
+  @@map("documentos_compra")
+}
+
+// ---------------------------------------------------------------------
+// 7. Solicitudes de Pedido — Sprint 4 (Compras), parte 1.
+// Un responsable de área solicita insumos/materiales; el aprobador
+// (cualquier Asesor o superadmin, sin jerarquía) puede modificar
+// cantidades o eliminar ítems al decidir. Al aprobar, cada ítem se
+// separa automáticamente según el stock de Insumo:
+//   - lo que hay stock disponible → "por_despachar" (NO se descuenta
+//     todavía; el descuento real ocurre en el Despacho — Sprint B).
+//   - lo que falta → "pendiente_compra" (se consolidará en un Pedido
+//     de Compra por proveedor — Sprint C).
+// Un mismo ítem puede partirse en dos filas si el stock alcanza solo
+// parcialmente (ver lógica en la API de decisión).
+// El costeo de este módulo usa PEPS + Lotes (Sprint B en adelante); el
+// ajuste manual de stock de Insumo sigue usando promedio ponderado tal
+// como está hoy — son dos mecanismos de costeo que conviven a propósito.
+// ---------------------------------------------------------------------
+
+model Area {
+  id          BigInt   @id @default(autoincrement())
+  empresaId   BigInt   @map("empresa_id")
+  empresa     Empresa  @relation(fields: [empresaId], references: [id])
+  nombre      String
+  estado      String   @default("activo")
+
+  solicitudes SolicitudPedido[]
+
+  @@unique([empresaId, nombre])
+  @@map("areas")
+}
+
+model SolicitudPedido {
+  id                  BigInt    @id @default(autoincrement())
+  empresaId           BigInt    @map("empresa_id")
+  empresa             Empresa   @relation(fields: [empresaId], references: [id])
+  areaId              BigInt?   @map("area_id")
+  area                Area?     @relation(fields: [areaId], references: [id])
+  responsableId       String    @map("responsable_id") @db.Uuid
+  motivo              String?
+  // borrador | enviada | aprobada | rechazada
+  estado              String    @default("borrador")
+  aprobadorId         String?   @map("aprobador_id") @db.Uuid
+  fechaAprobacion     DateTime? @map("fecha_aprobacion")
+  comentarioAprobador String?   @map("comentario_aprobador")
+  fecha               DateTime  @default(now())
+
+  detalle             SolicitudPedidoDetalle[]
+
+  @@index([empresaId, estado])
+  @@map("solicitudes_pedido")
+}
+
+model SolicitudPedidoDetalle {
+  id                 BigInt          @id @default(autoincrement())
+  solicitudId        BigInt          @map("solicitud_id")
+  solicitud          SolicitudPedido @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
+  insumoId           BigInt          @map("insumo_id")
+  insumo             Insumo          @relation(fields: [insumoId], references: [id])
+  cantidadSolicitada Decimal         @map("cantidad_solicitada") @db.Decimal(10, 3)
+  cantidadAprobada   Decimal?        @map("cantidad_aprobada") @db.Decimal(10, 3)
+  // pendiente | eliminado | por_despachar | pendiente_compra | despachado
+  estadoItem         String          @default("pendiente") @map("estado_item")
+  fechaDespacho      DateTime?       @map("fecha_despacho")
+  observacion        String?
+  pedidoCompraDetalle PedidoCompraDetalle?
+
+  @@index([insumoId, estadoItem])
+  @@map("solicitudes_pedido_detalle")
+}
+
+// ---------------------------------------------------------------------
+// 8. Lotes de compra y Kardex por lote — Sprint 5 (Despacho).
+// Cada entrada de stock (compra, ajuste manual positivo, o la migración
+// de apertura) crea un LoteCompra con su propio costo. El Despacho
+// consume de estos lotes en orden PEPS (fechaIngreso ASC), y cada
+// consumo genera un movimiento de Kardex (MovimientoInventario) con
+// loteId — así el costo de cada salida es el costo real de ese lote,
+// no un promedio. `Insumo.costoPromedioActual` sigue existiendo como
+// KPI simplificado y no se toca por este mecanismo.
+// ---------------------------------------------------------------------
+
+model LoteCompra {
+  id                 BigInt   @id @default(autoincrement())
+  empresaId          BigInt   @map("empresa_id")
+  empresa            Empresa  @relation(fields: [empresaId], references: [id])
+  insumoId           BigInt   @map("insumo_id")
+  insumo             Insumo   @relation(fields: [insumoId], references: [id])
+  // apertura (migración inicial) | ajuste_manual | compra (Sprint 6+)
+  origen             String
+  fechaIngreso       DateTime @default(now()) @map("fecha_ingreso")
+  cantidadInicial    Decimal  @map("cantidad_inicial") @db.Decimal(10, 3)
+  cantidadDisponible Decimal  @map("cantidad_disponible") @db.Decimal(10, 3)
+  costoUnitario      Decimal  @map("costo_unitario") @db.Decimal(10, 4)
+  referenciaTipo     String?  @map("referencia_tipo")
+  referenciaId       BigInt?  @map("referencia_id")
+
+  movimientos        MovimientoInventario[]
+
+  @@index([insumoId, fechaIngreso])
+  @@map("lotes_compra")
+}
+
+// ---------------------------------------------------------------------
+// 9. Proveedores, Pedidos de Compra y Recepción — Sprint 6.
+// Consolidación: los ítems "pendiente_compra" de varias Solicitudes de
+// Pedido (posiblemente de distintas áreas) se agrupan por el proveedor
+// preferido del insumo y se emiten como un Pedido de Compra (OC) — un
+// documento por proveedor, exportable a PDF.
+// Al Recepcionar, cada línea crea un LoteCompra (origen "compra") con el
+// costo REAL pagado, compara contra el costo del lote anterior del mismo
+// insumo y genera una AlertaAnomaliaCosto si la variación supera el
+// umbral de la empresa. El ítem de la Solicitud vuelve a "por_despachar"
+// con la cantidad realmente recibida — así reutiliza el mismo mecanismo
+// de Despacho del Sprint 5, en vez de duplicar lógica.
+// ---------------------------------------------------------------------
+
+model Proveedor {
+  id        BigInt   @id @default(autoincrement())
+  empresaId BigInt   @map("empresa_id")
+  empresa   Empresa  @relation(fields: [empresaId], references: [id])
+  nombre    String
+  ruc       String?
+  contacto  String?
+  telefono  String?
+  email     String?
+  estado    String   @default("activo")
+
+  insumosPreferidos Insumo[]
+  pedidosCompra     PedidoCompra[]
+  cuentasBancarias  CuentaBancariaProveedor[]
+
+  @@unique([empresaId, nombre])
+  @@map("proveedores")
+}
+
+// Cuenta(s) bancaria(s) del proveedor — un proveedor puede tener varias
+// (ej. una cuenta en Soles y otra en Dólares, o cuentas en distintos
+// bancos). Se usan al registrar un pago de Cuenta por Pagar (PagoCxp),
+// para tener a la mano los datos de transferencia del proveedor.
+model CuentaBancariaProveedor {
+  id            BigInt    @id @default(autoincrement())
+  proveedorId   BigInt    @map("proveedor_id")
+  proveedor     Proveedor @relation(fields: [proveedorId], references: [id])
+  banco         String
+  numeroCuenta  String    @map("numero_cuenta")
+  cci           String?
+  moneda        String    @default("PEN")
+  esPrincipal   Boolean   @default(false) @map("es_principal")
+  estado        String    @default("activo")
+
+  pagosCxp      PagoCxp[]
+
+  @@map("cuentas_bancarias_proveedor")
+}
+
+model PedidoCompra {
+  id          BigInt    @id @default(autoincrement())
+  empresaId   BigInt    @map("empresa_id")
+  empresa     Empresa   @relation(fields: [empresaId], references: [id])
+  proveedorId BigInt    @map("proveedor_id")
+  proveedor   Proveedor @relation(fields: [proveedorId], references: [id])
+  // emitida | recibida_parcial | recibida | cerrada
+  estado      String    @default("emitida")
+  fecha       DateTime  @default(now())
+  usuarioId   String    @map("usuario_id") @db.Uuid
+
+  detalle     PedidoCompraDetalle[]
+
+  @@index([empresaId, estado])
+  @@map("pedidos_compra")
+}
+
+model PedidoCompraDetalle {
+  id                    BigInt                 @id @default(autoincrement())
+  pedidoCompraId        BigInt                 @map("pedido_compra_id")
+  pedidoCompra          PedidoCompra           @relation(fields: [pedidoCompraId], references: [id], onDelete: Cascade)
+  // Un ítem de solicitud solo puede estar en UNA orden de compra a la vez.
+  solicitudDetalleId    BigInt                 @unique @map("solicitud_detalle_id")
+  solicitudDetalle      SolicitudPedidoDetalle @relation(fields: [solicitudDetalleId], references: [id])
+  insumoId              BigInt                 @map("insumo_id")
+  insumo                Insumo                 @relation(fields: [insumoId], references: [id])
+  cantidad              Decimal                @db.Decimal(10, 3)
+  costoUnitarioEstimado Decimal?               @map("costo_unitario_estimado") @db.Decimal(10, 4)
+  cantidadRecibida      Decimal?               @map("cantidad_recibida") @db.Decimal(10, 3)
+  costoUnitarioReal     Decimal?               @map("costo_unitario_real") @db.Decimal(10, 4)
+  fechaRecepcion        DateTime?              @map("fecha_recepcion")
+
+  @@map("pedidos_compra_detalle")
+}
+
+// Aviso cuando el costo de un lote recién recibido difiere del lote
+// anterior del mismo insumo más allá del umbral configurado por la
+// empresa. No bloquea la recepción — solo informa para que el asesor
+// pueda revisarlo (ej. el proveedor subió precio, o se cargó un error).
+model AlertaAnomaliaCosto {
+  id             BigInt   @id @default(autoincrement())
+  empresaId      BigInt   @map("empresa_id")
+  empresa        Empresa  @relation(fields: [empresaId], references: [id])
+  insumoId       BigInt   @map("insumo_id")
+  insumo         Insumo   @relation(fields: [insumoId], references: [id])
+  loteAnteriorId BigInt?  @map("lote_anterior_id") // referencia informativa, sin FK
+  loteNuevoId    BigInt   @map("lote_nuevo_id")    // referencia informativa, sin FK
+  costoAnterior  Decimal  @map("costo_anterior") @db.Decimal(10, 4)
+  costoNuevo     Decimal  @map("costo_nuevo") @db.Decimal(10, 4)
+  variacionPct   Decimal  @map("variacion_pct") @db.Decimal(6, 2)
+  fecha          DateTime @default(now())
+  // pendiente | revisado
+  estado         String   @default("pendiente")
+
+  @@index([empresaId, estado])
+  @@map("alertas_anomalia_costo")
+}
