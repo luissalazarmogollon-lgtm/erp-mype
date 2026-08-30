@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import type { ModuloKey } from "@/lib/permisosModulo";
+import { MODULOS_SOLO_PRODUCTOS, esEmpresaDeServicios, type ModuloKey } from "@/lib/permisosModulo";
 
 /**
  * Resuelve quién es el usuario autenticado y a qué empresas tiene acceso.
@@ -76,11 +76,21 @@ export async function verificarAccesoEmpresa(
 
   const asignacion = await prisma.usuarioEmpresa.findFirst({
     where: { usuarioId, empresaId, estado: "activo" },
-    include: { rolOperativo: true },
+    include: { rolOperativo: true, empresa: { include: { tipoNegocio: true } } },
   });
 
   if (!asignacion) {
     throw new Error("No tienes acceso a esta empresa");
+  }
+
+  // Defensa en profundidad: si el módulo pedido solo aplica a empresas que
+  // venden productos (maneja inventario) y esta empresa está clasificada
+  // como "Servicios", se niega el acceso sin importar el permiso o si
+  // tiene acceso total — el módulo simplemente no aplica al modelo de
+  // negocio de esta empresa. El panel ya lo oculta; esto cubre además
+  // quien intente llamar a la API directamente.
+  if (moduloRequerido && MODULOS_SOLO_PRODUCTOS.includes(moduloRequerido) && esEmpresaDeServicios(asignacion.empresa.tipoNegocio.nombre)) {
+    throw new Error("Este módulo no está disponible para empresas de tipo Servicios");
   }
 
   if (moduloRequerido && !asignacion.accesoTotal) {
@@ -120,11 +130,22 @@ export async function verificarAccesoAlguno(
 
   const asignacion = await prisma.usuarioEmpresa.findFirst({
     where: { usuarioId, empresaId, estado: "activo" },
-    include: { rolOperativo: true },
+    include: { rolOperativo: true, empresa: { include: { tipoNegocio: true } } },
   });
 
   if (!asignacion) {
     throw new Error("No tienes acceso a esta empresa");
+  }
+
+  // Igual defensa en profundidad que en verificarAccesoEmpresa: si TODOS
+  // los módulos que darían acceso son exclusivos de empresas de productos,
+  // no aplican en una empresa de Servicios.
+  if (
+    modulosPermitidos.length > 0 &&
+    modulosPermitidos.every((m) => MODULOS_SOLO_PRODUCTOS.includes(m)) &&
+    esEmpresaDeServicios(asignacion.empresa.tipoNegocio.nombre)
+  ) {
+    throw new Error("Este módulo no está disponible para empresas de tipo Servicios");
   }
 
   if (!asignacion.accesoTotal) {

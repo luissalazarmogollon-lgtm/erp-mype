@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { MODULOS_DISPONIBLES } from "@/lib/permisosModulo";
+import { MODULOS_DISPONIBLES, MODULOS_SOLO_PRODUCTOS } from "@/lib/permisosModulo";
 
 type MiembroEquipo = {
   asignacionId: string;
@@ -20,12 +20,21 @@ export function EquipoAsignado({
   empresaId,
   equipoInicial,
   puedeEditar,
+  esServicios = false,
 }: {
   empresaId: string;
   equipoInicial: MiembroEquipo[];
   puedeEditar: boolean;
+  esServicios?: boolean;
 }) {
   const router = useRouter();
+  // En una empresa de Servicios no se ofrecen permisos de módulos de
+  // inventario/compras al editar a alguien del equipo — no existen para
+  // esa empresa. (La lista completa se sigue usando para MOSTRAR permisos
+  // ya asignados anteriormente, por si la empresa cambió de tipo después.)
+  const modulosOfrecidos = esServicios
+    ? MODULOS_DISPONIBLES.filter((m) => !MODULOS_SOLO_PRODUCTOS.includes(m.key))
+    : MODULOS_DISPONIBLES;
   const [editando, setEditando] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
@@ -157,7 +166,7 @@ export function EquipoAsignado({
 
                 {!form.accesoTotal && (
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 10 }}>
-                    {MODULOS_DISPONIBLES.map((mod) => (
+                    {modulosOfrecidos.map((mod) => (
                       <label key={mod.key} className="checkbox-row" style={{ fontSize: 12 }}>
                         <input
                           type="checkbox"

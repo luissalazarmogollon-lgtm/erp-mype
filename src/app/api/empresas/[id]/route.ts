@@ -5,26 +5,28 @@ import { getUsuarioActual, requiereSuperadmin, verificarAccesoEmpresa } from "@/
 
 export const dynamic = "force-dynamic";
 
-const patchSchema = z.object({
-  umbralAlertaAnomaliaPct: z.number().min(0).max(100),
-});
+const patchSchema = z
+  .object({
+    umbralAlertaAnomaliaPct: z.number().min(0).max(100).optional(),
+    // Reclasificar el tipo de negocio (Productos / Servicios / Productos y
+    // Servicios) cambia qué módulos ve toda la empresa — ver más abajo.
+    tipoNegocioId: z.number().int().optional(),
+  })
+  .refine((d) => d.umbralAlertaAnomaliaPct !== undefined || d.tipoNegocioId !== undefined, {
+    message: "Debes enviar al menos un campo a actualizar",
+  });
 
-// PATCH /api/empresas/[id] — por ahora solo permite ajustar el umbral de
-// alerta de anomalía de costo (Sprint 6). Reservado a quien tiene acceso
-// total a la empresa (superadmin o Asesor principal).
+// PATCH /api/empresas/[id] — permite ajustar el umbral de alerta de
+// anomalía de costo (Sprint 6), reservado a quien tiene acceso total a la
+// empresa (superadmin o Asesor principal); y reclasificar el tipo de
+// negocio de la empresa (Fase 2 — "Tipo de empresa"), reservado
+// exclusivamente al superadmin de la plataforma porque afecta qué módulos
+// ve todo el equipo asignado, no solo una preferencia de esta persona.
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   const usuarioActual = await getUsuarioActual();
   if (!usuarioActual) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
   const empresaId = BigInt(params.id);
-  try {
-    const acceso = await verificarAccesoEmpresa(usuarioActual.id, empresaId);
-    if (!acceso.accesoTotal) {
-      return NextResponse.json({ error: "No tienes permiso para cambiar esta configuración" }, { status: 403 });
-    }
-  } catch (error) {
-    return NextResponse.json({ error: (error as Error).message }, { status: 403 });
-  }
 
   const body = await request.json();
   const parsed = patchSchema.safeParse(body);
@@ -32,10 +34,51 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  await prisma.empresa.update({
-    where: { id: empresaId },
-    data: { umbralAlertaAnomaliaPct: parsed.data.umbralAlertaAnomaliaPct },
-  });
+  const cambiaTipoNegocio = parsed.data.tipoNegocioId !== undefined;
+
+  try {
+    if (cambiaTipoNegocio) {
+      requiereSuperadmin(usuarioActual);
+    } else {
+      const acceso = await verificarAccesoEmpresa(usuarioActual.id, empresaId);
+      if (!acceso.accesoTotal) {
+        return NextResponse.json({ error: "No tienes permiso para cambiar esta configuración" }, { status: 403 });
+      }
+    }
+  } catch (error) {
+    return NextResponse.json({ error: (error as Error).message }, { status: 403 });
+  }
+
+  const dataActualizar: { umbralAlertaAnomaliaPct?: number; tipoNegocioId?: number } = {};
+  if (parsed.data.umbralAlertaAnomaliaPct !== undefined) {
+    dataActualizar.umbralAlertaAnomaliaPct = parsed.data.umbralAlertaAnomaliaPct;
+  }
+
+  if (cambiaTipoNegocio) {
+    const tipoNegocio = await prisma.tipoNegocio.findUnique({ where: { id: parsed.data.tipoNegocioId } });
+    if (!tipoNegocio) {
+      return NextResponse.json({ error: "El tipo de negocio seleccionado no existe" }, { status: 400 });
+    }
+    dataActualizar.tipoNegocioId = parsed.data.tipoNegocioId;
+  }
+
+  await prisma.empresa.update({ where: { id: empresaId }, data: dataActualizar });
+
+  if (cambiaTipoNegocio) {
+    // Reclasificar nunca borra Insumos/Productos/Mermas/Ventas existentes —
+    // solo cambia qué se muestra/permite de aquí en adelante. Se audita
+    // porque afecta a qué módulos tiene acceso todo el equipo asignado.
+    await prisma.auditoria.create({
+      data: {
+        usuarioId: usuarioActual!.id,
+        empresaId,
+        tablaAfectada: "empresas",
+        registroId: empresaId,
+        accion: "actualizar",
+        valorNuevo: { tipoNegocioId: parsed.data.tipoNegocioId },
+      },
+    });
+  }
 
   return NextResponse.json({ ok: true });
 }

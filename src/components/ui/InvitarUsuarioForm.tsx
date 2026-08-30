@@ -2,9 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { MODULOS_DISPONIBLES } from "@/lib/permisosModulo";
+import { MODULOS_DISPONIBLES, MODULOS_SOLO_PRODUCTOS } from "@/lib/permisosModulo";
 
-export function InvitarUsuarioForm({ empresaId }: { empresaId: string }) {
+export function InvitarUsuarioForm({ empresaId, esServicios = false }: { empresaId: string; esServicios?: boolean }) {
+  // En una empresa de Servicios no tiene sentido ofrecer permisos de
+  // módulos de inventario/compras — no existen para esa empresa.
+  const modulosOfrecidos = esServicios
+    ? MODULOS_DISPONIBLES.filter((m) => !MODULOS_SOLO_PRODUCTOS.includes(m.key))
+    : MODULOS_DISPONIBLES;
   const router = useRouter();
   const [abierto, setAbierto] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -141,7 +146,7 @@ export function InvitarUsuarioForm({ empresaId }: { empresaId: string }) {
 
       {!form.accesoTotal && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 14 }}>
-          {MODULOS_DISPONIBLES.map((m) => (
+          {modulosOfrecidos.map((m) => (
             <label key={m.key} className="checkbox-row" style={{ fontSize: 12 }}>
               <input type="checkbox" checked={form.permisos.includes(m.key)} onChange={() => togglePermiso(m.key)} />
               {m.label}

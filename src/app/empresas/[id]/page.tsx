@@ -2,10 +2,12 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { MODULOS_SOLO_PRODUCTOS, esEmpresaDeServicios, type ModuloKey } from "@/lib/permisosModulo";
 import { InvitarUsuarioForm } from "@/components/ui/InvitarUsuarioForm";
 import { EliminarEmpresaButton } from "@/components/ui/EliminarEmpresaButton";
 import { VaciarDatosButton } from "@/components/ui/VaciarDatosButton";
 import { EquipoAsignado } from "@/components/ui/EquipoAsignado";
+import { CambiarTipoNegocio } from "@/components/ui/CambiarTipoNegocio";
 
 // Pantalla de detalle de una empresa. Muestra los accesos directos al
 // registro y control financiero — solo los módulos a los que el usuario
@@ -37,6 +39,14 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
     include: { usuario: true, rolOperativo: true },
     orderBy: { fechaAsignacion: "asc" },
   });
+
+  const tiposNegocio = await prisma.tipoNegocio.findMany({ orderBy: { id: "asc" } });
+
+  const esServicios = esEmpresaDeServicios(empresa.tipoNegocio.nombre);
+  // Una empresa de Servicios no maneja inventario: estos accesos directos
+  // no aplican a su modelo de negocio y se ocultan del panel (además del
+  // bloqueo a nivel de API en verificarAccesoEmpresa/verificarAccesoAlguno).
+  const esSoloDeProductos = (modulos: string[]) => modulos.every((m) => MODULOS_SOLO_PRODUCTOS.includes(m as ModuloKey));
 
   const puedeVerAlguno = (modulos: string[]) => modulos.some((m) => puedeVer(m));
 
@@ -80,14 +90,23 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
           </div>
         )}
       </div>
-      <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 28 }}>
-        {empresa.rubro.nombre} · {empresa.tipoNegocio.nombre} · {empresa.monedaOperacion} ·{" "}
-        {empresa.aplicaIgv ? `IGV ${empresa.tasaIgv}%` : "Sin IGV"}
-      </p>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 28, flexWrap: "wrap" }}>
+        <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)", margin: 0 }}>
+          {empresa.rubro.nombre} · {empresa.tipoNegocio.nombre} · {empresa.monedaOperacion} ·{" "}
+          {empresa.aplicaIgv ? `IGV ${empresa.tasaIgv}%` : "Sin IGV"}
+        </p>
+        {usuarioActual.esSuperadminPlataforma && (
+          <CambiarTipoNegocio
+            empresaId={params.id}
+            tipoNegocioActualId={empresa.tipoNegocioId}
+            tiposNegocio={tiposNegocio.map((t) => ({ id: t.id, nombre: t.nombre }))}
+          />
+        )}
+      </div>
 
       <div style={{ marginBottom: 28 }}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {ACCESOS_DIRECTOS.filter((a) => puedeVerAlguno(a.modulos)).map((a) => (
+          {ACCESOS_DIRECTOS.filter((a) => puedeVerAlguno(a.modulos) && !(esServicios && esSoloDeProductos(a.modulos))).map((a) => (
             <Link
               key={a.href}
               href={`/empresas/${params.id}/${a.href}`}
@@ -98,9 +117,15 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
             </Link>
           ))}
         </div>
-        {ACCESOS_DIRECTOS.filter((a) => puedeVerAlguno(a.modulos)).length === 0 && (
+        {ACCESOS_DIRECTOS.filter((a) => puedeVerAlguno(a.modulos) && !(esServicios && esSoloDeProductos(a.modulos))).length === 0 && (
           <p style={{ color: "var(--ink-soft)", fontSize: 13 }}>
             No tienes acceso a ningún módulo de esta empresa todavía. Pídele al superadmin que te lo asigne.
+          </p>
+        )}
+        {esServicios && (
+          <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 10 }}>
+            Esta empresa es de tipo Servicios: Insumos, Mermas, Productos y recetas, Ventas por producto (POS),
+            Compras, Proveedores y Solicitudes de Pedido están ocultos porque no maneja inventario.
           </p>
         )}
       </div>
@@ -108,11 +133,12 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
       {(acceso.tipoActor === "superadmin" || acceso.tipoActor === "asesor" || acceso.tipoActor === "asistente") && (
         <>
           <h2 style={{ fontSize: 18, marginBottom: 12 }}>Equipo asignado</h2>
-          {usuarioActual.esSuperadminPlataforma && <InvitarUsuarioForm empresaId={params.id} />}
+          {usuarioActual.esSuperadminPlataforma && <InvitarUsuarioForm empresaId={params.id} esServicios={esServicios} />}
 
           <EquipoAsignado
             empresaId={params.id}
             puedeEditar={usuarioActual.esSuperadminPlataforma}
+            esServicios={esServicios}
             equipoInicial={equipo.map((a) => ({
               asignacionId: a.id.toString(),
               usuarioId: a.usuario.id,

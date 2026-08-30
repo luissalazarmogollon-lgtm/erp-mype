@@ -10,6 +10,7 @@ type Rubro = {
   requiereFichasTecnicas: boolean;
   tipoNegocioSugerido?: { id: number; nombre: string } | null;
 };
+type TipoNegocio = { id: number; nombre: string };
 
 // Wizard de alta de empresa — HU-01 de especificacion_mvp_erp_mype.md.
 // Cubre el paso 1 (datos generales), 2 (tipo de negocio/rubro) y 3
@@ -19,6 +20,7 @@ type Rubro = {
 export default function AltaEmpresaPage() {
   const router = useRouter();
   const [rubros, setRubros] = useState<Rubro[]>([]);
+  const [tiposNegocio, setTiposNegocio] = useState<TipoNegocio[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -27,6 +29,7 @@ export default function AltaEmpresaPage() {
     nombreComercial: "",
     ruc: "",
     rubroId: "",
+    tipoNegocioId: "",
     monedaOperacion: "PEN",
     aplicaIgv: true,
     tasaIgv: 18,
@@ -39,16 +42,33 @@ export default function AltaEmpresaPage() {
       .then((r) => r.json())
       .then(setRubros)
       .catch(() => setError("No se pudieron cargar los rubros"));
+    fetch("/api/tipos-negocio")
+      .then((r) => r.json())
+      .then(setTiposNegocio)
+      .catch(() => setError("No se pudieron cargar los tipos de negocio"));
   }, []);
 
   const rubroSeleccionado = rubros.find((r) => r.id === Number(form.rubroId));
+  const tipoNegocioSeleccionado = tiposNegocio.find((t) => t.id === Number(form.tipoNegocioId));
+  const esServicios = tipoNegocioSeleccionado?.nombre === "Servicios";
+
+  function handleCambiarRubro(rubroId: string) {
+    const rubro = rubros.find((r) => r.id === Number(rubroId));
+    setForm((f) => ({
+      ...f,
+      rubroId,
+      // Pre-llena el tipo de negocio con lo que sugiere el rubro — la
+      // persona lo puede corregir después en el selector explícito de abajo.
+      tipoNegocioId: rubro?.tipoNegocioSugerido ? String(rubro.tipoNegocioSugerido.id) : f.tipoNegocioId,
+    }));
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
 
-    if (!form.razonSocial || !form.nombreComercial || !form.rubroId) {
-      setError("Completa razón social, nombre comercial y rubro.");
+    if (!form.razonSocial || !form.nombreComercial || !form.rubroId || !form.tipoNegocioId) {
+      setError("Completa razón social, nombre comercial, rubro y tipo de negocio.");
       return;
     }
 
@@ -61,7 +81,7 @@ export default function AltaEmpresaPage() {
         razonSocial: form.razonSocial,
         nombreComercial: form.nombreComercial,
         ruc: form.ruc || undefined,
-        tipoNegocioId: rubroSeleccionado?.tipoNegocioSugerido?.id,
+        tipoNegocioId: Number(form.tipoNegocioId),
         rubroId: Number(form.rubroId),
         monedaOperacion: form.monedaOperacion,
         aplicaIgv: form.aplicaIgv,
@@ -128,7 +148,7 @@ export default function AltaEmpresaPage() {
 
         <div className="field">
           <label>Rubro</label>
-          <select value={form.rubroId} onChange={(e) => setForm({ ...form, rubroId: e.target.value })}>
+          <select value={form.rubroId} onChange={(e) => handleCambiarRubro(e.target.value)}>
             <option value="">Selecciona un rubro...</option>
             {rubros.map((r) => (
               <option key={r.id} value={r.id}>
@@ -138,11 +158,35 @@ export default function AltaEmpresaPage() {
           </select>
         </div>
 
-        {rubroSeleccionado && (
+        <div className="field">
+          <label>Tipo de negocio</label>
+          <select value={form.tipoNegocioId} onChange={(e) => setForm({ ...form, tipoNegocioId: e.target.value })}>
+            <option value="">Selecciona un tipo de negocio...</option>
+            {tiposNegocio.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.nombre}
+              </option>
+            ))}
+          </select>
+          <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 6 }}>
+            Se sugiere automáticamente según el rubro elegido, pero puedes cambiarlo. Se puede volver a cambiar
+            después desde el detalle de la empresa.
+          </p>
+        </div>
+
+        {rubroSeleccionado && !esServicios && (
           <p className="mono" style={{ fontSize: 11, color: "var(--teal)", marginTop: -10, marginBottom: 18 }}>
             Se activarán automáticamente: {rubroSeleccionado.requiereInventario ? "Inventario, " : ""}
             {rubroSeleccionado.requiereFichasTecnicas ? "Fichas técnicas, " : ""}
             Compras, CxC/CxP, Caja y Bancos, Gastos, Activos fijos, Préstamos.
+          </p>
+        )}
+
+        {esServicios && (
+          <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: -10, marginBottom: 18 }}>
+            Al ser una empresa de Servicios, no se activan Insumos, Mermas, Productos y recetas, Ventas por
+            producto (POS), Compras/Proveedores ni Solicitudes de Pedido — sí CxC/CxP, Caja y Bancos, Gastos,
+            Activos fijos y Préstamos.
           </p>
         )}
 
