@@ -98,6 +98,51 @@ export async function verificarAccesoEmpresa(
   };
 }
 
+/**
+ * Variante de verificarAccesoEmpresa para pantallas donde MÁS DE UN
+ * módulo da acceso — por ejemplo, Cuentas por Pagar: quien solo tiene
+ * "cuentas_por_pagar_registrar" (registra facturas sin clasificar) y
+ * quien tiene "cuentas_por_pagar" (clasifica y paga) ambos pueden entrar
+ * a ver/crear, pero cada acción específica (clasificar, pagar) valida
+ * el módulo exacto por separado con verificarAccesoEmpresa.
+ */
+export async function verificarAccesoAlguno(
+  usuarioId: string,
+  empresaId: bigint,
+  modulosPermitidos: ModuloKey[]
+) {
+  const usuario = await prisma.usuario.findUnique({ where: { id: usuarioId } });
+  if (!usuario) throw new Error("Usuario no encontrado");
+
+  if (usuario.esSuperadminPlataforma) {
+    return { rolOperativo: "Gerencial", tipoActor: "superadmin" as const, accesoTotal: true, permisos: [] as string[] };
+  }
+
+  const asignacion = await prisma.usuarioEmpresa.findFirst({
+    where: { usuarioId, empresaId, estado: "activo" },
+    include: { rolOperativo: true },
+  });
+
+  if (!asignacion) {
+    throw new Error("No tienes acceso a esta empresa");
+  }
+
+  if (!asignacion.accesoTotal) {
+    const permisos = (asignacion.permisos as unknown as string[] | null) ?? [];
+    const tieneAlguno = modulosPermitidos.some((m) => permisos.includes(m));
+    if (!tieneAlguno) {
+      throw new Error("No tienes permiso para acceder a esta sección de la empresa");
+    }
+  }
+
+  return {
+    rolOperativo: asignacion.rolOperativo.nombre,
+    tipoActor: asignacion.tipoActor,
+    accesoTotal: asignacion.accesoTotal,
+    permisos: (asignacion.permisos as unknown as string[] | null) ?? [],
+  };
+}
+
 /** RN-004: solo el superadmin de plataforma puede dar de alta empresas nuevas. */
 export function requiereSuperadmin(usuario: { esSuperadminPlataforma: boolean } | null) {
   if (!usuario || !usuario.esSuperadminPlataforma) {

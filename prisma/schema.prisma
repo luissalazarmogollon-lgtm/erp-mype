@@ -572,7 +572,13 @@ model Gasto {
   // Naturaleza del egreso — determina el tratamiento contable (ver RN nuevas):
   // costo_directo | mano_obra_directa | gasto_operativo | gasto_financiero |
   // gasto_tributario | activo | deuda | retiro_socios | otros
-  naturaleza           String
+  // NULL = todavía sin clasificar — viene de una factura por pagar
+  // registrada directamente en Cuentas por Pagar (solo ítems + monto,
+  // sin naturaleza) y está pendiente de que el responsable de finanzas/
+  // contabilidad le asigne su naturaleza y categoría específica. Mientras
+  // esté en NULL no impacta el Estado de Resultados y la cuenta por pagar
+  // asociada no se puede pagar (ver API de pago).
+  naturaleza           String?
   categoriaEspecifica  String?   @map("categoria_especifica")
   proveedorNombre      String?   @map("proveedor_nombre")
   descripcion          String

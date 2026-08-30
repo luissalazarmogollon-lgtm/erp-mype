@@ -1,45 +1,51 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
-import { NATURALEZAS_EGRESO } from "@/lib/naturalezaEgreso";
+import { getUsuarioActual, verificarAccesoAlguno } from "@/lib/auth";
 import { TIPOS_COMPROBANTE } from "@/lib/tiposComprobante";
 
 export const dynamic = "force-dynamic";
 
-const NATURALEZAS_VALIDAS = NATURALEZAS_EGRESO.map((n) => n.value) as [string, ...string[]];
 const TIPOS_COMPROBANTE_VALIDOS = TIPOS_COMPROBANTE.map((t) => t.value) as [string, ...string[]];
 
 // Registrar una factura por pagar directamente desde este módulo — sin
-// pasar por Gastos y Costos ni por una compra/pedido previo. Por debajo
-// crea el mismo par Gasto (condicion="credito") + CuentaPorPagar que ya
-// generaba la pantalla de Gastos, para que la factura también aparezca
-// correctamente clasificada en Gastos y Costos y en el Estado de
-// Resultados (según su `naturaleza`).
-const registrarFacturaSchema = z.object({
-  localId: z.string().optional(),
-  naturaleza: z.enum(NATURALEZAS_VALIDAS),
-  categoriaEspecifica: z.string().optional(),
-  proveedorNombre: z.string().min(1, "Indica el proveedor"),
-  descripcion: z.string().min(2, "Describe brevemente la factura"),
-  tipoComprobante: z.enum(TIPOS_COMPROBANTE_VALIDOS),
-  numeroComprobante: z.string().optional(),
-  montoTotal: z.number().positive(),
-  fecha: z.string(),
-  fechaVencimiento: z.string().optional(),
+// pasar por Gastos y Costos ni por una compra/pedido previo, y puede
+// traer uno o varios ítems (igual que un documento de compra normal).
+//
+// A propósito NO pide Naturaleza del egreso ni Categoría específica: la
+// persona que registra facturas ("cuentas_por_pagar_registrar") solo
+// digita cada ítem con su descripción y monto — nada de clasificación
+// contable, para que le sea simple. Cada ítem queda "sin clasificar"
+// (naturaleza = NULL) hasta que el responsable de finanzas/contabilidad
+// ("cuentas_por_pagar") se lo asigne desde esta misma pantalla — recién
+// ahí esa factura se puede pagar (ver API de pago) y cuenta en el Estado
+// de Resultados.
+const itemFacturaSchema = z.object({
+  descripcion: z.string().min(2, "Describe brevemente el ítem"),
+  monto: z.number().positive(),
 });
 
-// GET /api/empresas/[id]/cuentas-por-pagar — listado con saldo pendiente.
-// Cada fila puede venir de un gasto simple (un solo ítem) o de un
-// documento de compra con varios ítems — se arma una descripción que
-// funciona para ambos casos.
+const registrarFacturaSchema = z.object({
+  localId: z.string().optional(),
+  proveedorNombre: z.string().min(1, "Indica el proveedor"),
+  tipoComprobante: z.enum(TIPOS_COMPROBANTE_VALIDOS),
+  numeroComprobante: z.string().optional(),
+  fecha: z.string(),
+  fechaVencimiento: z.string().optional(),
+  items: z.array(itemFacturaSchema).min(1, "Agrega al menos un ítem"),
+});
+
+// GET /api/empresas/[id]/cuentas-por-pagar — listado con saldo pendiente
+// y el detalle de ítems de cada factura (uno si viene de un gasto simple,
+// varios si viene de un documento de compra), con la naturaleza de cada
+// ítem para saber si ya está clasificado o sigue pendiente.
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   const usuarioActual = await getUsuarioActual();
   if (!usuarioActual) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
   const empresaId = BigInt(params.id);
   try {
-    await verificarAccesoEmpresa(usuarioActual.id, empresaId, "cuentas_por_pagar");
+    await verificarAccesoAlguno(usuarioActual.id, empresaId, ["cuentas_por_pagar", "cuentas_por_pagar_registrar"]);
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 403 });
   }
@@ -56,10 +62,20 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
   return NextResponse.json(
     cxps.map((c) => {
-      const descripcion = c.gasto
+      const itemsRaw = c.documentoCompra ? c.documentoCompra.items : c.gasto ? [c.gasto] : [];
+      const items = itemsRaw.map((g) => ({
+        id: g.id.toString(),
+        descripcion: g.descripcion,
+        monto: g.montoTotal.toString(),
+        naturaleza: g.naturaleza,
+        categoriaEspecifica: g.categoriaEspecifica,
+      }));
+      const pendienteClasificar = items.some((i) => !i.naturaleza);
+
+      const descripcion = c.documentoCompra
+        ? `${c.documentoCompra.numeroComprobante ?? "Documento"} (${items.length} ítem${items.length !== 1 ? "s" : ""})`
+        : c.gasto
         ? c.gasto.descripcion
-        : c.documentoCompra
-        ? `${c.documentoCompra.numeroComprobante ?? "Documento"} (${c.documentoCompra.items.length} ítems)`
         : "-";
 
       return {
@@ -71,6 +87,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
         fechaEmision: c.fechaEmision,
         fechaVencimiento: c.fechaVencimiento,
         estado: c.estado,
+        items,
+        pendienteClasificar,
         pagos: c.pagos.map((p) => ({ monto: p.monto.toString(), fecha: p.fecha, medioPago: p.medioPago })),
       };
     })
@@ -79,18 +97,18 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
 // POST /api/empresas/[id]/cuentas-por-pagar
 //
-// Registra una factura por pagar directamente (sin pasar por Gastos y
-// Costos). Crea un Gasto con condicion="credito" y su CuentaPorPagar
-// asociada, igual que hace la pantalla de Gastos — así la factura queda
-// clasificada por naturaleza para el Estado de Resultados y aparece en
-// ambas pantallas de forma consistente.
+// Registra una factura por pagar directamente, con uno o varios ítems.
+// Crea 1 DocumentoCompra (cabecera) + N Gasto (uno por ítem, todos con
+// naturaleza=NULL, "sin clasificar") + 1 CuentaPorPagar por el total —
+// igual que el flujo de "Documento con varios ítems" de Gastos y Costos,
+// pero sin pedir naturaleza/categoría en este paso.
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   const usuarioActual = await getUsuarioActual();
   if (!usuarioActual) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
   const empresaId = BigInt(params.id);
   try {
-    await verificarAccesoEmpresa(usuarioActual.id, empresaId, "cuentas_por_pagar");
+    await verificarAccesoAlguno(usuarioActual.id, empresaId, ["cuentas_por_pagar", "cuentas_por_pagar_registrar"]);
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 403 });
   }
@@ -102,32 +120,61 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
   const localId = datos.localId ? BigInt(datos.localId) : null;
   const usuarioId = usuarioActual.id;
+  const montoTotal = datos.items.reduce((acc, i) => acc + i.monto, 0);
 
-  const { gasto, cuentaPorPagar } = await prisma.$transaction(async (tx) => {
-    const nuevoGasto = await tx.gasto.create({
+  const documento = await prisma.$transaction(async (tx) => {
+    const nuevoDocumento = await tx.documentoCompra.create({
       data: {
         empresaId,
         localId,
-        naturaleza: datos.naturaleza,
-        categoriaEspecifica: datos.categoriaEspecifica || null,
         proveedorNombre: datos.proveedorNombre,
-        descripcion: datos.descripcion,
         tipoComprobante: datos.tipoComprobante,
         numeroComprobante: datos.numeroComprobante || null,
-        montoTotal: datos.montoTotal,
         fecha: new Date(datos.fecha),
         condicion: "credito",
+        montoTotal,
         usuarioId,
       },
     });
 
+    for (const item of datos.items) {
+      const nuevoGasto = await tx.gasto.create({
+        data: {
+          empresaId,
+          localId,
+          documentoCompraId: nuevoDocumento.id,
+          naturaleza: null,
+          categoriaEspecifica: null,
+          proveedorNombre: datos.proveedorNombre,
+          descripcion: item.descripcion,
+          tipoComprobante: datos.tipoComprobante,
+          numeroComprobante: datos.numeroComprobante || null,
+          montoTotal: item.monto,
+          fecha: new Date(datos.fecha),
+          condicion: "credito",
+          usuarioId,
+        },
+      });
+
+      await tx.auditoria.create({
+        data: {
+          usuarioId,
+          empresaId,
+          tablaAfectada: "gastos",
+          registroId: nuevoGasto.id,
+          accion: "crear",
+          valorNuevo: { origen: "cuentas_por_pagar", descripcion: item.descripcion, monto: item.monto.toString() },
+        },
+      });
+    }
+
     const nuevaCxp = await tx.cuentaPorPagar.create({
       data: {
         empresaId,
-        gastoId: nuevoGasto.id,
+        documentoCompraId: nuevoDocumento.id,
         proveedorNombre: datos.proveedorNombre,
-        montoTotal: datos.montoTotal,
-        saldoPendiente: datos.montoTotal,
+        montoTotal,
+        saldoPendiente: montoTotal,
         fechaVencimiento: datos.fechaVencimiento ? new Date(datos.fechaVencimiento) : null,
       },
     });
@@ -136,15 +183,15 @@ export async function POST(request: Request, { params }: { params: { id: string 
       data: {
         usuarioId,
         empresaId,
-        tablaAfectada: "gastos",
-        registroId: nuevoGasto.id,
+        tablaAfectada: "cuentas_por_pagar",
+        registroId: nuevaCxp.id,
         accion: "crear",
-        valorNuevo: { descripcion: nuevoGasto.descripcion, montoTotal: nuevoGasto.montoTotal.toString(), origen: "cuentas_por_pagar" },
+        valorNuevo: { proveedorNombre: datos.proveedorNombre, montoTotal: montoTotal.toString(), items: datos.items.length },
       },
     });
 
-    return { gasto: nuevoGasto, cuentaPorPagar: nuevaCxp };
+    return nuevoDocumento;
   });
 
-  return NextResponse.json({ id: cuentaPorPagar.id.toString(), gastoId: gasto.id.toString() }, { status: 201 });
+  return NextResponse.json({ id: documento.id.toString(), montoTotal }, { status: 201 });
 }

@@ -1,0 +1,12 @@
+-- Permite registrar facturas por pagar directamente desde el módulo
+-- Cuentas por Pagar, con uno o varios ítems, SIN clasificar (sin
+-- Naturaleza del egreso ni Categoría específica) en el momento del
+-- registro. La persona que ingresa la factura solo digita cada ítem y
+-- su monto; el responsable de finanzas y contabilidad clasifica cada
+-- ítem después (desde Cuentas por Pagar), y recién ahí el sistema deja
+-- pagarla y la suma correctamente en el Estado de Resultados.
+--
+-- IMPORTANTE: ejecutar este script ANTES de desplegar el código nuevo
+-- (si se despliega el código primero, cualquier intento de registrar una
+-- factura por pagar fallará porque la columna todavía exige un valor).
+ALTER TABLE gastos ALTER COLUMN naturaleza DROP NOT NULL;

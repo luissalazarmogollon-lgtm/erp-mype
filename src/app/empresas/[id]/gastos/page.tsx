@@ -8,7 +8,7 @@ import { TIPOS_COMPROBANTE } from "@/lib/tiposComprobante";
 type Gasto = {
   id: string;
   local: string | null;
-  naturaleza: string;
+  naturaleza: string | null;
   categoriaEspecifica: string | null;
   proveedorNombre: string | null;
   descripcion: string;
@@ -513,6 +513,54 @@ export default function GastosPage({ params }: { params: { id: string } }) {
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {(() => {
+          const sinClasificar = gastos.filter((g) => !g.naturaleza);
+          if (sinClasificar.length === 0) return null;
+          const totalSinClasificar = sinClasificar.reduce((acc, g) => acc + Number(g.montoTotal), 0);
+          const abierto = naturalezasAbiertas["__sin_clasificar__"] ?? false;
+          return (
+            <div className="card" style={{ padding: 0, overflow: "hidden", borderColor: "var(--stamp)" }}>
+              <button
+                onClick={() => setNaturalezasAbiertas({ ...naturalezasAbiertas, __sin_clasificar__: !abierto })}
+                style={{
+                  width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
+                  padding: 14, background: "none", border: "none", cursor: "pointer", textAlign: "left",
+                }}
+              >
+                <span style={{ fontSize: 14, fontWeight: 500, color: "var(--stamp)" }}>
+                  {abierto ? "▾" : "▸"} Sin clasificar
+                </span>
+                <span className="mono" style={{ fontSize: 12, color: "var(--ink-soft)" }}>
+                  {sinClasificar.length} ítem{sinClasificar.length !== 1 ? "s" : ""} · S/ {totalSinClasificar.toFixed(2)} · no afecta resultados todavía
+                </span>
+              </button>
+
+              {abierto && (
+                <div style={{ borderTop: "1px solid var(--line)", display: "flex", flexDirection: "column" }}>
+                  {sinClasificar.map((g) => (
+                    <div key={g.id} style={{ padding: "12px 14px", borderBottom: "1px solid var(--line)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <div>
+                          <p style={{ fontSize: 13.5 }}>{g.descripcion}</p>
+                          <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
+                            {g.proveedorNombre ? `${g.proveedorNombre} · ` : ""}
+                            {g.numeroComprobante ? `${g.numeroComprobante} · ` : ""}
+                            {new Date(g.fecha).toLocaleDateString("es-PE", { timeZone: "UTC" })}
+                          </p>
+                        </div>
+                        <p className="mono" style={{ fontSize: 13 }}>S/ {Number(g.montoTotal).toFixed(2)}</p>
+                      </div>
+                    </div>
+                  ))}
+                  <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", padding: "10px 14px" }}>
+                    Clasifícalos desde Cuentas por Pagar (Naturaleza del egreso y Categoría específica) para que se
+                    sumen correctamente al Estado de Resultados.
+                  </p>
+                </div>
+              )}
+            </div>
+          );
+        })()}
         {NATURALEZAS_EGRESO.map((n) => {
           const gastosGrupo = gastos.filter((g) => g.naturaleza === n.value);
           if (gastosGrupo.length === 0) return null;

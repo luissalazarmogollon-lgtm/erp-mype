@@ -73,8 +73,11 @@ export async function GET(request: Request, { params }: { params: { id: string }
   const totalCreditos = creditosOtorgados.reduce((acc, c) => acc + Number(c.montoTotal), 0);
   const ventasTotales = totalVentasDiarias + totalCreditos;
 
+  // g.naturaleza puede ser NULL (ítem de una factura por pagar todavía
+  // sin clasificar) — mientras tanto no cuenta en ningún grupo, así el
+  // Estado de Resultados nunca muestra un gasto mal clasificado.
   const sumaPorNaturaleza = (naturalezas: string[]) =>
-    gastos.filter((g) => naturalezas.includes(g.naturaleza)).reduce((acc, g) => acc + Number(g.montoTotal), 0);
+    gastos.filter((g) => g.naturaleza !== null && naturalezas.includes(g.naturaleza)).reduce((acc, g) => acc + Number(g.montoTotal), 0);
 
   const costoVentas = sumaPorNaturaleza(["costo_directo", "mano_obra_directa"]);
   const gastoOperativo = sumaPorNaturaleza(["gasto_operativo"]);
@@ -97,7 +100,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
   const detallePorNaturaleza: Record<string, number> = {};
   for (const g of gastos) {
-    detallePorNaturaleza[g.naturaleza] = (detallePorNaturaleza[g.naturaleza] ?? 0) + Number(g.montoTotal);
+    const clave = g.naturaleza ?? "sin_clasificar";
+    detallePorNaturaleza[clave] = (detallePorNaturaleza[clave] ?? 0) + Number(g.montoTotal);
   }
 
   const pct = (valor: number) => (ventasTotales > 0 ? (valor / ventasTotales) * 100 : 0);

@@ -22,8 +22,19 @@ export const NATURALEZAS_EGRESO = [
 
 export type NaturalezaEgreso = (typeof NATURALEZAS_EGRESO)[number]["value"];
 
-export function impactaResultados(naturaleza: string): boolean {
+// naturaleza === null → el gasto todavía no fue clasificado (viene de una
+// factura por pagar registrada directamente en Cuentas por Pagar, sin
+// pasar por Gastos y Costos). Mientras no se clasifique, NO impacta el
+// Estado de Resultados — se muestra aparte como "Sin clasificar" hasta
+// que el responsable de finanzas/contabilidad le asigne su naturaleza.
+export function impactaResultados(naturaleza: string | null | undefined): boolean {
+  if (!naturaleza) return false;
   return NATURALEZAS_EGRESO.find((n) => n.value === naturaleza)?.impactaResultados ?? true;
+}
+
+export function labelNaturaleza(naturaleza: string | null | undefined): string {
+  if (!naturaleza) return "Sin clasificar";
+  return NATURALEZAS_EGRESO.find((n) => n.value === naturaleza)?.label ?? naturaleza;
 }
 
 // Categorías específicas por naturaleza — lista corta y consolidada,

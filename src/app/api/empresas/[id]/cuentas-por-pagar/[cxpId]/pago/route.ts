@@ -36,9 +36,21 @@ export async function POST(
   const cxpId = BigInt(params.cxpId);
   const cxp = await prisma.cuentaPorPagar.findFirst({
     where: { id: cxpId, empresaId },
-    include: { gasto: true, documentoCompra: true },
+    include: { gasto: true, documentoCompra: { include: { items: true } } },
   });
   if (!cxp) return NextResponse.json({ error: "Cuenta por pagar no encontrada" }, { status: 404 });
+
+  // No se puede pagar una factura mientras alguno de sus ítems siga sin
+  // clasificar (naturaleza=NULL) — si no, quedaría un pago hecho que
+  // nunca se termina de clasificar y el Estado de Resultados queda mal.
+  const itemsCxp = cxp.documentoCompra ? cxp.documentoCompra.items : cxp.gasto ? [cxp.gasto] : [];
+  const faltaClasificar = itemsCxp.some((g) => !g.naturaleza);
+  if (faltaClasificar) {
+    return NextResponse.json(
+      { error: "Antes de pagar, clasifica todos los ítems de esta factura (Naturaleza del egreso) en Cuentas por Pagar." },
+      { status: 400 }
+    );
+  }
 
   const descripcionCxp = cxp.gasto
     ? cxp.gasto.descripcion
