@@ -269,10 +269,26 @@ export default function CreditosPage({ params }: { params: { id: string } }) {
                       ))}
                     </select>
                   )}
+                  {/* Antes "Confirmar" no decía qué se iba a cobrar. Ahora el
+                      botón muestra el monto exacto, para que un cobro no
+                      quede registrado con el monto equivocado por error. */}
+                  <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginBottom: 8 }}>
+                    Vas a registrar un cobro de <b>S/ {montoCobro.toFixed(2)}</b> de <b>{c.cliente}</b> por{" "}
+                    <b>{medioPagoCobro}</b>
+                    {cuentaCobro && (
+                      <> hacia <b>{cuentasBancarias.find((cb) => cb.id === cuentaCobro)?.bancoNombre}</b></>
+                    )}
+                    .
+                  </p>
                   {error && <p className="field error">{error}</p>}
                   <div style={{ display: "flex", gap: 10 }}>
-                    <button className="btn-primary" style={{ padding: "8px 14px", fontSize: 12 }} onClick={() => handleCobro(c.id)}>
-                      Confirmar
+                    <button
+                      className="btn-primary"
+                      style={{ padding: "8px 14px", fontSize: 12 }}
+                      disabled={montoCobro <= 0}
+                      onClick={() => handleCobro(c.id)}
+                    >
+                      Confirmar cobro de S/ {montoCobro.toFixed(2)}
                     </button>
                     <button className="btn-ghost" style={{ padding: "8px 14px", fontSize: 12 }} onClick={() => setCobrando(null)}>
                       Cancelar

@@ -438,7 +438,7 @@ export default function CuentasPorPagarPage({ params }: { params: { id: string }
                   </p>
                 ) : pagando === c.id ? (
                   <div style={{ marginTop: 10 }}>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: cuentasBancarias.length > 0 ? 8 : 0 }}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
                       <input
                         type="number"
                         step="0.01"
@@ -446,18 +446,12 @@ export default function CuentasPorPagarPage({ params }: { params: { id: string }
                         onChange={(e) => setMontoPago(Number(e.target.value))}
                         style={{ flex: 1, padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 2 }}
                       />
-                      <button className="btn-primary" style={{ padding: "8px 14px", fontSize: 12 }} onClick={() => handlePago(c.id)}>
-                        Confirmar
-                      </button>
-                      <button className="btn-ghost" style={{ padding: "8px 14px", fontSize: 12 }} onClick={() => setPagando(null)}>
-                        Cancelar
-                      </button>
                     </div>
                     {cuentasBancarias.length > 0 && (
                       <select
                         value={cuentaPago}
                         onChange={(e) => setCuentaPago(e.target.value)}
-                        style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 2, fontSize: 12 }}
+                        style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 2, fontSize: 12, marginBottom: 8 }}
                       >
                         <option value="">¿De qué cuenta sale? (opcional, para el flujo de caja)</option>
                         {cuentasBancarias.map((cb) => (
@@ -465,6 +459,33 @@ export default function CuentasPorPagarPage({ params }: { params: { id: string }
                         ))}
                       </select>
                     )}
+                    {/* Antes "Confirmar" no decía qué se iba a pagar — solo
+                        había campos sueltos. Ahora el botón muestra el monto
+                        exacto, para que un pago no salga con el monto o la
+                        cuenta equivocada por error. */}
+                    <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginBottom: 8 }}>
+                      Vas a registrar un pago de <b>S/ {montoPago.toFixed(2)}</b> a{" "}
+                      <b>{c.proveedorNombre ?? "este proveedor"}</b>
+                      {cuentaPago ? (
+                        <> desde <b>{cuentasBancarias.find((cb) => cb.id === cuentaPago)?.bancoNombre}</b></>
+                      ) : (
+                        " (sin registrar de qué cuenta sale)"
+                      )}
+                      .
+                    </p>
+                    <div style={{ display: "flex", gap: 10 }}>
+                      <button
+                        className="btn-primary"
+                        style={{ padding: "8px 14px", fontSize: 12 }}
+                        disabled={montoPago <= 0}
+                        onClick={() => handlePago(c.id)}
+                      >
+                        Confirmar pago de S/ {montoPago.toFixed(2)}
+                      </button>
+                      <button className="btn-ghost" style={{ padding: "8px 14px", fontSize: 12 }} onClick={() => setPagando(null)}>
+                        Cancelar
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <button

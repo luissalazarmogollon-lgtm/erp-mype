@@ -251,8 +251,27 @@ export default function CajaChicaPage({ params }: { params: { id: string } }) {
                         </select>
                       )}
                     </div>
+                    {/* Antes "Confirmar" no decía qué se iba a mover. Ahora
+                        el botón muestra el monto exacto, para no reponer un
+                        fondo con el monto equivocado por error. */}
+                    <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", margin: "8px 0" }}>
+                      Vas a mover <b>S/ {formReponer.monto.toFixed(2)}</b> desde{" "}
+                      <b>
+                        {formReponer.cuentaBancariaId
+                          ? cuentasBancarias.find((c) => c.id === formReponer.cuentaBancariaId)?.bancoNombre
+                          : "la cuenta por defecto"}
+                      </b>{" "}
+                      hacia "{caja.nombre}".
+                    </p>
                     <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-                      <button className="btn-primary" style={{ fontSize: 12, padding: "8px 14px" }} onClick={handleReponer}>Confirmar</button>
+                      <button
+                        className="btn-primary"
+                        style={{ fontSize: 12, padding: "8px 14px" }}
+                        disabled={formReponer.monto <= 0}
+                        onClick={handleReponer}
+                      >
+                        Confirmar reposición de S/ {formReponer.monto.toFixed(2)}
+                      </button>
                       <button className="btn-ghost" style={{ fontSize: 12, padding: "8px 14px" }} onClick={() => setReponiendo(false)}>Cancelar</button>
                     </div>
                   </div>
@@ -359,10 +378,14 @@ export default function CajaChicaPage({ params }: { params: { id: string } }) {
                           </select>
                         </div>
                       </div>
+                      <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 10 }}>
+                        Vas a trasladar <b>S/ {Number(g.monto).toFixed(2)}</b> a Gastos y Costos como{" "}
+                        <b>{formClasificar.categoriaEspecifica}</b>. No se puede deshacer desde aquí.
+                      </p>
                       {error && <p className="field error" style={{ marginTop: 8 }}>{error}</p>}
                       <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
                         <button className="btn-primary" style={{ fontSize: 12, padding: "8px 14px" }} onClick={() => handleTrasladar(g.id)}>
-                          Trasladar a Gastos y Costos
+                          Trasladar S/ {Number(g.monto).toFixed(2)} a Gastos y Costos
                         </button>
                         <button className="btn-ghost" style={{ fontSize: 12, padding: "8px 14px" }} onClick={() => setClasificando(null)}>
                           Cancelar
