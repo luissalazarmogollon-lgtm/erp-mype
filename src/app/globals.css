@@ -1,10 +1,16 @@
 @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap");
 
 /*
-  Paleta inspirada en SAP Business One: azul corporativo como color de
-  marca (botones primarios, encabezado, enlaces, estados activos), dorado
-  como acento (igual que el "One" del logo — se usa para resaltar lo
-  pendiente/importante), fondo gris-azulado claro y tarjetas blancas.
+  Paleta: SOLO gris y amarillo/dorado, igual que el logo de SAP Business
+  One (el texto "SAP Business" en gris y el "One" en dorado). El gris
+  carbón es el color estructural — encabezado, botones, bordes activos,
+  enfoque de campos — y el dorado queda reservado como acento (insignia
+  "EM", franja bajo el encabezado, y también su uso previo como color de
+  "pendiente/sin clasificar" en varias pantallas). Los colores verde/rojo
+  (--teal / --alert) NO son de marca: son indicadores funcionales de
+  saldo a favor/en contra que ya se usan en todo el sistema financiero
+  (montos positivos y negativos, errores de validación), así que se
+  mantienen para no perder esa señal visual.
 
   Todas las pantallas de la app ya usaban estas mismas variables (--ink,
   --paper-card, --line, etc.) en vez de colores sueltos, así que cambiar
@@ -12,16 +18,16 @@
   pantalla una por una.
 */
 :root {
-  --ink: #1b2a38;
-  --ink-soft: #5c6f80;
-  --paper-bg: #eef2f6;
-  --paper: #e3ebf2;
+  --ink: #29292b;
+  --ink-soft: #6c6c70;
+  --paper-bg: #f1f0ee;
+  --paper: #e8e6e3;
   --paper-card: #ffffff;
-  --line: #d7e0e8;
+  --line: #dbd9d5;
 
-  --brand: #0a5ca8;
-  --brand-dark: #084a89;
-  --brand-bg: #e6f0fa;
+  --brand: #4b4b4e;
+  --brand-dark: #302f31;
+  --brand-bg: #ececeb;
 
   --stamp: #b8790a;
   --stamp-bg: #f8ecd2;
@@ -31,8 +37,8 @@
   --alert-bg: #fbe1dd;
 
   --radius: 8px;
-  --shadow-sm: 0 1px 2px rgba(15, 35, 60, 0.07), 0 1px 1px rgba(15, 35, 60, 0.04);
-  --shadow-md: 0 8px 24px rgba(15, 35, 60, 0.12);
+  --shadow-sm: 0 1px 2px rgba(20, 20, 20, 0.07), 0 1px 1px rgba(20, 20, 20, 0.04);
+  --shadow-md: 0 8px 24px rgba(20, 20, 20, 0.12);
 }
 
 * {
@@ -185,7 +191,7 @@ a.card:focus-visible {
 }
 
 input[type="checkbox"] {
-  accent-color: var(--brand);
+  accent-color: var(--stamp);
 }
 
 /* Panel decorativo de la pantalla de login — oculto en pantallas angostas,
