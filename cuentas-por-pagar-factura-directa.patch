@@ -1,0 +1,348 @@
+From 9d707be7420354ebcaa212842f873bd6a6c93d56 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 30 Aug 2026 16:24:52 +0000
+Subject: [PATCH] Permitir registrar una factura por pagar directamente desde
+ Cuentas por Pagar
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Antes las cuentas por pagar solo se generaban automáticamente al registrar
+un gasto "al crédito" en Gastos y Costos. Ahora el módulo de Cuentas por
+Pagar tiene su propio formulario "+ Registrar factura" para que el
+encargado de pagos registre una factura directamente ahí, sin pasar por
+Gastos y Costos ni por una compra previa. Por debajo crea el mismo par
+Gasto (condicion=credito) + CuentaPorPagar, así la factura queda
+clasificada por naturaleza para el Estado de Resultados igual que antes.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+---
+ .../empresas/[id]/cuentas-por-pagar/route.ts  |  97 +++++++++++
+ .../empresas/[id]/cuentas-por-pagar/page.tsx  | 154 +++++++++++++++++-
+ 2 files changed, 250 insertions(+), 1 deletion(-)
+
+diff --git a/src/app/api/empresas/[id]/cuentas-por-pagar/route.ts b/src/app/api/empresas/[id]/cuentas-por-pagar/route.ts
+index 4b1792a..ffc6b7c 100644
+--- a/src/app/api/empresas/[id]/cuentas-por-pagar/route.ts
++++ b/src/app/api/empresas/[id]/cuentas-por-pagar/route.ts
+@@ -1,9 +1,34 @@
+ import { NextResponse } from "next/server";
++import { z } from "zod";
+ import { prisma } from "@/lib/prisma";
+ import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
++import { NATURALEZAS_EGRESO } from "@/lib/naturalezaEgreso";
++import { TIPOS_COMPROBANTE } from "@/lib/tiposComprobante";
+ 
+ export const dynamic = "force-dynamic";
+ 
++const NATURALEZAS_VALIDAS = NATURALEZAS_EGRESO.map((n) => n.value) as [string, ...string[]];
++const TIPOS_COMPROBANTE_VALIDOS = TIPOS_COMPROBANTE.map((t) => t.value) as [string, ...string[]];
++
++// Registrar una factura por pagar directamente desde este módulo — sin
++// pasar por Gastos y Costos ni por una compra/pedido previo. Por debajo
++// crea el mismo par Gasto (condicion="credito") + CuentaPorPagar que ya
++// generaba la pantalla de Gastos, para que la factura también aparezca
++// correctamente clasificada en Gastos y Costos y en el Estado de
++// Resultados (según su `naturaleza`).
++const registrarFacturaSchema = z.object({
++  localId: z.string().optional(),
++  naturaleza: z.enum(NATURALEZAS_VALIDAS),
++  categoriaEspecifica: z.string().optional(),
++  proveedorNombre: z.string().min(1, "Indica el proveedor"),
++  descripcion: z.string().min(2, "Describe brevemente la factura"),
++  tipoComprobante: z.enum(TIPOS_COMPROBANTE_VALIDOS),
++  numeroComprobante: z.string().optional(),
++  montoTotal: z.number().positive(),
++  fecha: z.string(),
++  fechaVencimiento: z.string().optional(),
++});
++
+ // GET /api/empresas/[id]/cuentas-por-pagar — listado con saldo pendiente.
+ // Cada fila puede venir de un gasto simple (un solo ítem) o de un
+ // documento de compra con varios ítems — se arma una descripción que
+@@ -51,3 +76,75 @@ export async function GET(request: Request, { params }: { params: { id: string }
+     })
+   );
+ }
++
++// POST /api/empresas/[id]/cuentas-por-pagar
++//
++// Registra una factura por pagar directamente (sin pasar por Gastos y
++// Costos). Crea un Gasto con condicion="credito" y su CuentaPorPagar
++// asociada, igual que hace la pantalla de Gastos — así la factura queda
++// clasificada por naturaleza para el Estado de Resultados y aparece en
++// ambas pantallas de forma consistente.
++export async function POST(request: Request, { params }: { params: { id: string } }) {
++  const usuarioActual = await getUsuarioActual();
++  if (!usuarioActual) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
++
++  const empresaId = BigInt(params.id);
++  try {
++    await verificarAccesoEmpresa(usuarioActual.id, empresaId, "cuentas_por_pagar");
++  } catch (error) {
++    return NextResponse.json({ error: (error as Error).message }, { status: 403 });
++  }
++
++  const body = await request.json();
++  const parsed = registrarFacturaSchema.safeParse(body);
++  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
++  const datos = parsed.data;
++
++  const localId = datos.localId ? BigInt(datos.localId) : null;
++  const usuarioId = usuarioActual.id;
++
++  const { gasto, cuentaPorPagar } = await prisma.$transaction(async (tx) => {
++    const nuevoGasto = await tx.gasto.create({
++      data: {
++        empresaId,
++        localId,
++        naturaleza: datos.naturaleza,
++        categoriaEspecifica: datos.categoriaEspecifica || null,
++        proveedorNombre: datos.proveedorNombre,
++        descripcion: datos.descripcion,
++        tipoComprobante: datos.tipoComprobante,
++        numeroComprobante: datos.numeroComprobante || null,
++        montoTotal: datos.montoTotal,
++        fecha: new Date(datos.fecha),
++        condicion: "credito",
++        usuarioId,
++      },
++    });
++
++    const nuevaCxp = await tx.cuentaPorPagar.create({
++      data: {
++        empresaId,
++        gastoId: nuevoGasto.id,
++        proveedorNombre: datos.proveedorNombre,
++        montoTotal: datos.montoTotal,
++        saldoPendiente: datos.montoTotal,
++        fechaVencimiento: datos.fechaVencimiento ? new Date(datos.fechaVencimiento) : null,
++      },
++    });
++
++    await tx.auditoria.create({
++      data: {
++        usuarioId,
++        empresaId,
++        tablaAfectada: "gastos",
++        registroId: nuevoGasto.id,
++        accion: "crear",
++        valorNuevo: { descripcion: nuevoGasto.descripcion, montoTotal: nuevoGasto.montoTotal.toString(), origen: "cuentas_por_pagar" },
++      },
++    });
++
++    return { gasto: nuevoGasto, cuentaPorPagar: nuevaCxp };
++  });
++
++  return NextResponse.json({ id: cuentaPorPagar.id.toString(), gastoId: gasto.id.toString() }, { status: 201 });
++}
+diff --git a/src/app/empresas/[id]/cuentas-por-pagar/page.tsx b/src/app/empresas/[id]/cuentas-por-pagar/page.tsx
+index 03999b4..dd95eae 100644
+--- a/src/app/empresas/[id]/cuentas-por-pagar/page.tsx
++++ b/src/app/empresas/[id]/cuentas-por-pagar/page.tsx
+@@ -2,6 +2,8 @@
+ 
+ import { useEffect, useState } from "react";
+ import Link from "next/link";
++import { NATURALEZAS_EGRESO, CATEGORIAS_POR_NATURALEZA } from "@/lib/naturalezaEgreso";
++import { TIPOS_COMPROBANTE } from "@/lib/tiposComprobante";
+ 
+ type Cxp = {
+   id: string;
+@@ -13,17 +15,39 @@ type Cxp = {
+   estado: string;
+ };
+ type CuentaOpcion = { id: string; bancoNombre: string; saldoActual: string };
++type LocalOpcion = { id: string; nombre: string };
++
++function hoyISO() {
++  return new Date().toISOString().slice(0, 10);
++}
+ 
+ export default function CuentasPorPagarPage({ params }: { params: { id: string } }) {
+   const empresaId = params.id;
+   const [cxps, setCxps] = useState<Cxp[]>([]);
+   const [cuentasBancarias, setCuentasBancarias] = useState<CuentaOpcion[]>([]);
++  const [locales, setLocales] = useState<LocalOpcion[]>([]);
+   const [pagando, setPagando] = useState<string | null>(null);
+   const [montoPago, setMontoPago] = useState(0);
+   const [cuentaPago, setCuentaPago] = useState("");
+   const [error, setError] = useState<string | null>(null);
+   const [mostrarPagadas, setMostrarPagadas] = useState(false);
+ 
++  const [mostrarForm, setMostrarForm] = useState(false);
++  const [guardando, setGuardando] = useState(false);
++  const [errorForm, setErrorForm] = useState<string | null>(null);
++  const [form, setForm] = useState({
++    localId: "",
++    naturaleza: "gasto_operativo",
++    categoriaEspecifica: CATEGORIAS_POR_NATURALEZA.gasto_operativo[0],
++    proveedorNombre: "",
++    descripcion: "",
++    tipoComprobante: "factura",
++    numeroComprobante: "",
++    montoTotal: 0,
++    fecha: hoyISO(),
++    fechaVencimiento: "",
++  });
++
+   async function cargar() {
+     const [resCxp, resCatalogos] = await Promise.all([
+       fetch(`/api/empresas/${empresaId}/cuentas-por-pagar`).then((r) => r.json()),
+@@ -31,6 +55,7 @@ export default function CuentasPorPagarPage({ params }: { params: { id: string }
+     ]);
+     setCxps(resCxp);
+     setCuentasBancarias(resCatalogos.cuentasBancarias ?? []);
++    setLocales(resCatalogos.locales ?? []);
+   }
+ 
+   useEffect(() => {
+@@ -38,6 +63,36 @@ export default function CuentasPorPagarPage({ params }: { params: { id: string }
+     // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [empresaId]);
+ 
++  const categoriasDisponibles = CATEGORIAS_POR_NATURALEZA[form.naturaleza] ?? [];
++
++  function cambiarNaturaleza(naturaleza: string) {
++    setForm({ ...form, naturaleza, categoriaEspecifica: CATEGORIAS_POR_NATURALEZA[naturaleza]?.[0] ?? "" });
++  }
++
++  async function handleCrearFactura(e: React.FormEvent) {
++    e.preventDefault();
++    setErrorForm(null);
++    setGuardando(true);
++
++    const res = await fetch(`/api/empresas/${empresaId}/cuentas-por-pagar`, {
++      method: "POST",
++      headers: { "Content-Type": "application/json" },
++      body: JSON.stringify(form),
++    });
++
++    setGuardando(false);
++
++    if (!res.ok) {
++      const data = await res.json();
++      setErrorForm(data.error?.toString() ?? "No se pudo registrar la factura.");
++      return;
++    }
++
++    setForm({ ...form, proveedorNombre: "", descripcion: "", numeroComprobante: "", montoTotal: 0, fechaVencimiento: "" });
++    setMostrarForm(false);
++    cargar();
++  }
++
+   const totalPorPagar = cxps.filter((c) => c.estado !== "pagada").reduce((acc, c) => acc + Number(c.saldoPendiente), 0);
+   const cxpsVisibles = mostrarPagadas ? cxps : cxps.filter((c) => c.estado !== "pagada");
+   const cantidadPagadas = cxps.filter((c) => c.estado === "pagada").length;
+@@ -72,10 +127,107 @@ export default function CuentasPorPagarPage({ params }: { params: { id: string }
+         Total por pagar: S/ {totalPorPagar.toFixed(2)}
+       </p>
+       <p style={{ color: "var(--ink-soft)", fontSize: 13, marginBottom: 12 }}>
+-        Estas cuentas se generan automáticamente al registrar un gasto "al crédito" en la pantalla de Gastos y Costos.
++        Las cuentas por pagar también se generan automáticamente al registrar un gasto "al crédito" en Gastos y Costos.
+         Puedes pagarlas de una sola vez o en varios abonos.
+       </p>
+ 
++      {!mostrarForm ? (
++        <button className="btn-primary" style={{ marginBottom: 20 }} onClick={() => setMostrarForm(true)}>
++          + Registrar factura
++        </button>
++      ) : (
++        <form onSubmit={handleCrearFactura} className="card" style={{ marginBottom: 20 }}>
++          <h3 style={{ fontSize: 15, marginBottom: 4 }}>Registrar factura por pagar</h3>
++          <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginBottom: 12 }}>
++            Para una factura que llega directamente al área de pagos, sin pasar por una compra o solicitud previa.
++            Queda pendiente de pago de inmediato y también se clasifica en Gastos y Costos.
++          </p>
++
++          <div className="field">
++            <label>Proveedor</label>
++            <input
++              value={form.proveedorNombre}
++              onChange={(e) => setForm({ ...form, proveedorNombre: e.target.value })}
++              placeholder="Ej: Distribuidora XYZ"
++              required
++            />
++          </div>
++          <div className="field">
++            <label>Descripción</label>
++            <input
++              value={form.descripcion}
++              onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
++              placeholder="Ej: Factura F001-00234 — insumos del mes"
++              required
++            />
++          </div>
++
++          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
++            {locales.length > 0 && (
++              <div className="field">
++                <label>Local (opcional)</label>
++                <select value={form.localId} onChange={(e) => setForm({ ...form, localId: e.target.value })}>
++                  <option value="">Consolidado (sin local específico)</option>
++                  {locales.map((l) => (
++                    <option key={l.id} value={l.id}>{l.nombre}</option>
++                  ))}
++                </select>
++              </div>
++            )}
++            <div className="field">
++              <label>Naturaleza del egreso</label>
++              <select value={form.naturaleza} onChange={(e) => cambiarNaturaleza(e.target.value)}>
++                {NATURALEZAS_EGRESO.map((n) => (
++                  <option key={n.value} value={n.value}>{n.label}</option>
++                ))}
++              </select>
++            </div>
++            <div className="field">
++              <label>Categoría específica</label>
++              <select value={form.categoriaEspecifica} onChange={(e) => setForm({ ...form, categoriaEspecifica: e.target.value })}>
++                {categoriasDisponibles.map((c) => (
++                  <option key={c} value={c}>{c}</option>
++                ))}
++              </select>
++            </div>
++            <div className="field">
++              <label>Tipo de comprobante</label>
++              <select value={form.tipoComprobante} onChange={(e) => setForm({ ...form, tipoComprobante: e.target.value })}>
++                {TIPOS_COMPROBANTE.map((t) => (
++                  <option key={t.value} value={t.value}>{t.label}</option>
++                ))}
++              </select>
++            </div>
++            <div className="field">
++              <label>N° de comprobante (opcional)</label>
++              <input value={form.numeroComprobante} onChange={(e) => setForm({ ...form, numeroComprobante: e.target.value })} placeholder="Ej: F001-00234" />
++            </div>
++            <div className="field">
++              <label>Monto total (S/)</label>
++              <input type="number" step="0.01" value={form.montoTotal} onChange={(e) => setForm({ ...form, montoTotal: Number(e.target.value) })} required />
++            </div>
++            <div className="field">
++              <label>Fecha de emisión</label>
++              <input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} required />
++            </div>
++            <div className="field">
++              <label>Fecha de vencimiento (opcional)</label>
++              <input type="date" value={form.fechaVencimiento} onChange={(e) => setForm({ ...form, fechaVencimiento: e.target.value })} />
++            </div>
++          </div>
++
++          {errorForm && <p className="field error">{errorForm}</p>}
++          <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
++            <button type="submit" className="btn-primary" disabled={guardando}>
++              {guardando ? "Guardando..." : "Registrar factura"}
++            </button>
++            <button type="button" className="btn-ghost" onClick={() => { setMostrarForm(false); setErrorForm(null); }}>
++              Cancelar
++            </button>
++          </div>
++        </form>
++      )}
++
+       {cantidadPagadas > 0 && (
+         <label className="checkbox-row mono" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 20 }}>
+           <input type="checkbox" checked={mostrarPagadas} onChange={(e) => setMostrarPagadas(e.target.checked)} />
+-- 
+2.43.0
+
