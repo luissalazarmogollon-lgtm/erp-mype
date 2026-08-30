@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
+import { consumirLotesPeps, registrarFaltanteSinLote } from "@/lib/inventario";
 
 export const dynamic = "force-dynamic";
 
@@ -100,7 +101,10 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
   // Acumulamos el consumo total de cada insumo across todos los items de
   // la venta, para validar stock una sola vez por insumo (RN-022).
-  const consumoPorInsumo = new Map<string, { cantidad: number; nombre: string; stockActual: number }>();
+  const consumoPorInsumo = new Map<
+    string,
+    { cantidad: number; nombre: string; stockActual: number; costoPromedioActual: number }
+  >();
   const itemsCalculados = datos.items.map((item) => {
     const producto = productos.find((p) => p.id === BigInt(item.productoId))!;
 
@@ -118,6 +122,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
         cantidad: (existente?.cantidad ?? 0) + consumoLinea,
         nombre: f.insumo.nombre,
         stockActual: Number(f.insumo.stockActual),
+        costoPromedioActual: Number(f.insumo.costoPromedioActual),
       });
     }
 
@@ -184,20 +189,34 @@ export async function POST(request: Request, { params }: { params: { id: string 
       })),
     });
 
-    // RN-023: descuenta stock generando movimientos_inventario tipo salida_venta.
+    // RN-023: descuenta stock consumiendo lotes en orden PEPS (mismo
+    // patrón que Despacho de Solicitudes y Ajuste de Stock), en vez de
+    // solo generar un movimiento genérico con costo 0 — así el Kardex
+    // queda con el costo real de cada lote tocado, y los lotes se
+    // mantienen sincronizados con el stock real del insumo.
     for (const [insumoIdStr, consumo] of consumoPorInsumo.entries()) {
       const insumoId = BigInt(insumoIdStr);
-      await tx.movimientoInventario.create({
-        data: {
-          empresaId,
-          insumoId,
-          tipo: "salida_venta",
-          cantidad: -consumo.cantidad,
-          costoUnitario: 0, // se registra el costo en ventas_detalle, no aquí
-          referenciaTipo: "venta",
-          referenciaId: nuevaVenta.id,
-          usuarioId: usuarioActual.id,
-        },
+      const resultado = await consumirLotesPeps(tx, {
+        empresaId,
+        insumoId,
+        cantidad: consumo.cantidad,
+        tipo: "salida_venta",
+        referenciaTipo: "venta",
+        referenciaId: nuevaVenta.id,
+        usuarioId: usuarioActual.id,
+      });
+      // Si los lotes no alcanzan (posible con insumos que ya tenían ventas
+      // de antes de este fix, cuando no se tocaban lotes), se cubre igual
+      // con el costo promedio actual — no se bloquea una venta ya cobrada.
+      await registrarFaltanteSinLote(tx, {
+        empresaId,
+        insumoId,
+        cantidad: resultado.faltante,
+        tipo: "salida_venta",
+        referenciaTipo: "venta",
+        referenciaId: nuevaVenta.id,
+        usuarioId: usuarioActual.id,
+        costoUnitario: consumo.costoPromedioActual,
       });
       await tx.insumo.update({
         where: { id: insumoId },

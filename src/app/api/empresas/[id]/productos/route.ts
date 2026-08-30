@@ -93,6 +93,35 @@ export async function POST(request: Request, { params }: { params: { id: string 
     );
   }
 
+  // Validación cross-tenant: categoriaId e insumoId llegan del cliente como
+  // simples IDs — sin verificar, alguien podría (por error o a propósito)
+  // enviar el ID de una categoría o insumo de OTRA empresa, y Prisma lo
+  // aceptaría igual porque la FK no exige que empresaId coincida. Eso
+  // rompería el aislamiento multi-tenant: el costo de este producto
+  // terminaría calculado con el insumo de otra empresa.
+  if (datos.categoriaId) {
+    const categoria = await prisma.categoriaProducto.findFirst({
+      where: { id: BigInt(datos.categoriaId), empresaId },
+    });
+    if (!categoria) {
+      return NextResponse.json({ error: "La categoría seleccionada no existe en esta empresa" }, { status: 400 });
+    }
+  }
+
+  if (datos.receta.length > 0) {
+    const insumoIds = Array.from(new Set(datos.receta.map((linea) => BigInt(linea.insumoId))));
+    const insumosDeLaEmpresa = await prisma.insumo.findMany({
+      where: { id: { in: insumoIds }, empresaId },
+      select: { id: true },
+    });
+    if (insumosDeLaEmpresa.length !== insumoIds.length) {
+      return NextResponse.json(
+        { error: "Alguno de los insumos de la receta no existe en esta empresa" },
+        { status: 400 }
+      );
+    }
+  }
+
   const producto = await prisma.$transaction(async (tx) => {
     const nuevoProducto = await tx.producto.create({
       data: {

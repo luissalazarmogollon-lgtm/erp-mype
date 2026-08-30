@@ -69,6 +69,26 @@ export async function POST(request: Request, { params }: { params: { id: string 
   }
   const datos = parsed.data;
 
+  // Validación cross-tenant: sin esto, un categoriaId/unidadMedidaId de
+  // otra empresa se aceptaría igual (la FK no exige que empresaId
+  // coincida), rompiendo el aislamiento multi-tenant.
+  if (datos.categoriaId) {
+    const categoria = await prisma.categoriaInsumo.findFirst({
+      where: { id: BigInt(datos.categoriaId), empresaId },
+    });
+    if (!categoria) {
+      return NextResponse.json({ error: "La categoría seleccionada no existe en esta empresa" }, { status: 400 });
+    }
+  }
+  if (datos.unidadMedidaId) {
+    const unidad = await prisma.unidadMedida.findFirst({
+      where: { id: BigInt(datos.unidadMedidaId), empresaId },
+    });
+    if (!unidad) {
+      return NextResponse.json({ error: "La unidad de medida seleccionada no existe en esta empresa" }, { status: 400 });
+    }
+  }
+
   const insumo = await prisma.insumo.create({
     data: {
       empresaId,

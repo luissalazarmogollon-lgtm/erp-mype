@@ -1,12 +1,21 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
+import type { ModuloKey } from "@/lib/permisosModulo";
 
 export const dynamic = "force-dynamic";
 
 // GET /api/empresas/[id]/catalogos — devuelve en un solo request todos los
 // catálogos que necesitan los formularios de Insumos, Productos, Ventas,
 // Ventas diarias y Gastos.
+//
+// Antes, cualquier persona con acceso a la empresa (aunque solo tuviera
+// permiso de, por ejemplo, Ventas POS) recibía TODO: incluyendo el saldo
+// de las cuentas bancarias y la lista de proveedores — datos que no tienen
+// relación con su módulo. Ahora cada sección solo se incluye si la
+// persona tiene permiso sobre algún módulo que realmente la necesita
+// (o acceso total). `areas`, `empleados` y `tiposGasto` se quitaron del
+// todo: no los usa ningún formulario actual.
 //
 // IMPORTANTE: cada fila de Prisma trae campos BigInt (id, empresaId, y a
 // veces otras llaves foráneas) que NextResponse.json() NO puede serializar
@@ -19,47 +28,63 @@ export async function GET(request: Request, { params }: { params: { id: string }
   if (!usuarioActual) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
   const empresaId = BigInt(params.id);
+  let acceso: Awaited<ReturnType<typeof verificarAccesoEmpresa>>;
   try {
-    await verificarAccesoEmpresa(usuarioActual.id, empresaId);
+    acceso = await verificarAccesoEmpresa(usuarioActual.id, empresaId);
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 403 });
   }
+
+  const tienePermiso = (modulos: ModuloKey[]) =>
+    acceso.accesoTotal || modulos.some((m) => acceso.permisos.includes(m));
+
+  // Las cuentas bancarias incluyen su saldo — solo se ofrecen a módulos
+  // que de verdad necesitan elegir una cuenta para un movimiento de dinero.
+  const incluirCuentasBancarias = tienePermiso([
+    "flujo_caja",
+    "gastos",
+    "cuentas_por_pagar",
+    "cuentas_por_pagar_registrar",
+    "ventas_diarias",
+    "rrhh",
+    "creditos",
+    "caja_chica",
+  ]);
+  // Proveedores solo lo usa el formulario de Insumos (proveedor preferido).
+  const incluirProveedores = tienePermiso(["insumos", "compras"]);
 
   const [
     categoriasInsumo,
     categoriasProducto,
     unidadesMedida,
-    tiposGasto,
     metodosPago,
     insumos,
     productos,
     clientes,
     locales,
     cuentasBancarias,
-    empleados,
-    areas,
     proveedores,
   ] = await Promise.all([
     prisma.categoriaInsumo.findMany({ where: { empresaId }, orderBy: { nombre: "asc" } }),
     prisma.categoriaProducto.findMany({ where: { empresaId }, orderBy: { nombre: "asc" } }),
     prisma.unidadMedida.findMany({ where: { empresaId }, orderBy: { nombre: "asc" } }),
-    prisma.tipoGasto.findMany({ where: { empresaId }, orderBy: { nombre: "asc" } }),
     prisma.metodoPago.findMany({ where: { empresaId }, orderBy: { nombre: "asc" } }),
     prisma.insumo.findMany({ where: { empresaId }, include: { unidadMedida: true }, orderBy: { nombre: "asc" } }),
     prisma.producto.findMany({ where: { empresaId, estado: "activo" }, orderBy: { nombre: "asc" } }),
     prisma.cliente.findMany({ where: { empresaId }, orderBy: { nombre: "asc" } }),
     prisma.local.findMany({ where: { empresaId, estado: "activo" }, orderBy: { nombre: "asc" } }),
-    prisma.cuentaBancaria.findMany({ where: { empresaId, estado: "activo" }, orderBy: { bancoNombre: "asc" } }),
-    prisma.empleado.findMany({ where: { empresaId, estado: "activo" }, orderBy: { nombres: "asc" } }),
-    prisma.area.findMany({ where: { empresaId, estado: "activo" }, orderBy: { nombre: "asc" } }),
-    prisma.proveedor.findMany({ where: { empresaId, estado: "activo" }, orderBy: { nombre: "asc" } }),
+    incluirCuentasBancarias
+      ? prisma.cuentaBancaria.findMany({ where: { empresaId, estado: "activo" }, orderBy: { bancoNombre: "asc" } })
+      : Promise.resolve([]),
+    incluirProveedores
+      ? prisma.proveedor.findMany({ where: { empresaId, estado: "activo" }, orderBy: { nombre: "asc" } })
+      : Promise.resolve([]),
   ]);
 
   return NextResponse.json({
     categoriasInsumo: categoriasInsumo.map((c) => ({ id: c.id.toString(), nombre: c.nombre })),
     categoriasProducto: categoriasProducto.map((c) => ({ id: c.id.toString(), nombre: c.nombre })),
     unidadesMedida: unidadesMedida.map((u) => ({ id: u.id.toString(), nombre: u.nombre, abreviatura: u.abreviatura })),
-    tiposGasto: tiposGasto.map((t) => ({ id: t.id.toString(), nombre: t.nombre })),
     metodosPago: metodosPago.map((m) => ({ id: m.id.toString(), nombre: m.nombre })),
     insumos: insumos.map((i) => ({
       id: i.id.toString(),
@@ -81,8 +106,6 @@ export async function GET(request: Request, { params }: { params: { id: string }
       bancoNombre: c.bancoNombre,
       saldoActual: c.saldoActual.toString(),
     })),
-    empleados: empleados.map((e) => ({ id: e.id.toString(), nombre: `${e.nombres} ${e.apellidos}` })),
-    areas: areas.map((a) => ({ id: a.id.toString(), nombre: a.nombre })),
     proveedores: proveedores.map((p) => ({ id: p.id.toString(), nombre: p.nombre })),
   });
 }

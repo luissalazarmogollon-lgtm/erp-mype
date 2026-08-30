@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
+import { consumirLotesPeps, registrarFaltanteSinLote } from "@/lib/inventario";
 
 export const dynamic = "force-dynamic";
 
@@ -93,18 +94,32 @@ export async function POST(request: Request, { params }: { params: { id: string 
       },
     });
 
-    // RN-040: genera movimiento de salida y descuenta stock.
-    await tx.movimientoInventario.create({
-      data: {
-        empresaId,
-        insumoId,
-        tipo: "merma",
-        cantidad: -datos.cantidad,
-        costoUnitario: insumo.costoPromedioActual,
-        referenciaTipo: "merma",
-        referenciaId: nuevaMerma.id,
-        usuarioId: usuarioActual.id,
-      },
+    // RN-040: genera movimiento de salida consumiendo lotes en orden PEPS
+    // (mismo patrón que Despacho de Solicitudes y Ajuste de Stock), y
+    // descuenta stock. Antes, la merma descontaba stockActual sin tocar
+    // los lotes — con el tiempo eso desincronizaba la suma de lotes
+    // disponibles del stock real.
+    const resultado = await consumirLotesPeps(tx, {
+      empresaId,
+      insumoId,
+      cantidad: datos.cantidad,
+      tipo: "merma",
+      referenciaTipo: "merma",
+      referenciaId: nuevaMerma.id,
+      usuarioId: usuarioActual.id,
+    });
+    // Si los lotes no alcanzan (posible con insumos que ya tenían mermas o
+    // ventas de antes de este fix), se cubre igual con el costo promedio
+    // actual — no se bloquea la merma ya confirmada por el usuario.
+    await registrarFaltanteSinLote(tx, {
+      empresaId,
+      insumoId,
+      cantidad: resultado.faltante,
+      tipo: "merma",
+      referenciaTipo: "merma",
+      referenciaId: nuevaMerma.id,
+      usuarioId: usuarioActual.id,
+      costoUnitario: Number(insumo.costoPromedioActual),
     });
     await tx.insumo.update({
       where: { id: insumoId },
