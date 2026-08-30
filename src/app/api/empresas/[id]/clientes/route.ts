@@ -18,11 +18,13 @@ const crearClienteSchema = z.object({
   personaContacto: z.string().optional(),
   direccion: z.string().optional(),
   telefono2: z.string().optional(),
+  email: z.string().optional(),
   rubro: z.string().optional(),
   paginaWeb: z.string().optional(),
   instagram: z.string().optional(),
   tiktok: z.string().optional(),
   logoUrl: z.string().optional(),
+  estado: z.enum(["activo", "inactivo"]).optional(),
 });
 
 function datosOpcionales(datos: z.infer<typeof crearClienteSchema>) {
@@ -34,11 +36,13 @@ function datosOpcionales(datos: z.infer<typeof crearClienteSchema>) {
     personaContacto: datos.personaContacto || null,
     direccion: datos.direccion || null,
     telefono2: datos.telefono2 || null,
+    email: datos.email || null,
     rubro: datos.rubro || null,
     paginaWeb: datos.paginaWeb || null,
     instagram: datos.instagram || null,
     tiktok: datos.tiktok || null,
     logoUrl: datos.logoUrl || null,
+    ...(datos.estado ? { estado: datos.estado } : {}),
   };
 }
 
@@ -76,6 +80,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
       personaContacto: c.personaContacto,
       direccion: c.direccion,
       telefono2: c.telefono2,
+      email: c.email,
       rubro: c.rubro,
       paginaWeb: c.paginaWeb,
       instagram: c.instagram,

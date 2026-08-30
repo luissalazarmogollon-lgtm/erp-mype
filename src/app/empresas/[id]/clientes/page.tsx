@@ -13,6 +13,7 @@ type Cliente = {
   personaContacto: string | null;
   direccion: string | null;
   telefono2: string | null;
+  email: string | null;
   rubro: string | null;
   paginaWeb: string | null;
   instagram: string | null;
@@ -30,11 +31,13 @@ type FormCliente = {
   personaContacto: string;
   direccion: string;
   telefono2: string;
+  email: string;
   rubro: string;
   paginaWeb: string;
   instagram: string;
   tiktok: string;
   logoUrl: string;
+  estado: "activo" | "inactivo";
 };
 
 const FORM_VACIO: FormCliente = {
@@ -46,11 +49,13 @@ const FORM_VACIO: FormCliente = {
   personaContacto: "",
   direccion: "",
   telefono2: "",
+  email: "",
   rubro: "",
   paginaWeb: "",
   instagram: "",
   tiktok: "",
   logoUrl: "",
+  estado: "activo",
 };
 
 // Campos del formulario, compartidos entre "+ Nuevo cliente" y la edición
@@ -96,6 +101,22 @@ function CamposCliente({ form, setForm }: { form: FormCliente; setForm: (f: Form
           <label>Teléfono de contacto 2 (opcional)</label>
           <input value={form.telefono2} onChange={(e) => setForm({ ...form, telefono2: e.target.value })} />
         </div>
+        <div className="field">
+          <label>Email (opcional)</label>
+          <input
+            type="email"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            placeholder="contacto@empresa.pe"
+          />
+        </div>
+        <div className="field">
+          <label>Estado</label>
+          <select value={form.estado} onChange={(e) => setForm({ ...form, estado: e.target.value as "activo" | "inactivo" })}>
+            <option value="activo">Activo</option>
+            <option value="inactivo">De baja</option>
+          </select>
+        </div>
       </div>
       <div className="field">
         <label>Dirección (opcional)</label>
@@ -140,11 +161,13 @@ function clienteAForm(c: Cliente): FormCliente {
     personaContacto: c.personaContacto ?? "",
     direccion: c.direccion ?? "",
     telefono2: c.telefono2 ?? "",
+    email: c.email ?? "",
     rubro: c.rubro ?? "",
     paginaWeb: c.paginaWeb ?? "",
     instagram: c.instagram ?? "",
     tiktok: c.tiktok ?? "",
     logoUrl: c.logoUrl ?? "",
+    estado: c.estado === "inactivo" ? "inactivo" : "activo",
   };
 }
 
@@ -230,7 +253,7 @@ export default function ClientesPage({ params }: { params: { id: string } }) {
 
   async function handleCambiarEstado(c: Cliente) {
     const nuevoEstado = c.estado === "inactivo" ? "activo" : "inactivo";
-    if (nuevoEstado === "inactivo" && !confirm(`¿Desactivar a "${c.nombre}"? Ya no aparecerá para elegirlo en Ventas o Facturación.`)) {
+    if (nuevoEstado === "inactivo" && !confirm(`¿Dar de baja a "${c.nombre}"? Ya no aparecerá para elegirlo en Ventas o Facturación.`)) {
       return;
     }
     const res = await fetch(`/api/empresas/${empresaId}/clientes/${c.id}`, {
@@ -285,7 +308,7 @@ export default function ClientesPage({ params }: { params: { id: string } }) {
       {cantidadInactivos > 0 && (
         <label className="checkbox-row mono" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 20 }}>
           <input type="checkbox" checked={mostrarInactivos} onChange={(e) => setMostrarInactivos(e.target.checked)} />
-          Mostrar también los {cantidadInactivos} clientes desactivados
+          Mostrar también los {cantidadInactivos} clientes dados de baja
         </label>
       )}
 
@@ -327,7 +350,7 @@ export default function ClientesPage({ params }: { params: { id: string } }) {
                       {c.docIdentidad ? ` — RUC ${c.docIdentidad}` : ""}
                       {c.estado === "inactivo" && (
                         <span className="mono" style={{ fontSize: 10, color: "var(--alert)", marginLeft: 8, textTransform: "uppercase" }}>
-                          Desactivado
+                          De baja
                         </span>
                       )}
                     </p>
@@ -335,7 +358,7 @@ export default function ClientesPage({ params }: { params: { id: string } }) {
                       <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>{c.razonSocial}</p>
                     )}
                     <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 2 }}>
-                      {[c.rubro, c.personaContacto, c.telefono, c.telefono2].filter(Boolean).join(" · ") || "Sin datos de contacto"}
+                      {[c.rubro, c.personaContacto, c.telefono, c.telefono2, c.email].filter(Boolean).join(" · ") || "Sin datos de contacto"}
                     </p>
                     {c.direccion && (
                       <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>{c.direccion}</p>
@@ -355,7 +378,7 @@ export default function ClientesPage({ params }: { params: { id: string } }) {
                       style={{ fontSize: 11, padding: "5px 10px", color: c.estado === "inactivo" ? "var(--teal)" : "var(--alert)" }}
                       onClick={() => handleCambiarEstado(c)}
                     >
-                      {c.estado === "inactivo" ? "Activar" : "Desactivar"}
+                      {c.estado === "inactivo" ? "Reactivar" : "Dar de baja"}
                     </button>
                   </div>
                 </div>

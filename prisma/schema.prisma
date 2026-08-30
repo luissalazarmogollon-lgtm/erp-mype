@@ -347,12 +347,13 @@ model Cliente {
   personaContacto    String? @map("persona_contacto")
   direccion          String?
   telefono2          String? @map("telefono_2")
+  email              String?
   rubro              String?
   paginaWeb          String? @map("pagina_web")
   instagram          String?
   tiktok             String?
   logoUrl            String? @map("logo_url") // link de Imgur u otro hosting externo
-  estado             String  @default("activo") // activo | inactivo
+  estado             String  @default("activo") // activo | inactivo ("de baja" en la interfaz)
 
   ventas            Venta[]
   cuentasPorCobrar  CuentaPorCobrar[]

@@ -14,6 +14,7 @@ type FilaPlantilla = {
   direccion?: string;
   telefono_1?: string | number;
   telefono_2?: string | number;
+  email?: string;
   rubro?: string;
   pagina_web?: string;
   instagram?: string;
@@ -84,6 +85,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
       direccion: String(fila.direccion ?? "").trim() || null,
       telefono: String(fila.telefono_1 ?? "").trim() || null,
       telefono2: String(fila.telefono_2 ?? "").trim() || null,
+      email: String(fila.email ?? "").trim() || null,
       rubro: String(fila.rubro ?? "").trim() || null,
       paginaWeb: String(fila.pagina_web ?? "").trim() || null,
       instagram: String(fila.instagram ?? "").trim() || null,
