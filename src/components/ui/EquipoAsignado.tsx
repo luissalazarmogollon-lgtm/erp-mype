@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { MODULOS_DISPONIBLES, MODULOS_SOLO_PRODUCTOS } from "@/lib/permisosModulo";
+import { MODULOS_DISPONIBLES, MODULOS_SOLO_PRODUCTOS, etiquetaModulo, type ModuloKey } from "@/lib/permisosModulo";
 
 type MiembroEquipo = {
   asignacionId: string;
@@ -173,7 +173,7 @@ export function EquipoAsignado({
                           checked={form.permisos.includes(mod.key)}
                           onChange={() => togglePermiso(mod.key)}
                         />
-                        {mod.label}
+                        {etiquetaModulo(mod.key, esServicios)}
                       </label>
                     ))}
                   </div>
@@ -203,7 +203,7 @@ export function EquipoAsignado({
                     {m.accesoTotal
                       ? "Acceso total"
                       : m.permisos.length > 0
-                      ? m.permisos.map((p) => MODULOS_DISPONIBLES.find((mod) => mod.key === p)?.label ?? p).join(", ")
+                      ? m.permisos.map((p) => etiquetaModulo(p as ModuloKey, esServicios)).join(", ")
                       : "Sin permisos asignados"}
                   </p>
                 </div>

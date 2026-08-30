@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { MODULOS_DISPONIBLES, MODULOS_SOLO_PRODUCTOS } from "@/lib/permisosModulo";
+import { MODULOS_DISPONIBLES, MODULOS_SOLO_PRODUCTOS, etiquetaModulo } from "@/lib/permisosModulo";
 
 export function InvitarUsuarioForm({ empresaId, esServicios = false }: { empresaId: string; esServicios?: boolean }) {
   // En una empresa de Servicios no tiene sentido ofrecer permisos de
@@ -149,7 +149,7 @@ export function InvitarUsuarioForm({ empresaId, esServicios = false }: { empresa
           {modulosOfrecidos.map((m) => (
             <label key={m.key} className="checkbox-row" style={{ fontSize: 12 }}>
               <input type="checkbox" checked={form.permisos.includes(m.key)} onChange={() => togglePermiso(m.key)} />
-              {m.label}
+              {etiquetaModulo(m.key, esServicios)}
             </label>
           ))}
         </div>

@@ -68,6 +68,7 @@ export default function EstadoResultadosPage({ params }: { params: { id: string 
   const [locales, setLocales] = useState<LocalOpcion[]>([]);
   const [data, setData] = useState<EstadoResultados | null>(null);
   const [cargando, setCargando] = useState(true);
+  const [esServicios, setEsServicios] = useState(false);
 
   async function cargar() {
     setCargando(true);
@@ -83,6 +84,9 @@ export default function EstadoResultadosPage({ params }: { params: { id: string 
     fetch(`/api/empresas/${empresaId}/catalogos`)
       .then((r) => r.json())
       .then((d) => setLocales(d.locales ?? []));
+    fetch(`/api/empresas/${empresaId}/mi-acceso`)
+      .then((r) => r.json())
+      .then((d) => setEsServicios(Boolean(d.esServicios)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [empresaId]);
 
@@ -146,11 +150,13 @@ export default function EstadoResultadosPage({ params }: { params: { id: string 
           <div className="card" style={{ marginBottom: 16 }}>
             <Linea label="Ventas totales" valor={data.ventas.total} destacado />
             <div style={{ paddingLeft: 12, marginBottom: 8 }}>
+              {!esServicios && (
+                <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
+                  Efectivo S/{data.ventas.porMetodoPago.efectivo.toFixed(2)} · Yape S/{data.ventas.porMetodoPago.yape.toFixed(2)} · Plin S/{data.ventas.porMetodoPago.plin.toFixed(2)} · Tarjeta S/{data.ventas.porMetodoPago.tarjeta.toFixed(2)}
+                </p>
+              )}
               <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
-                Efectivo S/{data.ventas.porMetodoPago.efectivo.toFixed(2)} · Yape S/{data.ventas.porMetodoPago.yape.toFixed(2)} · Plin S/{data.ventas.porMetodoPago.plin.toFixed(2)} · Tarjeta S/{data.ventas.porMetodoPago.tarjeta.toFixed(2)}
-              </p>
-              <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
-                Créditos otorgados en el período: S/ {data.ventas.creditos.toFixed(2)}
+                {esServicios ? "Facturación emitida en el período" : "Créditos otorgados en el período"}: S/ {data.ventas.creditos.toFixed(2)}
               </p>
             </div>
 

@@ -47,3 +47,16 @@ export const MODULOS_SOLO_PRODUCTOS: ModuloKey[] = [
 export function esEmpresaDeServicios(tipoNegocioNombre: string | null | undefined): boolean {
   return tipoNegocioNombre === "Servicios";
 }
+
+// En una empresa de Servicios, el módulo "ventas_diarias" (mismo permiso,
+// misma clave — no se creó un permiso nuevo para no tener que reasignar a
+// nadie) deja de ser una caja registradora diaria y pasa a ser el módulo
+// de Facturación (registra directamente en Cuentas por Cobrar: cliente,
+// RUC, N° de factura, detalle y si está pagada o no — ver
+// /empresas/[id]/ventas-diarias). Esta función solo decide la ETIQUETA
+// que ve la persona que asigna permisos; el acceso real lo valida
+// verificarAccesoAlguno en las rutas de cuentas-por-cobrar.
+export function etiquetaModulo(clave: ModuloKey, esServicios: boolean): string {
+  if (clave === "ventas_diarias" && esServicios) return "Registrar facturación (CxC)";
+  return MODULOS_DISPONIBLES.find((m) => m.key === clave)?.label ?? clave;
+}

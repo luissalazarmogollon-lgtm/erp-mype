@@ -3,6 +3,44 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
+// Este mismo módulo ("ventas_diarias" — el permiso no cambió de nombre a
+// propósito, para no tener que reasignarlo a nadie) sirve dos pantallas
+// muy distintas según el tipo de negocio de la empresa:
+//
+//  - Productos / Mixta: la caja registradora diaria de siempre
+//    (VentasDiariasClasica) — total del día por método de pago.
+//  - Servicios: Facturación (FacturacionServicios) — una empresa de
+//    servicios no tiene caja registradora, factura a sus clientes. Este
+//    formulario registra directamente en Cuentas por Cobrar (cliente,
+//    RUC, N° de factura, detalle y si está pagada o no), con la misma
+//    lógica de registrar-y-luego-liquidar que Cuentas por Pagar.
+//
+// Quién ve cuál se decide con `esServicios`, que vive en /mi-acceso.
+export default function VentasDiariasORFacturacionPage({ params }: { params: { id: string } }) {
+  const empresaId = params.id;
+  const [esServicios, setEsServicios] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/empresas/${empresaId}/mi-acceso`)
+      .then((r) => r.json())
+      .then((data) => setEsServicios(Boolean(data.esServicios)));
+  }, [empresaId]);
+
+  if (esServicios === null) {
+    return (
+      <main style={{ maxWidth: 700, margin: "0 auto", padding: "32px 24px" }}>
+        <p style={{ color: "var(--ink-soft)", fontSize: 13 }}>Cargando…</p>
+      </main>
+    );
+  }
+
+  return esServicios ? <FacturacionServicios empresaId={empresaId} /> : <VentasDiariasClasica empresaId={empresaId} />;
+}
+
+// ---------------------------------------------------------------------
+// Productos / Mixta — caja registradora diaria (sin cambios de lógica).
+// ---------------------------------------------------------------------
+
 type Registro = {
   id: string;
   local: string | null;
@@ -34,8 +72,7 @@ const LEGS = [
   { campo: "tarjetaCuentaId" as const, conciliacionCampo: "tarjetaCuenta" as const, monto: "montoTarjeta" as const, label: "Tarjeta" },
 ];
 
-export default function VentasDiariasPage({ params }: { params: { id: string } }) {
-  const empresaId = params.id;
+function VentasDiariasClasica({ empresaId }: { empresaId: string }) {
   const [registros, setRegistros] = useState<Registro[]>([]);
   const [locales, setLocales] = useState<LocalOpcion[]>([]);
   const [cuentasBancarias, setCuentasBancarias] = useState<CuentaOpcion[]>([]);
@@ -296,6 +333,347 @@ export default function VentasDiariasPage({ params }: { params: { id: string } }
           })}
         {registros.length === 0 && (
           <p style={{ color: "var(--ink-soft)", fontSize: 14 }}>Todavía no hay ventas registradas.</p>
+        )}
+      </div>
+    </main>
+  );
+}
+
+// ---------------------------------------------------------------------
+// Servicios — Facturación. Registra directamente en Cuentas por Cobrar
+// (misma tabla y misma API que "Créditos (CxC)" — ver
+// /empresas/[id]/creditos —, solo que aquí es la pantalla principal de
+// ventas de una empresa de servicios, con el N° de factura y el detalle
+// como campos centrales en vez de opcionales).
+// ---------------------------------------------------------------------
+
+type Cxc = {
+  id: string;
+  cliente: string;
+  clienteRuc: string | null;
+  numeroFactura: string | null;
+  descripcion: string | null;
+  montoTotal: string;
+  saldoPendiente: string;
+  fechaEmision: string;
+  estado: string;
+};
+type ClienteOpcion = { id: string; nombre: string; docIdentidad: string | null };
+
+const MEDIOS_PAGO = ["Efectivo", "Tarjeta", "Plin", "Yape", "Transferencia"];
+
+function FacturacionServicios({ empresaId }: { empresaId: string }) {
+  const [facturas, setFacturas] = useState<Cxc[]>([]);
+  const [clientes, setClientes] = useState<ClienteOpcion[]>([]);
+  const [mostrarForm, setMostrarForm] = useState(false);
+  const [mostrarNuevoCliente, setMostrarNuevoCliente] = useState(false);
+  const [cobrando, setCobrando] = useState<string | null>(null);
+  const [montoCobro, setMontoCobro] = useState(0);
+  const [medioPagoCobro, setMedioPagoCobro] = useState("Efectivo");
+  const [cuentaCobro, setCuentaCobro] = useState("");
+  const [cuentasBancarias, setCuentasBancarias] = useState<{ id: string; bancoNombre: string; saldoActual: string }[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [mostrarPagadas, setMostrarPagadas] = useState(false);
+
+  const [form, setForm] = useState({ clienteId: "", numeroFactura: "", montoTotal: 0, descripcion: "" });
+  const [nuevoCliente, setNuevoCliente] = useState({ nombre: "", docIdentidad: "", telefono: "" });
+
+  async function cargar() {
+    const [resFacturas, resClientes, resCatalogos] = await Promise.all([
+      fetch(`/api/empresas/${empresaId}/cuentas-por-cobrar`).then((r) => r.json()),
+      fetch(`/api/empresas/${empresaId}/clientes`).then((r) => r.json()),
+      fetch(`/api/empresas/${empresaId}/catalogos`).then((r) => r.json()),
+    ]);
+    setFacturas(resFacturas);
+    setClientes(resClientes);
+    setCuentasBancarias(resCatalogos.cuentasBancarias ?? []);
+  }
+
+  useEffect(() => {
+    cargar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [empresaId]);
+
+  const totalPorCobrar = facturas.filter((f) => f.estado !== "pagada").reduce((acc, f) => acc + Number(f.saldoPendiente), 0);
+  const facturasVisibles = mostrarPagadas ? facturas : facturas.filter((f) => f.estado !== "pagada");
+  const cantidadPagadas = facturas.filter((f) => f.estado === "pagada").length;
+
+  async function crearCliente() {
+    const res = await fetch(`/api/empresas/${empresaId}/clientes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(nuevoCliente),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      await cargar();
+      setForm({ ...form, clienteId: data.id });
+      setNuevoCliente({ nombre: "", docIdentidad: "", telefono: "" });
+      setMostrarNuevoCliente(false);
+    }
+  }
+
+  async function handleCrearFactura(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (form.montoTotal <= 0) {
+      setError("El monto debe ser mayor a 0.");
+      return;
+    }
+    if (!form.numeroFactura.trim()) {
+      setError("Indica el N° de factura.");
+      return;
+    }
+    const res = await fetch(`/api/empresas/${empresaId}/cuentas-por-cobrar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(form),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error?.toString() ?? "No se pudo registrar la factura.");
+      return;
+    }
+    setForm({ clienteId: "", numeroFactura: "", montoTotal: 0, descripcion: "" });
+    setMostrarForm(false);
+    cargar();
+  }
+
+  async function handleCobro(cxcId: string) {
+    setError(null);
+    if (montoCobro <= 0) {
+      setError("El monto del pago debe ser mayor a 0.");
+      return;
+    }
+    const res = await fetch(`/api/empresas/${empresaId}/cuentas-por-cobrar/${cxcId}/cobro`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        monto: montoCobro,
+        medioPago: medioPagoCobro,
+        cuentaBancariaId: cuentaCobro || undefined,
+      }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error?.toString() ?? "No se pudo registrar el pago.");
+      return;
+    }
+    setCobrando(null);
+    setMontoCobro(0);
+    cargar();
+  }
+
+  return (
+    <main style={{ maxWidth: 700, margin: "0 auto", padding: "32px 24px" }}>
+      <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 6 }}>
+        <Link href={`/empresas/${empresaId}`} style={{ color: "inherit" }}>
+          Empresa
+        </Link>{" "}
+        → <b>Facturación</b>
+      </p>
+      <h1 style={{ fontSize: 26, marginBottom: 6 }}>Facturación</h1>
+      <p style={{ color: "var(--ink-soft)", fontSize: 13, marginBottom: 6 }}>
+        Registra cada factura emitida a un cliente. Queda en Cuentas por Cobrar hasta que el cliente la paga —
+        igual que una factura por pagar, pero en sentido contrario — y ya cuenta como venta en el Estado de
+        Resultados desde que la emites.
+      </p>
+      <p className="mono" style={{ fontSize: 12, color: "var(--alert)", marginBottom: 20 }}>
+        Total por cobrar: S/ {totalPorCobrar.toFixed(2)}
+      </p>
+
+      {!mostrarForm ? (
+        <button className="btn-primary" onClick={() => setMostrarForm(true)} style={{ marginBottom: 20 }}>
+          + Registrar factura
+        </button>
+      ) : (
+        <form onSubmit={handleCrearFactura} className="card" style={{ marginBottom: 20 }}>
+          <div className="field">
+            <label>Cliente</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <select value={form.clienteId} onChange={(e) => setForm({ ...form, clienteId: e.target.value })} required style={{ flex: 1 }}>
+                <option value="">Selecciona...</option>
+                {clientes.map((c) => (
+                  <option key={c.id} value={c.id}>{c.nombre}{c.docIdentidad ? ` — RUC ${c.docIdentidad}` : ""}</option>
+                ))}
+              </select>
+              <button type="button" className="btn-ghost" onClick={() => setMostrarNuevoCliente(!mostrarNuevoCliente)} style={{ fontSize: 12, whiteSpace: "nowrap" }}>
+                + Nuevo cliente
+              </button>
+            </div>
+          </div>
+
+          {mostrarNuevoCliente && (
+            <div className="card" style={{ marginBottom: 16, background: "var(--paper)" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <div className="field" style={{ marginBottom: 8 }}>
+                  <label>Nombre / Razón social del cliente</label>
+                  <input value={nuevoCliente.nombre} onChange={(e) => setNuevoCliente({ ...nuevoCliente, nombre: e.target.value })} />
+                </div>
+                <div className="field" style={{ marginBottom: 8 }}>
+                  <label>RUC (opcional)</label>
+                  <input value={nuevoCliente.docIdentidad} onChange={(e) => setNuevoCliente({ ...nuevoCliente, docIdentidad: e.target.value })} />
+                </div>
+                <div className="field" style={{ marginBottom: 0, gridColumn: "span 2" }}>
+                  <label>Teléfono (opcional)</label>
+                  <input value={nuevoCliente.telefono} onChange={(e) => setNuevoCliente({ ...nuevoCliente, telefono: e.target.value })} />
+                </div>
+              </div>
+              <button type="button" className="btn-primary" onClick={crearCliente} style={{ marginTop: 10 }}>
+                Crear cliente
+              </button>
+            </div>
+          )}
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div className="field">
+              <label>N° de factura</label>
+              <input
+                value={form.numeroFactura}
+                onChange={(e) => setForm({ ...form, numeroFactura: e.target.value })}
+                placeholder="Ej: F001-00234"
+                required
+              />
+            </div>
+            <div className="field">
+              <label>Monto de la factura (S/)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.montoTotal}
+                onChange={(e) => setForm({ ...form, montoTotal: Math.max(0, Number(e.target.value)) })}
+                required
+              />
+            </div>
+          </div>
+          <div className="field">
+            <label>Detalle de la factura</label>
+            <input
+              value={form.descripcion}
+              onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
+              placeholder="Ej: consultoría contable — agosto 2026"
+              required
+            />
+          </div>
+
+          {error && <p className="field error">{error}</p>}
+          <div style={{ display: "flex", gap: 10 }}>
+            <button type="submit" className="btn-primary">Registrar factura</button>
+            <button type="button" className="btn-ghost" onClick={() => setMostrarForm(false)}>Cancelar</button>
+          </div>
+        </form>
+      )}
+
+      {cantidadPagadas > 0 && (
+        <label className="checkbox-row mono" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 20 }}>
+          <input type="checkbox" checked={mostrarPagadas} onChange={(e) => setMostrarPagadas(e.target.checked)} />
+          Mostrar también las {cantidadPagadas} facturas ya pagadas
+        </label>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {facturasVisibles.map((f) => (
+          <div key={f.id} className="card" style={{ padding: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 500 }}>
+                  {f.cliente}{f.clienteRuc ? ` — RUC ${f.clienteRuc}` : ""}
+                </p>
+                <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
+                  {f.numeroFactura ? `Factura ${f.numeroFactura} · ` : ""}
+                  {f.descripcion ?? "-"} · {new Date(f.fechaEmision).toLocaleDateString("es-PE", { timeZone: "UTC" })}
+                </p>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <p className="mono" style={{ fontSize: 14 }}>
+                  S/ {Number(f.saldoPendiente).toFixed(2)}{" "}
+                  <span style={{ fontSize: 10, color: "var(--ink-soft)" }}>/ {Number(f.montoTotal).toFixed(2)}</span>
+                </p>
+                <p className="mono" style={{ fontSize: 10, textTransform: "uppercase", color: f.estado === "pagada" ? "var(--teal)" : "var(--stamp)" }}>
+                  {f.estado === "pagada" ? "pagada" : "sin pagar"}
+                </p>
+              </div>
+            </div>
+
+            {f.estado !== "pagada" && (
+              cobrando === f.id ? (
+                <div style={{ marginTop: 10, borderTop: "1px solid var(--line)", paddingTop: 10 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={montoCobro}
+                      onChange={(e) => setMontoCobro(Math.max(0, Number(e.target.value)))}
+                      placeholder="Monto pagado"
+                      style={{ padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 2 }}
+                    />
+                    <select
+                      value={medioPagoCobro}
+                      onChange={(e) => setMedioPagoCobro(e.target.value)}
+                      style={{ padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 2, fontSize: 13 }}
+                    >
+                      {MEDIOS_PAGO.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {cuentasBancarias.length > 0 && (
+                    <select
+                      value={cuentaCobro}
+                      onChange={(e) => setCuentaCobro(e.target.value)}
+                      style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 2, fontSize: 12, marginBottom: 8 }}
+                    >
+                      <option value="">¿A qué cuenta entra? (opcional, para el flujo de caja)</option>
+                      {cuentasBancarias.map((cb) => (
+                        <option key={cb.id} value={cb.id}>{cb.bancoNombre} (S/ {Number(cb.saldoActual).toFixed(2)})</option>
+                      ))}
+                    </select>
+                  )}
+                  <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginBottom: 8 }}>
+                    Vas a registrar un pago de <b>S/ {montoCobro.toFixed(2)}</b> de <b>{f.cliente}</b> por{" "}
+                    <b>{medioPagoCobro}</b>
+                    {cuentaCobro && (
+                      <> hacia <b>{cuentasBancarias.find((cb) => cb.id === cuentaCobro)?.bancoNombre}</b></>
+                    )}
+                    .
+                  </p>
+                  {error && <p className="field error">{error}</p>}
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <button
+                      className="btn-primary"
+                      style={{ padding: "8px 14px", fontSize: 12 }}
+                      disabled={montoCobro <= 0}
+                      onClick={() => handleCobro(f.id)}
+                    >
+                      Confirmar pago de S/ {montoCobro.toFixed(2)}
+                    </button>
+                    <button className="btn-ghost" style={{ padding: "8px 14px", fontSize: 12 }} onClick={() => setCobrando(null)}>
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  className="btn-ghost"
+                  style={{ marginTop: 10, fontSize: 12, padding: "6px 12px" }}
+                  onClick={() => {
+                    setCobrando(f.id);
+                    setMontoCobro(Number(f.saldoPendiente));
+                    setMedioPagoCobro("Efectivo");
+                    setCuentaCobro("");
+                    setError(null);
+                  }}
+                >
+                  Marcar como pagada / registrar pago
+                </button>
+              )
+            )}
+          </div>
+        ))}
+        {facturasVisibles.length === 0 && (
+          <p style={{ color: "var(--ink-soft)", fontSize: 14 }}>Todavía no hay facturas registradas.</p>
         )}
       </div>
     </main>

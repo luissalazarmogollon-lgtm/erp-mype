@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { mensajeErrorZod } from "@/lib/zodError";
 import { prisma } from "@/lib/prisma";
-import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
+import { getUsuarioActual, verificarAccesoAlguno } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +14,8 @@ const cobroSchema = z.object({
 
 // POST /api/empresas/[id]/cuentas-por-cobrar/[cxcId]/cobro
 // Si se indica cuentaBancariaId, genera el movimiento bancario de INGRESO
-// (el cliente pagó y ese dinero entra a la cuenta indicada).
+// (el cliente pagó y ese dinero entra a la cuenta indicada). Acepta
+// "creditos" o "ventas_diarias" — ver la nota en cuentas-por-cobrar/route.ts.
 export async function POST(
   request: Request,
   { params }: { params: { id: string; cxcId: string } }
@@ -24,7 +25,7 @@ export async function POST(
 
   const empresaId = BigInt(params.id);
   try {
-    await verificarAccesoEmpresa(usuarioActual.id, empresaId, "creditos");
+    await verificarAccesoAlguno(usuarioActual.id, empresaId, ["creditos", "ventas_diarias"]);
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 403 });
   }

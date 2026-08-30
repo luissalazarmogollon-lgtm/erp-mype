@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { mensajeErrorZod } from "@/lib/zodError";
 import { prisma } from "@/lib/prisma";
-import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
+import { getUsuarioActual, verificarAccesoAlguno } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -15,13 +15,19 @@ const crearCxcSchema = z.object({
 });
 
 // GET /api/empresas/[id]/cuentas-por-cobrar — listado con saldo pendiente.
+//
+// Acepta "creditos" (Créditos a clientes, empresas de Productos/Mixta) o
+// "ventas_diarias" (mismo permiso que da acceso al módulo de Facturación
+// en empresas de Servicios — ver /empresas/[id]/ventas-diarias): ambos
+// escriben sobre esta misma tabla, solo cambia la pantalla desde la que
+// se entra.
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   const usuarioActual = await getUsuarioActual();
   if (!usuarioActual) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
   const empresaId = BigInt(params.id);
   try {
-    await verificarAccesoEmpresa(usuarioActual.id, empresaId, "creditos");
+    await verificarAccesoAlguno(usuarioActual.id, empresaId, ["creditos", "ventas_diarias"]);
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 403 });
   }
@@ -63,7 +69,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
   const empresaId = BigInt(params.id);
   try {
-    await verificarAccesoEmpresa(usuarioActual.id, empresaId, "creditos");
+    await verificarAccesoAlguno(usuarioActual.id, empresaId, ["creditos", "ventas_diarias"]);
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 403 });
   }

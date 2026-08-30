@@ -53,7 +53,7 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
   const ACCESOS_DIRECTOS: { modulos: string[]; href: string; label: string; primario?: boolean }[] = [
     { modulos: ["estado_resultados"], href: "estado-resultados", label: "Estado de Resultados", primario: true },
     { modulos: ["flujo_caja"], href: "flujo-caja", label: "Flujo de Caja" },
-    { modulos: ["ventas_diarias"], href: "ventas-diarias", label: "Ventas diarias" },
+    { modulos: ["ventas_diarias"], href: "ventas-diarias", label: esServicios ? "Facturación" : "Ventas diarias" },
     { modulos: ["ventas_pos"], href: "ventas", label: "Ventas (POS)" },
     { modulos: ["productos"], href: "productos", label: "Productos" },
     { modulos: ["insumos"], href: "insumos", label: "Insumos" },
@@ -106,7 +106,9 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
 
       <div style={{ marginBottom: 28 }}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {ACCESOS_DIRECTOS.filter((a) => puedeVerAlguno(a.modulos) && !(esServicios && esSoloDeProductos(a.modulos))).map((a) => (
+          {ACCESOS_DIRECTOS.filter(
+            (a) => puedeVerAlguno(a.modulos) && !(esServicios && esSoloDeProductos(a.modulos)) && !(esServicios && a.href === "creditos")
+          ).map((a) => (
             <Link
               key={a.href}
               href={`/empresas/${params.id}/${a.href}`}
@@ -117,7 +119,9 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
             </Link>
           ))}
         </div>
-        {ACCESOS_DIRECTOS.filter((a) => puedeVerAlguno(a.modulos) && !(esServicios && esSoloDeProductos(a.modulos))).length === 0 && (
+        {ACCESOS_DIRECTOS.filter(
+            (a) => puedeVerAlguno(a.modulos) && !(esServicios && esSoloDeProductos(a.modulos)) && !(esServicios && a.href === "creditos")
+          ).length === 0 && (
           <p style={{ color: "var(--ink-soft)", fontSize: 13 }}>
             No tienes acceso a ningún módulo de esta empresa todavía. Pídele al superadmin que te lo asigne.
           </p>
@@ -125,7 +129,8 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
         {esServicios && (
           <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 10 }}>
             Esta empresa es de tipo Servicios: Insumos, Mermas, Productos y recetas, Ventas por producto (POS),
-            Compras, Proveedores y Solicitudes de Pedido están ocultos porque no maneja inventario.
+            Compras, Proveedores y Solicitudes de Pedido están ocultos porque no maneja inventario. En su lugar
+            factura a sus clientes desde "Facturación", que registra directamente en Cuentas por Cobrar.
           </p>
         )}
       </div>
