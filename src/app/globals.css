@@ -1,19 +1,38 @@
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap");
 
+/*
+  Paleta inspirada en SAP Business One: azul corporativo como color de
+  marca (botones primarios, encabezado, enlaces, estados activos), dorado
+  como acento (igual que el "One" del logo — se usa para resaltar lo
+  pendiente/importante), fondo gris-azulado claro y tarjetas blancas.
+
+  Todas las pantallas de la app ya usaban estas mismas variables (--ink,
+  --paper-card, --line, etc.) en vez de colores sueltos, así que cambiar
+  los valores aquí actualiza el look de todo el sistema sin tocar cada
+  pantalla una por una.
+*/
 :root {
-  --ink: #16232b;
-  --ink-soft: #3c4a50;
-  --paper: #ededee6;
-  --paper-bg: #ededee;
-  --paper-card: #f7f7f2;
-  --line: #cfd0c4;
-  --stamp: #b4762a;
-  --stamp-bg: #f1e2c8;
-  --teal: #20554e;
-  --teal-bg: #dceae6;
-  --alert: #9c3b34;
-  --alert-bg: #f3dedb;
-  --radius: 2px;
+  --ink: #1b2a38;
+  --ink-soft: #5c6f80;
+  --paper-bg: #eef2f6;
+  --paper: #e3ebf2;
+  --paper-card: #ffffff;
+  --line: #d7e0e8;
+
+  --brand: #0a5ca8;
+  --brand-dark: #084a89;
+  --brand-bg: #e6f0fa;
+
+  --stamp: #b8790a;
+  --stamp-bg: #f8ecd2;
+  --teal: #147a4c;
+  --teal-bg: #ddf3e6;
+  --alert: #c0392b;
+  --alert-bg: #fbe1dd;
+
+  --radius: 8px;
+  --shadow-sm: 0 1px 2px rgba(15, 35, 60, 0.07), 0 1px 1px rgba(15, 35, 60, 0.04);
+  --shadow-md: 0 8px 24px rgba(15, 35, 60, 0.12);
 }
 
 * {
@@ -24,17 +43,18 @@ body {
   margin: 0;
   background: var(--paper-bg);
   color: var(--ink);
-  font-family: "IBM Plex Sans", sans-serif;
+  font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
 h1,
 h2,
 h3 {
-  font-family: "Fraunces", serif;
-  font-weight: 600;
+  font-family: "IBM Plex Sans", sans-serif;
+  font-weight: 700;
   letter-spacing: -0.01em;
   margin: 0;
+  color: var(--ink);
 }
 
 .mono {
@@ -52,6 +72,20 @@ button {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 24px;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Solo las tarjetas que son enlaces (como las empresas del dashboard)
+   reaccionan al pasar el mouse — las tarjetas informativas normales se
+   quedan quietas para no insinuar que se puede hacer clic en ellas. */
+a.card {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+a.card:hover,
+a.card:focus-visible {
+  border-color: var(--brand);
+  box-shadow: var(--shadow-md);
 }
 
 .field {
@@ -77,6 +111,14 @@ button {
   background: #fff;
   font-size: 14px;
   color: var(--ink);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.field input:focus,
+.field select:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-bg);
 }
 
 .field .error {
@@ -86,14 +128,24 @@ button {
 }
 
 .btn-primary {
-  font-weight: 500;
+  font-weight: 600;
   font-size: 13.5px;
   padding: 11px 22px;
   border-radius: var(--radius);
   cursor: pointer;
-  border: 1px solid var(--ink);
-  background: var(--ink);
-  color: var(--paper-card);
+  border: 1px solid var(--brand);
+  background: var(--brand);
+  color: #fff;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--brand-dark);
+  border-color: var(--brand-dark);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .btn-primary:disabled {
@@ -107,9 +159,19 @@ button {
   padding: 11px 22px;
   border-radius: var(--radius);
   cursor: pointer;
-  border: 1px solid var(--ink);
-  background: transparent;
+  border: 1px solid var(--line);
+  background: #fff;
   color: var(--ink);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: var(--paper);
+}
+
+.btn-ghost:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .checkbox-row {
@@ -120,4 +182,16 @@ button {
 
 .checkbox-row input {
   width: auto;
+}
+
+input[type="checkbox"] {
+  accent-color: var(--brand);
+}
+
+/* Panel decorativo de la pantalla de login — oculto en pantallas angostas,
+   donde solo se ve la tarjeta del formulario centrada. */
+@media (max-width: 860px) {
+  .login-aside {
+    display: none !important;
+  }
 }

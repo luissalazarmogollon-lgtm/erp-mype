@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getUsuarioActual, getEmpresasVisibles } from "@/lib/auth";
-import { LogoutButton } from "@/components/ui/LogoutButton";
 
 // Selector de empresa activa (HU-03). Un Asesor/Asistente ve aquí solo
 // las empresas donde tiene una fila activa en usuario_empresa (RN-001);
@@ -14,22 +13,12 @@ export default async function DashboardPage() {
 
   return (
     <main style={{ maxWidth: 900, margin: "0 auto", padding: "32px 24px" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 8,
-        }}
-      >
-        <div>
-          <h1 style={{ fontSize: 24 }}>Tus empresas</h1>
-          <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)" }}>
-            {usuario.nombres} {usuario.apellidos} ·{" "}
-            {usuario.esSuperadminPlataforma ? "Superadmin" : usuario.tipoActorBase}
-          </p>
-        </div>
-        <LogoutButton />
+      <div style={{ marginBottom: 8 }}>
+        <h1 style={{ fontSize: 24 }}>Tus empresas</h1>
+        <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)" }}>
+          {usuario.nombres} {usuario.apellidos} ·{" "}
+          {usuario.esSuperadminPlataforma ? "Superadmin" : usuario.tipoActorBase}
+        </p>
       </div>
 
       {usuario.esSuperadminPlataforma && (
