@@ -60,6 +60,7 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
     { modulos: ["mermas"], href: "mermas", label: "Mermas" },
     { modulos: ["gastos"], href: "gastos", label: "Gastos y Costos" },
     { modulos: ["creditos"], href: "creditos", label: esServicios ? "Cuentas por Cobrar" : "Créditos (CxC)" },
+    { modulos: ["ventas_pos", "ventas_diarias", "creditos"], href: "clientes", label: "Clientes" },
     { modulos: ["cuentas_por_pagar", "cuentas_por_pagar_registrar"], href: "cuentas-por-pagar", label: "Cuentas por pagar" },
     { modulos: ["rrhh"], href: "rrhh", label: "RRHH" },
     { modulos: ["caja_chica"], href: "caja-chica", label: "Caja Chica" },

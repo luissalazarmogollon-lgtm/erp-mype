@@ -339,6 +339,21 @@ model Cliente {
   creditoHabilitado Boolean @default(false) @map("credito_habilitado")
   limiteCredito     Decimal @default(0) @map("limite_credito") @db.Decimal(12, 2)
 
+  // Ficha ampliada del cliente (módulo Clientes) — todo opcional, para no
+  // romper ningún registro ni flujo (Ventas POS, Créditos) que ya crea
+  // clientes solo con nombre/RUC/teléfono.
+  razonSocial        String? @map("razon_social")
+  representanteLegal String? @map("representante_legal")
+  personaContacto    String? @map("persona_contacto")
+  direccion          String?
+  telefono2          String? @map("telefono_2")
+  rubro              String?
+  paginaWeb          String? @map("pagina_web")
+  instagram          String?
+  tiktok             String?
+  logoUrl            String? @map("logo_url") // link de Imgur u otro hosting externo
+  estado             String  @default("activo") // activo | inactivo
+
   ventas            Venta[]
   cuentasPorCobrar  CuentaPorCobrar[]
 
