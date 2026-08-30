@@ -43,6 +43,11 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
   const desde = searchParams.get("desde") ? new Date(searchParams.get("desde")!) : inicioMesActual;
   const hasta = searchParams.get("hasta") ? new Date(searchParams.get("hasta")!) : hoy;
+  // "hasta" llega como fecha sin hora (YYYY-MM-DD), que se interpreta como
+  // medianoche exacta — sin este ajuste, cualquier venta/crédito/gasto
+  // registrado después de las 00:00:00 de ese día queda fuera del rango
+  // (en la práctica, esto excluía casi siempre lo del día "hasta").
+  hasta.setHours(23, 59, 59, 999);
   const localIdParam = searchParams.get("localId");
   const localId = localIdParam ? BigInt(localIdParam) : undefined;
 

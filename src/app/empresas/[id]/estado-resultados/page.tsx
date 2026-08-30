@@ -23,6 +23,7 @@ type EstadoResultados = {
   margenNetoPct: number;
   egresoCajaTotal: number;
   egresoCajaNoOperativo: number;
+  detallePorNaturaleza: Record<string, number>;
 };
 type LocalOpcion = { id: string; nombre: string };
 
@@ -35,8 +36,9 @@ function hoyISO() {
 }
 
 function Linea({
-  label, valor, negativo = false, destacado = false, borde = false, sub = false,
-}: { label: string; valor: number; negativo?: boolean; destacado?: boolean; borde?: boolean; sub?: boolean }) {
+  label, valor, negativo = false, destacado = false, borde = false, sub = false, unidad = "soles",
+}: { label: string; valor: number; negativo?: boolean; destacado?: boolean; borde?: boolean; sub?: boolean; unidad?: "soles" | "pct" }) {
+  const texto = unidad === "pct" ? `${valor.toFixed(1)}%` : `${negativo && valor > 0 ? "− " : ""}S/ ${valor.toFixed(2)}`;
   return (
     <div
       style={{
@@ -52,7 +54,7 @@ function Linea({
     >
       <span>{label}</span>
       <span className="mono" style={{ color: negativo ? "var(--alert)" : destacado ? (valor >= 0 ? "var(--teal)" : "var(--alert)") : undefined }}>
-        {negativo && valor > 0 ? "− " : ""}S/ {valor.toFixed(2)}
+        {texto}
       </span>
     </div>
   );
@@ -128,6 +130,19 @@ export default function EstadoResultadosPage({ params }: { params: { id: string 
         <p style={{ color: "var(--ink-soft)" }}>Calculando...</p>
       ) : (
         <>
+          {(data.detallePorNaturaleza?.sin_clasificar ?? 0) > 0 && (
+            <div className="card" style={{ marginBottom: 16, borderColor: "var(--stamp)", background: "var(--stamp-bg, #f1e2c8)" }}>
+              <p style={{ fontSize: 13, margin: 0 }}>
+                <b>S/ {data.detallePorNaturaleza.sin_clasificar.toFixed(2)}</b> en gastos todavía no están incluidos
+                en este resultado — vienen de facturas por pagar registradas sin clasificar.{" "}
+                <Link href={`/empresas/${empresaId}/cuentas-por-pagar`} style={{ color: "inherit", textDecoration: "underline" }}>
+                  Clasifícalos en Cuentas por Pagar
+                </Link>{" "}
+                para que se sumen aquí.
+              </p>
+            </div>
+          )}
+
           <div className="card" style={{ marginBottom: 16 }}>
             <Linea label="Ventas totales" valor={data.ventas.total} destacado />
             <div style={{ paddingLeft: 12, marginBottom: 8 }}>
@@ -141,15 +156,15 @@ export default function EstadoResultadosPage({ params }: { params: { id: string 
 
             <Linea label="(−) Costo de ventas" valor={data.costoVentas} negativo />
             <Linea label="Utilidad bruta" valor={data.utilidadBruta} destacado borde />
-            <Linea label="Margen bruto" valor={data.margenBrutoPct} sub />
+            <Linea label="Margen bruto" valor={data.margenBrutoPct} sub unidad="pct" />
 
             <Linea label="(−) Gasto operativo" valor={data.gastoOperativo} negativo />
             <Linea label="EBITDA" valor={data.ebitda} destacado borde />
-            <Linea label="Margen EBITDA" valor={data.margenEbitdaPct} sub />
+            <Linea label="Margen EBITDA" valor={data.margenEbitdaPct} sub unidad="pct" />
 
             <Linea label="(−) Depreciación y amortización" valor={data.depreciacionAmortizacion} negativo />
             <Linea label="Utilidad operativa (EBIT)" valor={data.utilidadOperativa} destacado borde />
-            <Linea label="Margen operativo" valor={data.margenOperativoPct} sub />
+            <Linea label="Margen operativo" valor={data.margenOperativoPct} sub unidad="pct" />
 
             <Linea label="(−) Gasto financiero" valor={data.gastoFinanciero} negativo />
             <Linea label="Utilidad antes de impuestos (EBT)" valor={data.utilidadAntesImpuestos} destacado borde />

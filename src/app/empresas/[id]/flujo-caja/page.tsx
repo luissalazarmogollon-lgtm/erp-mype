@@ -10,7 +10,7 @@ type CuentaGrupo = { cuentaId: string; cuentaNombre: string; dias: DiaGrupo[] };
 
 export default function FlujoCajaPage({ params }: { params: { id: string } }) {
   const empresaId = params.id;
-  const [saldoConsolidado, setSaldoConsolidado] = useState(0);
+  const [saldosPorMoneda, setSaldosPorMoneda] = useState<Record<string, number>>({});
   const [cuentas, setCuentas] = useState<Cuenta[]>([]);
   const [movimientosPorCuenta, setMovimientosPorCuenta] = useState<CuentaGrupo[]>([]);
   const [cuentasAbiertas, setCuentasAbiertas] = useState<Record<string, boolean>>({});
@@ -23,7 +23,7 @@ export default function FlujoCajaPage({ params }: { params: { id: string } }) {
 
   async function cargar() {
     const data = await fetch(`/api/empresas/${empresaId}/flujo-caja`).then((r) => r.json());
-    setSaldoConsolidado(data.saldoConsolidado ?? 0);
+    setSaldosPorMoneda(data.saldosPorMoneda ?? {});
     setCuentas(data.cuentas ?? []);
     setMovimientosPorCuenta(data.movimientosPorCuenta ?? []);
   }
@@ -76,9 +76,24 @@ export default function FlujoCajaPage({ params }: { params: { id: string } }) {
         → <b>Flujo de Caja</b>
       </p>
       <h1 style={{ fontSize: 26, marginBottom: 6 }}>Flujo de Caja</h1>
-      <p className="mono" style={{ fontSize: 16, color: "var(--teal, #20554e)", marginBottom: 20 }}>
-        Saldo consolidado: S/ {saldoConsolidado.toFixed(2)}
-      </p>
+      <div style={{ marginBottom: 20 }}>
+        {Object.keys(saldosPorMoneda).length === 0 ? (
+          <p className="mono" style={{ fontSize: 16, color: "var(--teal, #20554e)" }}>Saldo: S/ 0.00</p>
+        ) : (
+          Object.entries(saldosPorMoneda)
+            .sort(([a], [b]) => (a === "PEN" ? -1 : b === "PEN" ? 1 : a.localeCompare(b)))
+            .map(([moneda, saldo]) => (
+              <p key={moneda} className="mono" style={{ fontSize: 16, color: "var(--teal, #20554e)", margin: 0 }}>
+                Saldo en {moneda === "PEN" ? "soles" : moneda === "USD" ? "dólares" : moneda}: {moneda === "PEN" ? "S/" : moneda === "USD" ? "US$" : moneda} {saldo.toFixed(2)}
+              </p>
+            ))
+        )}
+        {Object.keys(saldosPorMoneda).length > 1 && (
+          <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 4 }}>
+            Se muestran por separado porque no se suman monedas distintas.
+          </p>
+        )}
+      </div>
 
       {!mostrarForm ? (
         <button className="btn-primary" onClick={() => setMostrarForm(true)} style={{ marginBottom: 20 }}>

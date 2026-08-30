@@ -50,7 +50,7 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
     { modulos: ["mermas"], href: "mermas", label: "Mermas" },
     { modulos: ["gastos"], href: "gastos", label: "Gastos y Costos" },
     { modulos: ["creditos"], href: "creditos", label: "Créditos (CxC)" },
-    { modulos: ["cuentas_por_pagar"], href: "cuentas-por-pagar", label: "Cuentas por pagar" },
+    { modulos: ["cuentas_por_pagar", "cuentas_por_pagar_registrar"], href: "cuentas-por-pagar", label: "Cuentas por pagar" },
     { modulos: ["rrhh"], href: "rrhh", label: "RRHH" },
     { modulos: ["caja_chica"], href: "caja-chica", label: "Caja Chica" },
     { modulos: ["locales"], href: "locales", label: "Locales" },

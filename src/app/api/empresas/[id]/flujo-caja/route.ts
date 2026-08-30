@@ -30,7 +30,15 @@ export async function GET(request: Request, { params }: { params: { id: string }
     take: 300,
   });
 
-  const saldoConsolidado = cuentas.reduce((acc, c) => acc + Number(c.saldoActual), 0);
+  // Las cuentas pueden estar en distintas monedas (PEN/USD) — sumarlas
+  // todas juntas daría un número financieramente incorrecto ("S/ 6,000"
+  // que en realidad son S/ 5,000 + US$ 1,000). Se agrupa por moneda en
+  // vez de dar un único "saldo consolidado".
+  const saldosPorMoneda: Record<string, number> = {};
+  for (const c of cuentas) {
+    const moneda = c.moneda ?? "PEN";
+    saldosPorMoneda[moneda] = (saldosPorMoneda[moneda] ?? 0) + Number(c.saldoActual);
+  }
 
   // Agrupar: cuenta → fecha (YYYY-MM-DD) → movimientos del día
   type MovimientoPlano = {
@@ -69,7 +77,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
   }));
 
   return NextResponse.json({
-    saldoConsolidado,
+    saldosPorMoneda,
     cuentas: cuentas.map((c) => ({
       id: c.id.toString(),
       bancoNombre: c.bancoNombre,
