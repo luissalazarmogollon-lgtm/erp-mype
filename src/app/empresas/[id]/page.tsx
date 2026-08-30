@@ -59,7 +59,7 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
     { modulos: ["insumos"], href: "insumos", label: "Insumos" },
     { modulos: ["mermas"], href: "mermas", label: "Mermas" },
     { modulos: ["gastos"], href: "gastos", label: "Gastos y Costos" },
-    { modulos: ["creditos"], href: "creditos", label: "Créditos (CxC)" },
+    { modulos: ["creditos"], href: "creditos", label: esServicios ? "Cuentas por Cobrar" : "Créditos (CxC)" },
     { modulos: ["cuentas_por_pagar", "cuentas_por_pagar_registrar"], href: "cuentas-por-pagar", label: "Cuentas por pagar" },
     { modulos: ["rrhh"], href: "rrhh", label: "RRHH" },
     { modulos: ["caja_chica"], href: "caja-chica", label: "Caja Chica" },
@@ -107,7 +107,7 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
       <div style={{ marginBottom: 28 }}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {ACCESOS_DIRECTOS.filter(
-            (a) => puedeVerAlguno(a.modulos) && !(esServicios && esSoloDeProductos(a.modulos)) && !(esServicios && a.href === "creditos")
+            (a) => puedeVerAlguno(a.modulos) && !(esServicios && esSoloDeProductos(a.modulos))
           ).map((a) => (
             <Link
               key={a.href}
@@ -120,7 +120,7 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
           ))}
         </div>
         {ACCESOS_DIRECTOS.filter(
-            (a) => puedeVerAlguno(a.modulos) && !(esServicios && esSoloDeProductos(a.modulos)) && !(esServicios && a.href === "creditos")
+            (a) => puedeVerAlguno(a.modulos) && !(esServicios && esSoloDeProductos(a.modulos))
           ).length === 0 && (
           <p style={{ color: "var(--ink-soft)", fontSize: 13 }}>
             No tienes acceso a ningún módulo de esta empresa todavía. Pídele al superadmin que te lo asigne.
