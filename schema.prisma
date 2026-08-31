@@ -1167,6 +1167,9 @@ model Tarea {
   horasReales         Decimal?           @map("horas_reales") @db.Decimal(5, 2)
   estado              String             @default("pendiente") // pendiente | en_progreso | completada | archivada
   whatsappEnviadoEn   DateTime?          @map("whatsapp_enviado_en")
+  // Acuse de recibo del trabajador ("ya lo vi") — independiente del
+  // estado: no fuerza a pasar a en_progreso, solo confirma que se enteró.
+  recibidoEn          DateTime?          @map("recibido_en")
   creadoPor           String             @map("creado_por") @db.Uuid
   creadoEn            DateTime           @default(now()) @map("creado_en")
 

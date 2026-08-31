@@ -1,22 +1,26 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
+import { getUsuarioActual, verificarAccesoAlguno } from "@/lib/auth";
+import { alertaVencimiento } from "@/lib/actividades";
 
 export const dynamic = "force-dynamic";
 
 // GET /api/empresas/[id]/actividades/tareas/mias — las tareas del
 // trabajador vinculado a la cuenta que está logueada ahora mismo
-// ("Mis actividades"). Si el usuario actual no tiene una ficha de RRHH
-// vinculada (es un asesor/admin, no un trabajador de campo con acceso),
-// devuelve vinculado:false y la pantalla simplemente no muestra nada acá
-// — es información normal, no un error.
+// ("Mis actividades"). Accesible tanto con el permiso completo
+// "actividades" (gestión del equipo) como con "actividades_propias"
+// (auto-servicio) — de hecho es la ÚNICA pantalla a la que puede entrar
+// alguien que solo tiene este último. Si el usuario actual no tiene una
+// ficha de RRHH vinculada (es un asesor/admin sin ficha, no un
+// trabajador de campo), devuelve vinculado:false y la pantalla
+// simplemente no muestra nada acá — es información normal, no un error.
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   const usuarioActual = await getUsuarioActual();
   if (!usuarioActual) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
   const empresaId = BigInt(params.id);
   try {
-    await verificarAccesoEmpresa(usuarioActual.id, empresaId, "actividades");
+    await verificarAccesoAlguno(usuarioActual.id, empresaId, ["actividades", "actividades_propias"]);
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 403 });
   }
@@ -46,7 +50,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
       fecha: t.fecha,
       horasEstimadas: Number(t.horasEstimadas),
       estado: t.estado,
-      atrasada: t.estado !== "completada" && new Date(t.fecha) < new Date(new Date().toISOString().slice(0, 10)),
+      recibidoEn: t.recibidoEn,
+      alertaVencimiento: alertaVencimiento(t.fecha, t.estado),
     })),
   });
 }

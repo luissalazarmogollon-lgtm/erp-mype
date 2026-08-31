@@ -23,6 +23,7 @@ type Tarea = {
   atrasada: boolean;
   whatsappEnviadoEn: string | null;
 };
+type AlertaVencimiento = "atrasada" | "hoy" | "manana" | null;
 type MiTarea = {
   id: string;
   titulo: string;
@@ -31,8 +32,16 @@ type MiTarea = {
   fecha: string;
   horasEstimadas: number;
   estado: string;
-  atrasada: boolean;
+  recibidoEn: string | null;
+  alertaVencimiento: AlertaVencimiento;
 };
+
+function textoAlerta(a: AlertaVencimiento) {
+  if (a === "atrasada") return "⚠ atrasada";
+  if (a === "hoy") return "⏰ vence hoy";
+  if (a === "manana") return "⏰ vence mañana";
+  return null;
+}
 
 function hoyISO() {
   return new Date().toISOString().slice(0, 10);
@@ -87,6 +96,9 @@ export default function ActividadesPage({ params }: { params: { id: string } }) 
   const [tipos, setTipos] = useState<TipoActividad[]>([]);
   const [tareasEquipo, setTareasEquipo] = useState<Tarea[]>([]);
   const [misTareas, setMisTareas] = useState<{ vinculado: boolean; tareas: MiTarea[] }>({ vinculado: false, tareas: [] });
+  // null mientras se resuelve — evita parpadear la vista completa antes de
+  // saber si el usuario solo tiene acceso de auto-servicio ("actividades_propias").
+  const [tieneAccesoCompleto, setTieneAccesoCompleto] = useState<boolean | null>(null);
 
   const [mostrarForm, setMostrarForm] = useState(false);
   const [mostrarNuevoTipo, setMostrarNuevoTipo] = useState(false);
@@ -123,8 +135,20 @@ export default function ActividadesPage({ params }: { params: { id: string } }) 
   }
 
   useEffect(() => {
-    cargarCatalogos();
-    cargarTareasEquipo();
+    // "Mis actividades" es lo único a lo que puede entrar alguien con
+    // acceso de auto-servicio ("actividades_propias") — el resto del
+    // tablero (catálogos, tareas de todo el equipo) es solo para quien
+    // tiene el permiso completo "actividades".
+    fetch(`/api/empresas/${empresaId}/mi-acceso`)
+      .then((r) => r.json())
+      .then((res) => {
+        const completo = !!(res.esSuperadminPlataforma || res.accesoTotal || (res.permisos ?? []).includes("actividades"));
+        setTieneAccesoCompleto(completo);
+        if (completo) {
+          cargarCatalogos();
+          cargarTareasEquipo();
+        }
+      });
     cargarMisTareas();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [empresaId]);
@@ -284,25 +308,33 @@ export default function ActividadesPage({ params }: { params: { id: string } }) 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8, gap: 16, flexWrap: "wrap" }}>
         <div>
           <h1 style={{ fontSize: 26, marginBottom: 4 }}>Actividades</h1>
-          <p style={{ color: "var(--ink-soft)", fontSize: 13 }}>Asigna actividades al equipo y sigue su cumplimiento.</p>
+          <p style={{ color: "var(--ink-soft)", fontSize: 13 }}>
+            {tieneAccesoCompleto
+              ? "Asigna actividades al equipo y sigue su cumplimiento."
+              : "Tus actividades asignadas."}
+          </p>
         </div>
-        <button
-          className="btn-primary"
-          onClick={() => {
-            setForm({ ...FORM_VACIO });
-            setError(null);
-            setMostrarForm(true);
-          }}
-        >
-          + Nueva actividad
-        </button>
+        {tieneAccesoCompleto && (
+          <button
+            className="btn-primary"
+            onClick={() => {
+              setForm({ ...FORM_VACIO });
+              setError(null);
+              setMostrarForm(true);
+            }}
+          >
+            + Nueva actividad
+          </button>
+        )}
       </div>
 
-      <p style={{ marginBottom: 24 }}>
-        <Link href={`/empresas/${empresaId}/actividades/clientes`} style={{ fontSize: 12.5, color: "var(--ink-soft)" }}>
-          Servicios por cliente (precio y rentabilidad) →
-        </Link>
-      </p>
+      {tieneAccesoCompleto && (
+        <p style={{ marginBottom: 24 }}>
+          <Link href={`/empresas/${empresaId}/actividades/clientes`} style={{ fontSize: 12.5, color: "var(--ink-soft)" }}>
+            Servicios por cliente (precio y rentabilidad) →
+          </Link>
+        </p>
+      )}
 
       {aviso && (
         <p className="field error" style={{ background: "var(--stamp)", color: "#fff", padding: 10, borderRadius: 6 }}>
@@ -410,6 +442,7 @@ export default function ActividadesPage({ params }: { params: { id: string } }) 
                   <p style={{ fontSize: 14, fontWeight: 500 }}>{t.titulo}</p>
                   <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
                     {t.clienteNombre ?? "Sin cliente"} · {fechaCorta(t.fecha)} · {t.horasEstimadas}h
+                    {t.recibidoEn ? " · visto" : ""}
                   </p>
                 </div>
                 <span
@@ -418,10 +451,10 @@ export default function ActividadesPage({ params }: { params: { id: string } }) 
                     fontSize: 10,
                     textTransform: "uppercase",
                     alignSelf: "center",
-                    color: t.atrasada ? "var(--alert)" : "var(--ink-soft)",
+                    color: t.alertaVencimiento === "atrasada" ? "var(--alert)" : t.alertaVencimiento ? "var(--stamp)" : "var(--ink-soft)",
                   }}
                 >
-                  {t.atrasada ? "⚠ atrasada" : t.estado.replace("_", " ")}
+                  {textoAlerta(t.alertaVencimiento) ?? t.estado.replace("_", " ")}
                 </span>
               </Link>
             ))}
@@ -429,7 +462,8 @@ export default function ActividadesPage({ params }: { params: { id: string } }) 
         )}
       </div>
 
-      {/* Actividades del equipo */}
+      {/* Actividades del equipo — solo para quien gestiona el equipo completo */}
+      {tieneAccesoCompleto && (
       <div className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 8 }}>
           <h2 style={{ fontSize: 16 }}>Actividades del equipo</h2>
@@ -561,6 +595,7 @@ export default function ActividadesPage({ params }: { params: { id: string } }) 
           )}
         </div>
       </div>
+      )}
     </main>
   );
 }

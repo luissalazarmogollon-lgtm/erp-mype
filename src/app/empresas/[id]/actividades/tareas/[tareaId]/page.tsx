@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
+type AlertaVencimiento = "atrasada" | "hoy" | "manana" | null;
 type Tarea = {
   id: string;
   empleadoId: string;
@@ -18,6 +19,8 @@ type Tarea = {
   horasReales: number | null;
   estado: string;
   whatsappEnviadoEn: string | null;
+  recibidoEn: string | null;
+  alertaVencimiento: AlertaVencimiento;
 };
 
 export default function TareaDetallePage({ params }: { params: { id: string; tareaId: string } }) {
@@ -47,6 +50,17 @@ export default function TareaDetallePage({ params }: { params: { id: string; tar
         estado,
         ...(estado === "completada" && horasReales ? { horasReales: Number(horasReales) } : {}),
       }),
+    });
+    setGuardando(false);
+    cargar();
+  }
+
+  async function marcarRecibido() {
+    setGuardando(true);
+    await fetch(`/api/empresas/${empresaId}/actividades/tareas/${tareaId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ marcarRecibido: true }),
     });
     setGuardando(false);
     cargar();
@@ -95,6 +109,24 @@ export default function TareaDetallePage({ params }: { params: { id: string; tar
         {tarea.tipoActividadNombre ? ` · ${tarea.tipoActividadNombre}` : ""}
       </p>
 
+      {tarea.alertaVencimiento && (
+        <p
+          className="mono"
+          style={{
+            fontSize: 12,
+            padding: "8px 12px",
+            borderRadius: "var(--radius)",
+            marginBottom: 16,
+            background: tarea.alertaVencimiento === "atrasada" ? "var(--alert-bg)" : "var(--stamp-bg)",
+            color: tarea.alertaVencimiento === "atrasada" ? "var(--alert)" : "var(--stamp)",
+          }}
+        >
+          {tarea.alertaVencimiento === "atrasada" && "⚠ Esta tarea está atrasada."}
+          {tarea.alertaVencimiento === "hoy" && "⏰ Esta tarea vence hoy."}
+          {tarea.alertaVencimiento === "manana" && "⏰ Esta tarea vence mañana."}
+        </p>
+      )}
+
       <div className="card" style={{ marginBottom: 20 }}>
         {tarea.descripcion && <p style={{ fontSize: 13, marginBottom: 12 }}>{tarea.descripcion}</p>}
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
@@ -105,6 +137,12 @@ export default function TareaDetallePage({ params }: { params: { id: string; tar
           <span style={{ fontSize: 13 }}>Estado</span>
           <span className="mono" style={{ fontSize: 13, textTransform: "uppercase" }}>{tarea.estado.replace("_", " ")}</span>
         </div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+          <span style={{ fontSize: 13 }}>Recibido por el trabajador</span>
+          <span className="mono" style={{ fontSize: 13, color: tarea.recibidoEn ? "var(--teal)" : "var(--ink-soft)" }}>
+            {tarea.recibidoEn ? new Date(tarea.recibidoEn).toLocaleString("es-PE") : "Todavía no"}
+          </span>
+        </div>
         {tarea.whatsappEnviadoEn && (
           <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
             Avisado por WhatsApp el {new Date(tarea.whatsappEnviadoEn).toLocaleString("es-PE")}
@@ -113,6 +151,11 @@ export default function TareaDetallePage({ params }: { params: { id: string; tar
       </div>
 
       <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
+        {!tarea.recibidoEn && (
+          <button className="btn-primary" disabled={guardando} onClick={marcarRecibido}>
+            ✓ Recibido
+          </button>
+        )}
         <button className="btn-ghost" onClick={enviarWhatsapp}>
           {tarea.whatsappEnviadoEn ? "Reenviar por WhatsApp" : "Enviar por WhatsApp"}
         </button>

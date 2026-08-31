@@ -97,3 +97,31 @@ export async function horasComprometidasPorEmpleado(empresaId: bigint, excluirAs
   }
   return mapa;
 }
+
+/**
+ * Alerta de vencimiento de una tarea, para la vista de "Mis actividades"
+ * del trabajador y el detalle de la tarea: "atrasada" si la fecha ya pasó
+ * y sigue sin completarse, "hoy"/"manana" si está por vencer pronto, o
+ * null si está completada/archivada o falta más de un día. No aplica a
+ * ningún cálculo de capacidad ni reporte — es solo un aviso visual.
+ */
+export type AlertaVencimiento = "atrasada" | "hoy" | "manana" | null;
+
+export function alertaVencimiento(fecha: Date | string, estado: string): AlertaVencimiento {
+  if (estado === "completada" || estado === "archivada") return null;
+
+  const aSoloFecha = (d: Date | string) => {
+    const iso = typeof d === "string" ? d : d.toISOString();
+    return new Date(iso.slice(0, 10));
+  };
+
+  const hoy = aSoloFecha(new Date());
+  const manana = new Date(hoy);
+  manana.setUTCDate(manana.getUTCDate() + 1);
+  const f = aSoloFecha(fecha);
+
+  if (f.getTime() < hoy.getTime()) return "atrasada";
+  if (f.getTime() === hoy.getTime()) return "hoy";
+  if (f.getTime() === manana.getTime()) return "manana";
+  return null;
+}

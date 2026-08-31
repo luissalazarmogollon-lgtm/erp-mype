@@ -18,9 +18,9 @@ const crearAccesoSchema = z.object({
 // pueda iniciar sesión y ver "Mis actividades" en Gestión de Actividades.
 // Igual que /api/empresas/[id]/usuarios, la creación de cuentas queda
 // reservada al superadmin de la plataforma (ver nota en la arquitectura,
-// sección 2). El acceso que se otorga es limitado: solo el módulo
-// "actividades" en esta empresa — un trabajador de campo no necesita ver
-// el resto del sistema.
+// sección 2). El acceso que se otorga es limitado: solo "actividades_propias"
+// en esta empresa (ver/actualizar sus propias tareas) — un trabajador de
+// campo no necesita ver el resto del sistema ni gestionar al equipo.
 export async function POST(
   request: Request,
   { params }: { params: { id: string; empleadoId: string } }
@@ -110,7 +110,12 @@ export async function POST(
           tipoActor: "cliente",
           rolOperativoId: rolOperativo.id,
           accesoTotal: false,
-          permisos: ["actividades"],
+          // Un trabajador de RRHH con acceso propio ve y actualiza SOLO sus
+          // tareas asignadas ("Mis actividades") — no el tablero del equipo
+          // completo. Para dar acceso de gestión completa (crear/asignar
+          // tareas a cualquiera, reportes, etc.) se usa el permiso
+          // "actividades" desde Asignar personas, no este flujo.
+          permisos: ["actividades_propias"],
         },
       });
     }
