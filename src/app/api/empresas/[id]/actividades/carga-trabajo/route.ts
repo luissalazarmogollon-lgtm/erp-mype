@@ -54,7 +54,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
   const [empleados, tareas] = await Promise.all([
     prisma.empleado.findMany({ where: { empresaId, estado: "activo" }, orderBy: { nombres: "asc" } }),
     prisma.tarea.findMany({
-      where: { empresaId, fecha: { gte: desde, lte: hasta }, estado: { not: "completada" } },
+      where: { empresaId, fecha: { gte: desde, lte: hasta }, estado: { notIn: ["completada", "archivada"] } },
     }),
   ]);
 

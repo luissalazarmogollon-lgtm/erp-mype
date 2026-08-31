@@ -83,6 +83,9 @@ model Usuario {
   empresasComoAsesorPrincipal Empresa[]        @relation("AsesorPrincipal")
   asignaciones                UsuarioEmpresa[]
   auditorias                  Auditoria[]
+  // Ficha de RRHH (Empleado) vinculada a esta cuenta, si el trabajador
+  // tiene acceso para ver "Mis actividades" en Gestión de Actividades.
+  empleado                    Empleado?
 
   @@map("usuarios")
 }
@@ -687,6 +690,12 @@ model Empleado {
   telefono                String?  @map("telefono")
   horasCapacidadDiaria    Decimal  @default(9) @map("horas_capacidad_diaria") @db.Decimal(4, 2)
   costoHoraManual         Decimal? @map("costo_hora_manual") @db.Decimal(10, 2)
+  // Cuenta de acceso (Supabase Auth / Usuario) vinculada a este trabajador,
+  // para que pueda iniciar sesión y ver "Mis actividades" — opcional: un
+  // trabajador de campo puede seguir sin cuenta y solo recibir el aviso
+  // por WhatsApp. Se crea/vincula desde su ficha en RRHH.
+  usuarioId               String?  @unique @map("usuario_id") @db.Uuid
+  usuario                 Usuario? @relation(fields: [usuarioId], references: [id])
 
   adelantos               AdelantoSueldo[]
   asignacionesCliente     AsignacionClienteEmpleado[]
@@ -1128,7 +1137,7 @@ model Tarea {
   fecha               DateTime           @db.Date
   horasEstimadas      Decimal            @map("horas_estimadas") @db.Decimal(5, 2)
   horasReales         Decimal?           @map("horas_reales") @db.Decimal(5, 2)
-  estado              String             @default("pendiente") // pendiente | en_progreso | completada
+  estado              String             @default("pendiente") // pendiente | en_progreso | completada | archivada
   whatsappEnviadoEn   DateTime?          @map("whatsapp_enviado_en")
   creadoPor           String             @map("creado_por") @db.Uuid
   creadoEn            DateTime           @default(now()) @map("creado_en")

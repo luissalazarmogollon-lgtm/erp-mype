@@ -19,6 +19,8 @@ type DetalleEmpleado = {
   costoHoraManual: string | null;
   costoHora: number;
   capacidadMensualHoras: number;
+  usuarioId: string | null;
+  usuarioEmail: string | null;
   sueldoTotal: number;
   totalAdelantosPendientes: number;
   saldoPorRecibir: number;
@@ -35,11 +37,16 @@ export default function DetalleTrabajadorPage({ params }: { params: { id: string
   const empleadoId = params.empleadoId;
   const [empleado, setEmpleado] = useState<DetalleEmpleado | null>(null);
   const [cuentasBancarias, setCuentasBancarias] = useState<CuentaOpcion[]>([]);
+  const [esSuperadmin, setEsSuperadmin] = useState(false);
   const [editando, setEditando] = useState(false);
   const [mostrarFormAdelanto, setMostrarFormAdelanto] = useState(false);
+  const [mostrarFormAcceso, setMostrarFormAcceso] = useState(false);
+  const [formAcceso, setFormAcceso] = useState({ email: "", password: "" });
   const [error, setError] = useState<string | null>(null);
   const [errorAdelanto, setErrorAdelanto] = useState<string | null>(null);
+  const [errorAcceso, setErrorAcceso] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const [guardandoAcceso, setGuardandoAcceso] = useState(false);
 
   const [formEdit, setFormEdit] = useState({
     nombres: "", apellidos: "", docIdentidad: "", cargo: "", fechaIngreso: hoyISO(),
@@ -49,12 +56,14 @@ export default function DetalleTrabajadorPage({ params }: { params: { id: string
   const [formAdelanto, setFormAdelanto] = useState({ monto: 0, fecha: hoyISO(), motivo: "", cuentaBancariaId: "" });
 
   async function cargar() {
-    const [resEmpleado, resCatalogos] = await Promise.all([
+    const [resEmpleado, resCatalogos, resMiAcceso] = await Promise.all([
       fetch(`/api/empresas/${empresaId}/empleados/${empleadoId}`).then((r) => r.json()),
       fetch(`/api/empresas/${empresaId}/catalogos`).then((r) => r.json()),
+      fetch(`/api/empresas/${empresaId}/mi-acceso`).then((r) => r.json()),
     ]);
     setEmpleado(resEmpleado);
     setCuentasBancarias(resCatalogos.cuentasBancarias ?? []);
+    setEsSuperadmin(!!resMiAcceso.esSuperadminPlataforma);
   }
 
   useEffect(() => {
@@ -127,6 +136,26 @@ export default function DetalleTrabajadorPage({ params }: { params: { id: string
     cargar();
   }
 
+  async function handleCrearAcceso(e: React.FormEvent) {
+    e.preventDefault();
+    setErrorAcceso(null);
+    setGuardandoAcceso(true);
+    const res = await fetch(`/api/empresas/${empresaId}/empleados/${empleadoId}/crear-acceso`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(formAcceso),
+    });
+    setGuardandoAcceso(false);
+    if (!res.ok) {
+      const data = await res.json();
+      setErrorAcceso(data.error?.toString() ?? "No se pudo crear el acceso.");
+      return;
+    }
+    setFormAcceso({ email: "", password: "" });
+    setMostrarFormAcceso(false);
+    cargar();
+  }
+
   if (!empleado) {
     return (
       <main style={{ maxWidth: 700, margin: "0 auto", padding: "32px 24px" }}>
@@ -180,6 +209,65 @@ export default function DetalleTrabajadorPage({ params }: { params: { id: string
           <span className="mono" style={{ fontSize: 13 }}>{empleado.telefono ?? "No registrado"}</span>
         </div>
       </div>
+
+      {esSuperadmin && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginBottom: 10, textTransform: "uppercase" }}>
+            Acceso al sistema
+          </p>
+          {empleado.usuarioId ? (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 13 }}>
+                Tiene acceso — puede iniciar sesión y ver <b>Mis actividades</b>
+              </span>
+              <span className="mono" style={{ fontSize: 12, color: "var(--teal)" }}>{empleado.usuarioEmail}</span>
+            </div>
+          ) : !mostrarFormAcceso ? (
+            <div>
+              <p style={{ fontSize: 13, color: "var(--ink-soft)", marginBottom: 12 }}>
+                Este trabajador todavía no tiene una cuenta de acceso. Sin ella, solo recibe sus tareas por
+                WhatsApp; con ella, puede iniciar sesión y ver su lista de &quot;Mis actividades&quot; directamente.
+              </p>
+              <button className="btn-ghost" onClick={() => setMostrarFormAcceso(true)}>
+                + Crear acceso
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleCrearAcceso}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div className="field">
+                  <label>Correo</label>
+                  <input
+                    type="email"
+                    value={formAcceso.email}
+                    onChange={(e) => setFormAcceso({ ...formAcceso, email: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="field">
+                  <label>Contraseña temporal (mínimo 8 caracteres)</label>
+                  <input
+                    type="text"
+                    value={formAcceso.password}
+                    onChange={(e) => setFormAcceso({ ...formAcceso, password: e.target.value })}
+                    placeholder="La puede cambiar después"
+                    required
+                  />
+                </div>
+              </div>
+              {errorAcceso && <p className="field error">{errorAcceso}</p>}
+              <div style={{ display: "flex", gap: 10 }}>
+                <button type="submit" className="btn-primary" disabled={guardandoAcceso}>
+                  {guardandoAcceso ? "Creando..." : "Crear acceso"}
+                </button>
+                <button type="button" className="btn-ghost" onClick={() => setMostrarFormAcceso(false)}>
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
 
       {!editando ? (
         <button className="btn-ghost" onClick={abrirEdicion} style={{ marginBottom: 20 }}>

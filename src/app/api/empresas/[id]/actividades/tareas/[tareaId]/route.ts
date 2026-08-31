@@ -11,7 +11,7 @@ const editarTareaSchema = z.object({
   descripcion: z.string().optional(),
   horasEstimadas: z.number().min(0.1).optional(),
   horasReales: z.number().min(0).optional(),
-  estado: z.enum(["pendiente", "en_progreso", "completada"]).optional(),
+  estado: z.enum(["pendiente", "en_progreso", "completada", "archivada"]).optional(),
   marcarWhatsappEnviado: z.boolean().optional(),
 });
 

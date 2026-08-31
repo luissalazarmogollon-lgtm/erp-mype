@@ -42,7 +42,10 @@ export async function GET(
   }
 
   const empleadoId = BigInt(params.empleadoId);
-  const empleado = await prisma.empleado.findFirst({ where: { id: empleadoId, empresaId } });
+  const empleado = await prisma.empleado.findFirst({
+    where: { id: empleadoId, empresaId },
+    include: { usuario: true },
+  });
   if (!empleado) return NextResponse.json({ error: "Trabajador no encontrado" }, { status: 404 });
 
   const adelantos = await prisma.adelantoSueldo.findMany({
@@ -73,6 +76,8 @@ export async function GET(
     costoHoraManual: empleado.costoHoraManual ? empleado.costoHoraManual.toString() : null,
     costoHora: Number(costoHoraEmpleado(empleado).toFixed(2)),
     capacidadMensualHoras: Number(capacidadMensualHoras(empleado).toFixed(1)),
+    usuarioId: empleado.usuarioId,
+    usuarioEmail: empleado.usuario?.email ?? null,
     sueldoTotal,
     totalAdelantosPendientes,
     saldoPorRecibir,

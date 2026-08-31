@@ -38,6 +38,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
   const hasta = searchParams.get("hasta");
   const empleadoId = searchParams.get("empleadoId");
   const clienteId = searchParams.get("clienteId");
+  const estado = searchParams.get("estado");
+  const incluirArchivadas = searchParams.get("incluirArchivadas") === "true";
 
   const where: Prisma.TareaWhereInput = { empresaId };
   if (fecha) where.fecha = new Date(fecha);
@@ -49,6 +51,11 @@ export async function GET(request: Request, { params }: { params: { id: string }
   }
   if (empleadoId) where.empleadoId = BigInt(empleadoId);
   if (clienteId) where.clienteId = BigInt(clienteId);
+  // Por defecto, las tareas archivadas (limpiadas del tablero del equipo)
+  // quedan fuera de cualquier listado — hay que pedirlas explícitamente
+  // (estado=archivada, o incluirArchivadas=true junto a otro filtro).
+  if (estado) where.estado = estado;
+  else if (!incluirArchivadas) where.estado = { not: "archivada" };
 
   const tareas = await prisma.tarea.findMany({
     where,
@@ -56,11 +63,14 @@ export async function GET(request: Request, { params }: { params: { id: string }
     orderBy: [{ fecha: "asc" }, { creadoEn: "asc" }],
   });
 
+  const hoy = new Date(new Date().toISOString().slice(0, 10));
+
   return NextResponse.json(
     tareas.map((t) => ({
       id: t.id.toString(),
       empleadoId: t.empleadoId.toString(),
       empleadoNombre: `${t.empleado.nombres} ${t.empleado.apellidos}`,
+      empleadoCargo: t.empleado.cargo,
       empleadoTelefono: t.empleado.telefono,
       clienteId: t.clienteId ? t.clienteId.toString() : null,
       clienteNombre: t.cliente?.nombre ?? null,
@@ -72,6 +82,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
       horasEstimadas: Number(t.horasEstimadas),
       horasReales: t.horasReales ? Number(t.horasReales) : null,
       estado: t.estado,
+      atrasada: t.estado !== "completada" && t.estado !== "archivada" && new Date(t.fecha) < hoy,
       whatsappEnviadoEn: t.whatsappEnviadoEn,
     }))
   );
@@ -119,7 +130,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
   const fecha = new Date(datos.fecha);
   const tareasDelDia = await prisma.tarea.findMany({
-    where: { empleadoId, fecha, estado: { not: "completada" } },
+    where: { empleadoId, fecha, estado: { notIn: ["completada", "archivada"] } },
   });
   const horasYaAsignadas = tareasDelDia.reduce((acc, t) => acc + Number(t.horasEstimadas), 0);
   const capacidadDiaria = Number(empleado.horasCapacidadDiaria);
