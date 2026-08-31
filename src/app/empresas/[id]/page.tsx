@@ -76,7 +76,7 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
     },
     { modulos: ["compras"], href: "compras", label: "Compras" },
     { modulos: ["compras"], href: "proveedores", label: "Proveedores" },
-    { modulos: ["actividades"], href: "actividades", label: "Gestión de Actividades" },
+    { modulos: ["actividades", "actividades_propias"], href: "actividades", label: "Gestión de Actividades" },
   ];
 
   return (
@@ -126,7 +126,7 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
           ))}
         </div>
         {ACCESOS_DIRECTOS.filter(
-            (a) => puedeVerAlguno(a.modulos) && !(esServicios && esSoloDeProductos(a.modulos))
+            (a) => puedeVerAlguno(a.modulos) && !seOculta(a.modulos)
           ).length === 0 && (
           <p style={{ color: "var(--ink-soft)", fontSize: 13 }}>
             No tienes acceso a ningún módulo de esta empresa todavía. Pídele al superadmin que te lo asigne.
@@ -141,7 +141,14 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
         )}
       </div>
 
-      {(acceso.tipoActor === "superadmin" || acceso.tipoActor === "asesor" || acceso.tipoActor === "asistente") && (
+      {/* "Equipo asignado" expone correos y niveles de acceso de TODAS las
+          personas asignadas a esta empresa — es información de gestión, no
+          algo que deba ver cualquier asesor/asistente con acceso recortado
+          (ej. alguien con solo "actividades_propias"), ni un cliente. Se
+          exige accesoTotal además de no ser "cliente" — antes solo se
+          exigía el tipoActor, así que un asesor con permisos limitados
+          también la veía. */}
+      {acceso.tipoActor !== "cliente" && acceso.accesoTotal && (
         <>
           <h2 style={{ fontSize: 18, marginBottom: 12 }}>Equipo asignado</h2>
           {usuarioActual.esSuperadminPlataforma && <InvitarUsuarioForm empresaId={params.id} esServicios={esServicios} />}
