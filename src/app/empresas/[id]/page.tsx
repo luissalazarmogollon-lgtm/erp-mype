@@ -96,19 +96,25 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
           </div>
         )}
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 28, flexWrap: "wrap" }}>
-        <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)", margin: 0 }}>
-          {empresa.rubro.nombre} · {empresa.tipoNegocio.nombre} · {empresa.monedaOperacion} ·{" "}
-          {empresa.aplicaIgv ? `IGV ${empresa.tasaIgv}%` : "Sin IGV"}
-        </p>
-        {usuarioActual.esSuperadminPlataforma && (
-          <CambiarTipoNegocio
-            empresaId={params.id}
-            tipoNegocioActualId={empresa.tipoNegocioId}
-            tiposNegocio={tiposNegocio.map((t) => ({ id: t.id, nombre: t.nombre }))}
-          />
-        )}
-      </div>
+      {/* La ficha técnica (rubro, tipo de negocio, moneda, IGV) es
+          información de configuración del negocio — sin utilidad para
+          alguien con acceso recortado (ej. auto-servicio de Actividades),
+          así que solo se muestra a quien tiene acceso completo. */}
+      {acceso.accesoTotal && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 28, flexWrap: "wrap" }}>
+          <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)", margin: 0 }}>
+            {empresa.rubro.nombre} · {empresa.tipoNegocio.nombre} · {empresa.monedaOperacion} ·{" "}
+            {empresa.aplicaIgv ? `IGV ${empresa.tasaIgv}%` : "Sin IGV"}
+          </p>
+          {usuarioActual.esSuperadminPlataforma && (
+            <CambiarTipoNegocio
+              empresaId={params.id}
+              tipoNegocioActualId={empresa.tipoNegocioId}
+              tiposNegocio={tiposNegocio.map((t) => ({ id: t.id, nombre: t.nombre }))}
+            />
+          )}
+        </div>
+      )}
 
       <div style={{ marginBottom: 28 }}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -132,7 +138,7 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
             No tienes acceso a ningún módulo de esta empresa todavía. Pídele al superadmin que te lo asigne.
           </p>
         )}
-        {esServicios && (
+        {esServicios && acceso.accesoTotal && (
           <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 10 }}>
             Esta empresa es de tipo Servicios: Insumos, Mermas, Productos y recetas, Ventas por producto (POS),
             Compras, Proveedores y Solicitudes de Pedido están ocultos porque no maneja inventario. En su lugar
