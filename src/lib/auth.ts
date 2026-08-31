@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { MODULOS_SOLO_PRODUCTOS, esEmpresaDeServicios, type ModuloKey } from "@/lib/permisosModulo";
+import { MODULOS_SOLO_PRODUCTOS, MODULOS_SOLO_SERVICIOS, esEmpresaDeServicios, type ModuloKey } from "@/lib/permisosModulo";
 
 /**
  * Resuelve quién es el usuario autenticado y a qué empresas tiene acceso.
@@ -93,6 +93,12 @@ export async function verificarAccesoEmpresa(
     throw new Error("Este módulo no está disponible para empresas de tipo Servicios");
   }
 
+  // Simétrico al bloqueo anterior: un módulo exclusivo de empresas de
+  // Servicios (ej. "actividades") no aplica a una empresa de Productos.
+  if (moduloRequerido && MODULOS_SOLO_SERVICIOS.includes(moduloRequerido) && !esEmpresaDeServicios(asignacion.empresa.tipoNegocio.nombre)) {
+    throw new Error("Este módulo no está disponible para empresas de tipo Productos");
+  }
+
   if (moduloRequerido && !asignacion.accesoTotal) {
     const permisos = (asignacion.permisos as unknown as string[] | null) ?? [];
     if (!permisos.includes(moduloRequerido)) {
@@ -146,6 +152,16 @@ export async function verificarAccesoAlguno(
     esEmpresaDeServicios(asignacion.empresa.tipoNegocio.nombre)
   ) {
     throw new Error("Este módulo no está disponible para empresas de tipo Servicios");
+  }
+
+  // Simétrico: si TODOS los módulos que darían acceso son exclusivos de
+  // empresas de Servicios, no aplican en una empresa de Productos.
+  if (
+    modulosPermitidos.length > 0 &&
+    modulosPermitidos.every((m) => MODULOS_SOLO_SERVICIOS.includes(m)) &&
+    !esEmpresaDeServicios(asignacion.empresa.tipoNegocio.nombre)
+  ) {
+    throw new Error("Este módulo no está disponible para empresas de tipo Productos");
   }
 
   if (!asignacion.accesoTotal) {

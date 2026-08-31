@@ -14,6 +14,10 @@ type Empleado = {
   sueldoBasico: string;
   otrosIngresos: string;
   cuentaBancaria: string | null;
+  telefono: string | null;
+  horasCapacidadDiaria: string;
+  costoHoraManual: string | null;
+  costoHora: number;
 };
 type Adelanto = { id: string; empleadoId: string; monto: string; estado: string };
 
@@ -38,6 +42,8 @@ export default function RrhhPage({ params }: { params: { id: string } }) {
     sueldoBasico: 0,
     otrosIngresos: 0,
     cuentaBancaria: "",
+    telefono: "",
+    horasCapacidadDiaria: 9,
   });
 
   async function cargar() {
@@ -77,6 +83,7 @@ export default function RrhhPage({ params }: { params: { id: string } }) {
     setFormEmpleado({
       nombres: "", apellidos: "", docIdentidad: "", cargo: "", fechaIngreso: hoyISO(),
       tipoContrato: "", sueldoBasico: 0, otrosIngresos: 0, cuentaBancaria: "",
+      telefono: "", horasCapacidadDiaria: 9,
     });
     setMostrarFormEmpleado(false);
     cargar();
@@ -133,6 +140,26 @@ export default function RrhhPage({ params }: { params: { id: string } }) {
             <div className="field">
               <label>Otros ingresos fijos (S/, opcional)</label>
               <input type="number" step="0.01" value={formEmpleado.otrosIngresos} onChange={(e) => setFormEmpleado({ ...formEmpleado, otrosIngresos: Number(e.target.value) })} />
+            </div>
+            <div className="field">
+              <label>WhatsApp del trabajador (opcional)</label>
+              <input
+                value={formEmpleado.telefono}
+                onChange={(e) => setFormEmpleado({ ...formEmpleado, telefono: e.target.value })}
+                placeholder="Ej: 51987654321"
+              />
+            </div>
+            <div className="field">
+              <label>Capacidad de horas productivas por día</label>
+              <input
+                type="number"
+                step="0.5"
+                value={formEmpleado.horasCapacidadDiaria}
+                onChange={(e) => setFormEmpleado({ ...formEmpleado, horasCapacidadDiaria: Number(e.target.value) })}
+              />
+              <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 4 }}>
+                Usado por Gestión de Actividades para no sobrecargarlo de tareas. Por defecto 9h.
+              </p>
             </div>
             <div className="field" style={{ gridColumn: "span 2" }}>
               <label>Cuenta bancaria del trabajador (opcional, para transferencia de sueldo)</label>

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { mensajeErrorZod } from "@/lib/zodError";
 import { prisma } from "@/lib/prisma";
 import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
+import { costoHoraEmpleado } from "@/lib/actividades";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,10 @@ const crearEmpleadoSchema = z.object({
   sueldoBasico: z.number().min(0),
   otrosIngresos: z.number().min(0).default(0),
   cuentaBancaria: z.string().optional(),
+  // Módulo Gestión de Actividades (empresas de Servicios):
+  telefono: z.string().optional(), // WhatsApp, para avisar tareas asignadas
+  horasCapacidadDiaria: z.number().min(0).max(24).default(9),
+  costoHoraManual: z.number().min(0).optional(),
 });
 
 // GET /api/empresas/[id]/empleados
@@ -47,6 +52,10 @@ export async function GET(request: Request, { params }: { params: { id: string }
       sueldoBasico: e.sueldoBasico.toString(),
       otrosIngresos: e.otrosIngresos.toString(),
       cuentaBancaria: e.cuentaBancaria,
+      telefono: e.telefono,
+      horasCapacidadDiaria: e.horasCapacidadDiaria.toString(),
+      costoHoraManual: e.costoHoraManual ? e.costoHoraManual.toString() : null,
+      costoHora: Number(costoHoraEmpleado(e).toFixed(2)),
     }))
   );
 }
@@ -81,6 +90,9 @@ export async function POST(request: Request, { params }: { params: { id: string 
       sueldoBasico: datos.sueldoBasico,
       otrosIngresos: datos.otrosIngresos,
       cuentaBancaria: datos.cuentaBancaria || null,
+      telefono: datos.telefono || null,
+      horasCapacidadDiaria: datos.horasCapacidadDiaria,
+      costoHoraManual: datos.costoHoraManual ?? null,
     },
   });
 

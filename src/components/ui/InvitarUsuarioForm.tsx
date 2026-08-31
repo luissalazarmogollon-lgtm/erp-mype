@@ -2,14 +2,16 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { MODULOS_DISPONIBLES, MODULOS_SOLO_PRODUCTOS, etiquetaModulo } from "@/lib/permisosModulo";
+import { MODULOS_DISPONIBLES, MODULOS_SOLO_PRODUCTOS, MODULOS_SOLO_SERVICIOS, etiquetaModulo } from "@/lib/permisosModulo";
 
 export function InvitarUsuarioForm({ empresaId, esServicios = false }: { empresaId: string; esServicios?: boolean }) {
   // En una empresa de Servicios no tiene sentido ofrecer permisos de
-  // módulos de inventario/compras — no existen para esa empresa.
-  const modulosOfrecidos = esServicios
-    ? MODULOS_DISPONIBLES.filter((m) => !MODULOS_SOLO_PRODUCTOS.includes(m.key))
-    : MODULOS_DISPONIBLES;
+  // módulos de inventario/compras — no existen para esa empresa. Al revés,
+  // en una empresa de Productos no se ofrece "actividades" (Gestión de
+  // Actividades es exclusivo de Servicios).
+  const modulosOfrecidos = MODULOS_DISPONIBLES.filter((m) =>
+    esServicios ? !MODULOS_SOLO_PRODUCTOS.includes(m.key) : !MODULOS_SOLO_SERVICIOS.includes(m.key)
+  );
   const router = useRouter();
   const [abierto, setAbierto] = useState(false);
   const [error, setError] = useState<string | null>(null);

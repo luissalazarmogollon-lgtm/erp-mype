@@ -14,6 +14,11 @@ type DetalleEmpleado = {
   sueldoBasico: string;
   otrosIngresos: string;
   cuentaBancaria: string | null;
+  telefono: string | null;
+  horasCapacidadDiaria: string;
+  costoHoraManual: string | null;
+  costoHora: number;
+  capacidadMensualHoras: number;
   sueldoTotal: number;
   totalAdelantosPendientes: number;
   saldoPorRecibir: number;
@@ -39,6 +44,7 @@ export default function DetalleTrabajadorPage({ params }: { params: { id: string
   const [formEdit, setFormEdit] = useState({
     nombres: "", apellidos: "", docIdentidad: "", cargo: "", fechaIngreso: hoyISO(),
     tipoContrato: "", sueldoBasico: 0, otrosIngresos: 0, cuentaBancaria: "",
+    telefono: "", horasCapacidadDiaria: 9, costoHoraManual: "" as string | number,
   });
   const [formAdelanto, setFormAdelanto] = useState({ monto: 0, fecha: hoyISO(), motivo: "", cuentaBancariaId: "" });
 
@@ -68,6 +74,9 @@ export default function DetalleTrabajadorPage({ params }: { params: { id: string
       sueldoBasico: Number(empleado.sueldoBasico),
       otrosIngresos: Number(empleado.otrosIngresos),
       cuentaBancaria: empleado.cuentaBancaria ?? "",
+      telefono: empleado.telefono ?? "",
+      horasCapacidadDiaria: Number(empleado.horasCapacidadDiaria),
+      costoHoraManual: empleado.costoHoraManual ?? "",
     });
     setEditando(true);
     setError(null);
@@ -80,7 +89,10 @@ export default function DetalleTrabajadorPage({ params }: { params: { id: string
     const res = await fetch(`/api/empresas/${empresaId}/empleados/${empleadoId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formEdit),
+      body: JSON.stringify({
+        ...formEdit,
+        costoHoraManual: formEdit.costoHoraManual === "" ? undefined : Number(formEdit.costoHoraManual),
+      }),
     });
     setGuardando(false);
     if (!res.ok) {
@@ -151,6 +163,24 @@ export default function DetalleTrabajadorPage({ params }: { params: { id: string
         </div>
       </div>
 
+      <div className="card" style={{ marginBottom: 20 }}>
+        <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginBottom: 10, textTransform: "uppercase" }}>
+          Gestión de Actividades
+        </p>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+          <span style={{ fontSize: 13 }}>Capacidad diaria</span>
+          <span className="mono" style={{ fontSize: 13 }}>{Number(empleado.horasCapacidadDiaria).toFixed(1)} h/día (~{empleado.capacidadMensualHoras.toFixed(0)} h/mes)</span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+          <span style={{ fontSize: 13 }}>Costo por hora {empleado.costoHoraManual ? "(manual)" : "(calculado de su planilla)"}</span>
+          <span className="mono" style={{ fontSize: 13 }}>S/ {empleado.costoHora.toFixed(2)}</span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <span style={{ fontSize: 13 }}>WhatsApp</span>
+          <span className="mono" style={{ fontSize: 13 }}>{empleado.telefono ?? "No registrado"}</span>
+        </div>
+      </div>
+
       {!editando ? (
         <button className="btn-ghost" onClick={abrirEdicion} style={{ marginBottom: 20 }}>
           Editar datos del trabajador
@@ -190,6 +220,33 @@ export default function DetalleTrabajadorPage({ params }: { params: { id: string
             <div className="field">
               <label>Otros ingresos fijos (S/)</label>
               <input type="number" step="0.01" value={formEdit.otrosIngresos} onChange={(e) => setFormEdit({ ...formEdit, otrosIngresos: Number(e.target.value) })} />
+            </div>
+            <div className="field">
+              <label>WhatsApp del trabajador</label>
+              <input
+                value={formEdit.telefono}
+                onChange={(e) => setFormEdit({ ...formEdit, telefono: e.target.value })}
+                placeholder="Ej: 51987654321"
+              />
+            </div>
+            <div className="field">
+              <label>Capacidad de horas productivas por día</label>
+              <input
+                type="number"
+                step="0.5"
+                value={formEdit.horasCapacidadDiaria}
+                onChange={(e) => setFormEdit({ ...formEdit, horasCapacidadDiaria: Number(e.target.value) })}
+              />
+            </div>
+            <div className="field" style={{ gridColumn: "span 2" }}>
+              <label>Costo por hora manual (opcional — si no se indica, se calcula del sueldo)</label>
+              <input
+                type="number"
+                step="0.01"
+                value={formEdit.costoHoraManual}
+                onChange={(e) => setFormEdit({ ...formEdit, costoHoraManual: e.target.value })}
+                placeholder="Ej: incluir cargas sociales u overhead"
+              />
             </div>
             <div className="field" style={{ gridColumn: "span 2" }}>
               <label>Cuenta bancaria del trabajador</label>

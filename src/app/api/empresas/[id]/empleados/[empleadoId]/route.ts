@@ -3,6 +3,7 @@ import { z } from "zod";
 import { mensajeErrorZod } from "@/lib/zodError";
 import { prisma } from "@/lib/prisma";
 import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
+import { costoHoraEmpleado, capacidadMensualHoras } from "@/lib/actividades";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,9 @@ const editarEmpleadoSchema = z.object({
   sueldoBasico: z.number().min(0),
   otrosIngresos: z.number().min(0).default(0),
   cuentaBancaria: z.string().optional(),
+  telefono: z.string().optional(),
+  horasCapacidadDiaria: z.number().min(0).max(24).default(9),
+  costoHoraManual: z.number().min(0).optional(),
 });
 
 // GET /api/empresas/[id]/empleados/[empleadoId]
@@ -64,6 +68,11 @@ export async function GET(
     sueldoBasico: empleado.sueldoBasico.toString(),
     otrosIngresos: empleado.otrosIngresos.toString(),
     cuentaBancaria: empleado.cuentaBancaria,
+    telefono: empleado.telefono,
+    horasCapacidadDiaria: empleado.horasCapacidadDiaria.toString(),
+    costoHoraManual: empleado.costoHoraManual ? empleado.costoHoraManual.toString() : null,
+    costoHora: Number(costoHoraEmpleado(empleado).toFixed(2)),
+    capacidadMensualHoras: Number(capacidadMensualHoras(empleado).toFixed(1)),
     sueldoTotal,
     totalAdelantosPendientes,
     saldoPorRecibir,
@@ -114,6 +123,9 @@ export async function PATCH(
         sueldoBasico: datos.sueldoBasico,
         otrosIngresos: datos.otrosIngresos,
         cuentaBancaria: datos.cuentaBancaria || null,
+        telefono: datos.telefono || null,
+        horasCapacidadDiaria: datos.horasCapacidadDiaria,
+        costoHoraManual: datos.costoHoraManual ?? null,
       },
     }),
     prisma.auditoria.create({

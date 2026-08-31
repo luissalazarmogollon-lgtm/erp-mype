@@ -140,6 +140,9 @@ model Empresa {
   pedidosCompra          PedidoCompra[]
   alertasAnomaliaCosto   AlertaAnomaliaCosto[]
   umbralAlertaAnomaliaPct Decimal @default(15) @map("umbral_alerta_anomalia_pct") @db.Decimal(5, 2)
+  tiposActividad         TipoActividad[]
+  asignacionesCliente    AsignacionCliente[]
+  tareas                 Tarea[]
 
   @@map("empresas")
 }
@@ -355,8 +358,10 @@ model Cliente {
   logoUrl            String? @map("logo_url") // link de Imgur u otro hosting externo
   estado             String  @default("activo") // activo | inactivo ("de baja" en la interfaz)
 
-  ventas            Venta[]
-  cuentasPorCobrar  CuentaPorCobrar[]
+  ventas               Venta[]
+  cuentasPorCobrar     CuentaPorCobrar[]
+  asignacionesServicio AsignacionCliente[]
+  tareas               Tarea[]
 
   @@map("clientes")
 }
@@ -681,7 +686,18 @@ model Empleado {
   cuentaBancaria String?  @map("cuenta_bancaria") // cuenta personal del trabajador, para transferir el sueldo
   estado         String   @default("activo")
 
-  adelantos      AdelantoSueldo[]
+  // Módulo Gestión de Actividades (empresas de Servicios): teléfono para
+  // avisar por WhatsApp cuándo se le asigna una tarea, capacidad de horas
+  // productivas por día (por defecto 9h) y, opcionalmente, un costo/hora
+  // manual para cuando el sueldo en planilla no refleja el costo real que
+  // se le quiere cargar a los clientes (por defecto se calcula del sueldo).
+  telefono                String?  @map("telefono")
+  horasCapacidadDiaria    Decimal  @default(9) @map("horas_capacidad_diaria") @db.Decimal(4, 2)
+  costoHoraManual         Decimal? @map("costo_hora_manual") @db.Decimal(10, 2)
+
+  adelantos               AdelantoSueldo[]
+  asignacionesCliente     AsignacionClienteEmpleado[]
+  tareas                  Tarea[]
 
   @@map("empleados")
 }
@@ -1046,4 +1062,105 @@ model AlertaAnomaliaCosto {
 
   @@index([empresaId, estado])
   @@map("alertas_anomalia_costo")
+}
+
+// ---------------------------------------------------------------------
+// 8. Gestión de Actividades (empresas de Servicios): carga laboral,
+// asignación de recursos por cliente y rentabilidad por servicio.
+//
+// Flujo: al iniciar un servicio se crea una AsignacionCliente con los
+// empleados que le dedicarán tiempo y cuántas horas/mes cada uno
+// (AsignacionClienteEmpleado) — de ahí sale el costo del servicio y el
+// precio sugerido para una rentabilidad objetivo (ver RENTABILIDAD_OBJETIVO
+// en src/lib/actividades.ts). Después, el día a día se registra como
+// Tarea: una actividad puntual de un empleado, en una fecha, con tiempo
+// estimado — de ahí sale el reporte de carga de trabajo (no exceder la
+// capacidad diaria del empleado) y el aviso por WhatsApp.
+// ---------------------------------------------------------------------
+
+// Catálogo de tipos de actividad por empresa, con tiempo estándar de
+// referencia (ej. "Editar reel: 90 min") — igual que cualquier catálogo
+// de la app (insumos, gastos, etc.), 100% editable por el cliente. Sirve
+// para agilizar el registro diario y para estimar cargas de trabajo antes
+// de que existan datos reales.
+model TipoActividad {
+  id                BigInt   @id @default(autoincrement())
+  empresaId         BigInt   @map("empresa_id")
+  empresa           Empresa  @relation(fields: [empresaId], references: [id])
+  nombre            String
+  tiempoEstimadoMin Int?     @map("tiempo_estimado_min") // minutos, referencial
+  estado            String   @default("activo")
+
+  tareas            Tarea[]
+
+  @@map("tipos_actividad")
+}
+
+// Configuración del servicio para un cliente: se arma al iniciar el
+// servicio (o al renovarlo) y es la base para calcular costo, precio
+// sugerido y verificar que no se sobrecargue al personal. Puede haber
+// más de una en el tiempo por cliente (histórico); la última "activo" es
+// la vigente.
+model AsignacionCliente {
+  id                 BigInt   @id @default(autoincrement())
+  empresaId          BigInt   @map("empresa_id")
+  empresa            Empresa  @relation(fields: [empresaId], references: [id])
+  clienteId          BigInt   @map("cliente_id")
+  cliente            Cliente  @relation(fields: [clienteId], references: [id])
+  precioVentaMensual Decimal? @map("precio_venta_mensual") @db.Decimal(12, 2) // lo pactado con el cliente; si es null, se usa el sugerido (40% de rentabilidad)
+  fechaInicio        DateTime @default(now()) @map("fecha_inicio") @db.Date
+  estado             String   @default("activo") // activo | inactivo (servicio finalizado/pausado)
+  creadoPor          String   @map("creado_por") @db.Uuid
+
+  empleados          AsignacionClienteEmpleado[]
+  tareas             Tarea[]
+
+  @@map("asignaciones_cliente")
+}
+
+// Cuántas horas al mes le dedica cada empleado a un cliente dentro de una
+// AsignacionCliente — la suma de esto (en TODOS los clientes activos de
+// un empleado) no debería superar su capacidad mensual (horas_capacidad_
+// diaria × días laborales del mes); el módulo avisa si se supera, no lo
+// bloquea (a veces es una decisión consciente del negocio).
+model AsignacionClienteEmpleado {
+  id                  BigInt            @id @default(autoincrement())
+  asignacionClienteId BigInt            @map("asignacion_cliente_id")
+  asignacionCliente   AsignacionCliente @relation(fields: [asignacionClienteId], references: [id])
+  empleadoId          BigInt            @map("empleado_id")
+  empleado            Empleado          @relation(fields: [empleadoId], references: [id])
+  horasMensuales      Decimal           @map("horas_mensuales") @db.Decimal(6, 2)
+
+  @@unique([asignacionClienteId, empleadoId])
+  @@map("asignaciones_cliente_empleado")
+}
+
+// La actividad puntual del día a día: un empleado, una fecha, un tiempo
+// estimado (y luego real). El cliente es opcional — permite registrar
+// también tiempo interno/no facturable — pero si se indica, alimenta la
+// carga y el consumo de horas de esa AsignacionCliente.
+model Tarea {
+  id                  BigInt             @id @default(autoincrement())
+  empresaId           BigInt             @map("empresa_id")
+  empresa             Empresa            @relation(fields: [empresaId], references: [id])
+  empleadoId          BigInt             @map("empleado_id")
+  empleado            Empleado           @relation(fields: [empleadoId], references: [id])
+  clienteId           BigInt?            @map("cliente_id")
+  cliente             Cliente?           @relation(fields: [clienteId], references: [id])
+  asignacionClienteId BigInt?            @map("asignacion_cliente_id")
+  asignacionCliente   AsignacionCliente? @relation(fields: [asignacionClienteId], references: [id])
+  tipoActividadId     BigInt?            @map("tipo_actividad_id")
+  tipoActividad       TipoActividad?     @relation(fields: [tipoActividadId], references: [id])
+  titulo              String
+  descripcion         String?
+  fecha               DateTime           @db.Date
+  horasEstimadas      Decimal            @map("horas_estimadas") @db.Decimal(5, 2)
+  horasReales         Decimal?           @map("horas_reales") @db.Decimal(5, 2)
+  estado              String             @default("pendiente") // pendiente | en_progreso | completada
+  whatsappEnviadoEn   DateTime?          @map("whatsapp_enviado_en")
+  creadoPor           String             @map("creado_por") @db.Uuid
+  creadoEn            DateTime           @default(now()) @map("creado_en")
+
+  @@index([empresaId, empleadoId, fecha])
+  @@map("tareas")
 }

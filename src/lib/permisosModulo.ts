@@ -20,6 +20,7 @@ export const MODULOS_DISPONIBLES = [
   { key: "aprobar_solicitudes_pedido", label: "Aprobar solicitudes de pedido y gestionar áreas" },
   { key: "despachar_solicitudes_pedido", label: "Despachar solicitudes aprobadas (logística)" },
   { key: "compras", label: "Gestionar proveedores, pedidos de compra y recepciones" },
+  { key: "actividades", label: "Gestionar actividades y carga laboral (empresas de Servicios)" },
 ] as const;
 
 export type ModuloKey = (typeof MODULOS_DISPONIBLES)[number]["key"];
@@ -42,6 +43,13 @@ export const MODULOS_SOLO_PRODUCTOS: ModuloKey[] = [
   "despachar_solicitudes_pedido",
   "compras",
 ];
+
+// Simétrico a MODULOS_SOLO_PRODUCTOS: módulos que solo tienen sentido para
+// una empresa que vende SERVICIOS y maneja personal con carga laboral por
+// cliente (agencias, consultoras, estudios, etc.). Una empresa de
+// Productos no lo necesita — se usa igual que la lista anterior, para
+// ocultar el acceso directo, bloquear la API, y no ofrecer el permiso.
+export const MODULOS_SOLO_SERVICIOS: ModuloKey[] = ["actividades"];
 
 /** true si el nombre de TipoNegocio corresponde a una empresa puramente de servicios. */
 export function esEmpresaDeServicios(tipoNegocioNombre: string | null | undefined): boolean {

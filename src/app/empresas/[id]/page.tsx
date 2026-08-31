@@ -2,7 +2,7 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { MODULOS_SOLO_PRODUCTOS, esEmpresaDeServicios, type ModuloKey } from "@/lib/permisosModulo";
+import { MODULOS_SOLO_PRODUCTOS, MODULOS_SOLO_SERVICIOS, esEmpresaDeServicios, type ModuloKey } from "@/lib/permisosModulo";
 import { InvitarUsuarioForm } from "@/components/ui/InvitarUsuarioForm";
 import { EliminarEmpresaButton } from "@/components/ui/EliminarEmpresaButton";
 import { VaciarDatosButton } from "@/components/ui/VaciarDatosButton";
@@ -47,6 +47,10 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
   // no aplican a su modelo de negocio y se ocultan del panel (además del
   // bloqueo a nivel de API en verificarAccesoEmpresa/verificarAccesoAlguno).
   const esSoloDeProductos = (modulos: string[]) => modulos.every((m) => MODULOS_SOLO_PRODUCTOS.includes(m as ModuloKey));
+  // Simétrico: una empresa de Productos no ve accesos exclusivos de
+  // Servicios (ej. Gestión de Actividades).
+  const esSoloDeServicios = (modulos: string[]) => modulos.every((m) => MODULOS_SOLO_SERVICIOS.includes(m as ModuloKey));
+  const seOculta = (modulos: string[]) => (esServicios && esSoloDeProductos(modulos)) || (!esServicios && esSoloDeServicios(modulos));
 
   const puedeVerAlguno = (modulos: string[]) => modulos.some((m) => puedeVer(m));
 
@@ -72,6 +76,7 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
     },
     { modulos: ["compras"], href: "compras", label: "Compras" },
     { modulos: ["compras"], href: "proveedores", label: "Proveedores" },
+    { modulos: ["actividades"], href: "actividades", label: "Gestión de Actividades" },
   ];
 
   return (
@@ -108,7 +113,7 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
       <div style={{ marginBottom: 28 }}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {ACCESOS_DIRECTOS.filter(
-            (a) => puedeVerAlguno(a.modulos) && !(esServicios && esSoloDeProductos(a.modulos))
+            (a) => puedeVerAlguno(a.modulos) && !seOculta(a.modulos)
           ).map((a) => (
             <Link
               key={a.href}

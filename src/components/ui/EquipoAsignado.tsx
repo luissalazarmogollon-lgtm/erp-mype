@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { MODULOS_DISPONIBLES, MODULOS_SOLO_PRODUCTOS, etiquetaModulo, type ModuloKey } from "@/lib/permisosModulo";
+import { MODULOS_DISPONIBLES, MODULOS_SOLO_PRODUCTOS, MODULOS_SOLO_SERVICIOS, etiquetaModulo, type ModuloKey } from "@/lib/permisosModulo";
 
 type MiembroEquipo = {
   asignacionId: string;
@@ -30,11 +30,12 @@ export function EquipoAsignado({
   const router = useRouter();
   // En una empresa de Servicios no se ofrecen permisos de módulos de
   // inventario/compras al editar a alguien del equipo — no existen para
-  // esa empresa. (La lista completa se sigue usando para MOSTRAR permisos
-  // ya asignados anteriormente, por si la empresa cambió de tipo después.)
-  const modulosOfrecidos = esServicios
-    ? MODULOS_DISPONIBLES.filter((m) => !MODULOS_SOLO_PRODUCTOS.includes(m.key))
-    : MODULOS_DISPONIBLES;
+  // esa empresa. Al revés, en Productos no se ofrece "actividades". (La
+  // lista completa se sigue usando para MOSTRAR permisos ya asignados
+  // anteriormente, por si la empresa cambió de tipo después.)
+  const modulosOfrecidos = MODULOS_DISPONIBLES.filter((m) =>
+    esServicios ? !MODULOS_SOLO_PRODUCTOS.includes(m.key) : !MODULOS_SOLO_SERVICIOS.includes(m.key)
+  );
   const [editando, setEditando] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
