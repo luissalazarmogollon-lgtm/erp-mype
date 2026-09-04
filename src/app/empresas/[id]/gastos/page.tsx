@@ -7,6 +7,7 @@ import { TIPOS_COMPROBANTE } from "@/lib/tiposComprobante";
 
 type Gasto = {
   id: string;
+  localId: string | null;
   local: string | null;
   naturaleza: string | null;
   categoriaEspecifica: string | null;
@@ -17,10 +18,51 @@ type Gasto = {
   montoTotal: string;
   fecha: string;
   condicion: string;
+  medioPago: string | null;
+  cuentaBancariaId: string | null;
+  cuentaBancaria: string | null;
+  fechaVencimiento: string | null;
   estadoPago: string;
   impactaResultados: boolean;
+  esItemDocumento: boolean;
+  editable: boolean;
+  motivoBloqueo: string | null;
 };
 type LocalOpcion = { id: string; nombre: string };
+
+type FormEdicion = {
+  localId: string;
+  naturaleza: string;
+  categoriaEspecifica: string;
+  proveedorNombre: string;
+  descripcion: string;
+  tipoComprobante: string;
+  numeroComprobante: string;
+  montoTotal: number;
+  fecha: string;
+  condicion: string;
+  medioPago: string;
+  cuentaBancariaId: string;
+  fechaVencimiento: string;
+};
+
+function aFormEdicion(g: Gasto): FormEdicion {
+  return {
+    localId: g.localId ?? "",
+    naturaleza: g.naturaleza ?? "gasto_operativo",
+    categoriaEspecifica: g.categoriaEspecifica ?? "",
+    proveedorNombre: g.proveedorNombre ?? "",
+    descripcion: g.descripcion,
+    tipoComprobante: g.tipoComprobante,
+    numeroComprobante: g.numeroComprobante ?? "",
+    montoTotal: Number(g.montoTotal),
+    fecha: g.fecha.slice(0, 10),
+    condicion: g.condicion,
+    medioPago: g.medioPago ?? "Efectivo",
+    cuentaBancariaId: g.cuentaBancariaId ?? "",
+    fechaVencimiento: g.fechaVencimiento ? g.fechaVencimiento.slice(0, 10) : "",
+  };
+}
 
 function hoyISO() {
   return new Date().toISOString().slice(0, 10);
@@ -38,6 +80,11 @@ export default function GastosPage({ params }: { params: { id: string } }) {
   const [guardando, setGuardando] = useState(false);
   const [guardandoDoc, setGuardandoDoc] = useState(false);
   const [naturalezasAbiertas, setNaturalezasAbiertas] = useState<Record<string, boolean>>({});
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [formEdicion, setFormEdicion] = useState<FormEdicion | null>(null);
+  const [errorEdicion, setErrorEdicion] = useState<string | null>(null);
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false);
+  const [eliminandoId, setEliminandoId] = useState<string | null>(null);
 
   const [formDoc, setFormDoc] = useState({
     localId: "",
@@ -192,6 +239,78 @@ export default function GastosPage({ params }: { params: { id: string } }) {
     setItemsDoc([]);
     setFormDoc({ ...formDoc, proveedorNombre: "", numeroComprobante: "" });
     setMostrarFormDocumento(false);
+    cargar();
+  }
+
+  function iniciarEdicion(g: Gasto) {
+    setErrorEdicion(null);
+    setEditandoId(g.id);
+    setFormEdicion(aFormEdicion(g));
+  }
+
+  function cancelarEdicion() {
+    setEditandoId(null);
+    setFormEdicion(null);
+    setErrorEdicion(null);
+  }
+
+  async function guardarEdicion(gastoId: string) {
+    if (!formEdicion) return;
+    setErrorEdicion(null);
+    if (formEdicion.condicion === "contado" && !formEdicion.medioPago) {
+      setErrorEdicion("Indica el medio de pago.");
+      return;
+    }
+    setGuardandoEdicion(true);
+
+    const res = await fetch(`/api/empresas/${empresaId}/gastos/${gastoId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        localId: formEdicion.localId || null,
+        naturaleza: formEdicion.naturaleza,
+        categoriaEspecifica: formEdicion.categoriaEspecifica || null,
+        proveedorNombre: formEdicion.proveedorNombre || null,
+        descripcion: formEdicion.descripcion,
+        tipoComprobante: formEdicion.tipoComprobante,
+        numeroComprobante: formEdicion.numeroComprobante || null,
+        montoTotal: Number(formEdicion.montoTotal),
+        fecha: formEdicion.fecha,
+        condicion: formEdicion.condicion,
+        medioPago: formEdicion.condicion === "contado" ? formEdicion.medioPago : null,
+        cuentaBancariaId: formEdicion.condicion === "contado" ? formEdicion.cuentaBancariaId || null : null,
+        fechaVencimiento: formEdicion.condicion === "credito" ? formEdicion.fechaVencimiento || null : null,
+      }),
+    });
+
+    setGuardandoEdicion(false);
+
+    if (!res.ok) {
+      const data = await res.json();
+      setErrorEdicion(data.error?.toString() ?? "No se pudo guardar el cambio.");
+      return;
+    }
+
+    cancelarEdicion();
+    cargar();
+  }
+
+  async function eliminarGasto(g: Gasto) {
+    if (!window.confirm(`¿Eliminar el egreso "${g.descripcion}" por S/ ${Number(g.montoTotal).toFixed(2)}? Esto no se puede deshacer.`)) {
+      return;
+    }
+    setEliminandoId(g.id);
+
+    const res = await fetch(`/api/empresas/${empresaId}/gastos/${g.id}`, { method: "DELETE" });
+
+    setEliminandoId(null);
+
+    if (!res.ok) {
+      const data = await res.json();
+      window.alert(data.error?.toString() ?? "No se pudo eliminar el egreso.");
+      return;
+    }
+
     cargar();
   }
 
@@ -537,21 +656,37 @@ export default function GastosPage({ params }: { params: { id: string } }) {
 
               {abierto && (
                 <div style={{ borderTop: "1px solid var(--line)", display: "flex", flexDirection: "column" }}>
-                  {sinClasificar.map((g) => (
-                    <div key={g.id} style={{ padding: "12px 14px", borderBottom: "1px solid var(--line)" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <div>
-                          <p style={{ fontSize: 13.5 }}>{g.descripcion}</p>
-                          <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
-                            {g.proveedorNombre ? `${g.proveedorNombre} · ` : ""}
-                            {g.numeroComprobante ? `${g.numeroComprobante} · ` : ""}
-                            {new Date(g.fecha).toLocaleDateString("es-PE", { timeZone: "UTC" })}
-                          </p>
+                  {sinClasificar.map((g) =>
+                    editandoId === g.id && formEdicion ? (
+                      <FormularioEdicionGasto
+                        key={g.id}
+                        form={formEdicion}
+                        setForm={setFormEdicion}
+                        locales={locales}
+                        cuentasBancarias={cuentasBancarias}
+                        esItemDocumento={g.esItemDocumento}
+                        error={errorEdicion}
+                        guardando={guardandoEdicion}
+                        onGuardar={() => guardarEdicion(g.id)}
+                        onCancelar={cancelarEdicion}
+                      />
+                    ) : (
+                      <div key={g.id} style={{ padding: "12px 14px", borderBottom: "1px solid var(--line)" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                          <div>
+                            <p style={{ fontSize: 13.5 }}>{g.descripcion}</p>
+                            <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
+                              {g.proveedorNombre ? `${g.proveedorNombre} · ` : ""}
+                              {g.numeroComprobante ? `${g.numeroComprobante} · ` : ""}
+                              {new Date(g.fecha).toLocaleDateString("es-PE", { timeZone: "UTC" })}
+                            </p>
+                          </div>
+                          <p className="mono" style={{ fontSize: 13 }}>S/ {Number(g.montoTotal).toFixed(2)}</p>
                         </div>
-                        <p className="mono" style={{ fontSize: 13 }}>S/ {Number(g.montoTotal).toFixed(2)}</p>
+                        <AccionesGasto gasto={g} onEditar={() => iniciarEdicion(g)} onEliminar={() => eliminarGasto(g)} eliminando={eliminandoId === g.id} />
                       </div>
-                    </div>
-                  ))}
+                    )
+                  )}
                   <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", padding: "10px 14px" }}>
                     Clasifícalos desde Cuentas por Pagar (Naturaleza del egreso y Categoría específica) para que se
                     sumen correctamente al Estado de Resultados.
@@ -585,27 +720,43 @@ export default function GastosPage({ params }: { params: { id: string } }) {
 
               {abierto && (
                 <div style={{ borderTop: "1px solid var(--line)", display: "flex", flexDirection: "column" }}>
-                  {gastosGrupo.map((g) => (
-                    <div key={g.id} style={{ padding: "12px 14px", borderBottom: "1px solid var(--line)" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <div>
-                          <p style={{ fontSize: 13.5 }}>{g.descripcion}</p>
-                          <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
-                            {g.categoriaEspecifica ? `${g.categoriaEspecifica}` : ""}
-                            {g.numeroComprobante ? ` · ${g.numeroComprobante}` : ""}
-                            {g.local ? ` · ${g.local}` : ""} · {new Date(g.fecha).toLocaleDateString("es-PE", { timeZone: "UTC" })}
-                            {!g.impactaResultados && " · no afecta resultados"}
-                          </p>
+                  {gastosGrupo.map((g) =>
+                    editandoId === g.id && formEdicion ? (
+                      <FormularioEdicionGasto
+                        key={g.id}
+                        form={formEdicion}
+                        setForm={setFormEdicion}
+                        locales={locales}
+                        cuentasBancarias={cuentasBancarias}
+                        esItemDocumento={g.esItemDocumento}
+                        error={errorEdicion}
+                        guardando={guardandoEdicion}
+                        onGuardar={() => guardarEdicion(g.id)}
+                        onCancelar={cancelarEdicion}
+                      />
+                    ) : (
+                      <div key={g.id} style={{ padding: "12px 14px", borderBottom: "1px solid var(--line)" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                          <div>
+                            <p style={{ fontSize: 13.5 }}>{g.descripcion}</p>
+                            <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
+                              {g.categoriaEspecifica ? `${g.categoriaEspecifica}` : ""}
+                              {g.numeroComprobante ? ` · ${g.numeroComprobante}` : ""}
+                              {g.local ? ` · ${g.local}` : ""} · {new Date(g.fecha).toLocaleDateString("es-PE", { timeZone: "UTC" })}
+                              {!g.impactaResultados && " · no afecta resultados"}
+                            </p>
+                          </div>
+                          <div style={{ textAlign: "right" }}>
+                            <p className="mono" style={{ fontSize: 13 }}>S/ {Number(g.montoTotal).toFixed(2)}</p>
+                            <p className="mono" style={{ fontSize: 10, textTransform: "uppercase", color: g.estadoPago === "pendiente" ? "var(--stamp)" : "var(--teal)" }}>
+                              {g.condicion === "credito" ? g.estadoPago : "pagado"}
+                            </p>
+                          </div>
                         </div>
-                        <div style={{ textAlign: "right" }}>
-                          <p className="mono" style={{ fontSize: 13 }}>S/ {Number(g.montoTotal).toFixed(2)}</p>
-                          <p className="mono" style={{ fontSize: 10, textTransform: "uppercase", color: g.estadoPago === "pendiente" ? "var(--stamp)" : "var(--teal)" }}>
-                            {g.condicion === "credito" ? g.estadoPago : "pagado"}
-                          </p>
-                        </div>
+                        <AccionesGasto gasto={g} onEditar={() => iniciarEdicion(g)} onEliminar={() => eliminarGasto(g)} eliminando={eliminandoId === g.id} />
                       </div>
-                    </div>
-                  ))}
+                    )
+                  )}
                 </div>
               )}
             </div>
@@ -616,5 +767,183 @@ export default function GastosPage({ params }: { params: { id: string } }) {
         )}
       </div>
     </main>
+  );
+}
+
+// Botones de Editar/Eliminar de una fila de gasto — o, si no se puede
+// tocar (viene de Caja Chica, o su factura ya tiene pagos registrados),
+// una nota explicando por qué está bloqueado.
+function AccionesGasto({
+  gasto, onEditar, onEliminar, eliminando,
+}: { gasto: Gasto; onEditar: () => void; onEliminar: () => void; eliminando: boolean }) {
+  if (!gasto.editable) {
+    return (
+      <p className="mono" style={{ fontSize: 10.5, color: "var(--ink-soft)", marginTop: 8, fontStyle: "italic" }}>
+        🔒 {gasto.motivoBloqueo}
+      </p>
+    );
+  }
+  return (
+    <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+      <button
+        onClick={onEditar}
+        className="btn-ghost"
+        style={{ fontSize: 11, padding: "3px 10px" }}
+      >
+        Editar
+      </button>
+      <button
+        onClick={onEliminar}
+        disabled={eliminando}
+        className="btn-ghost"
+        style={{ fontSize: 11, padding: "3px 10px", color: "var(--alert)" }}
+      >
+        {eliminando ? "Eliminando..." : "Eliminar"}
+      </button>
+    </div>
+  );
+}
+
+// Formulario inline de edición — reemplaza la fila del gasto mientras se
+// está editando. Reutiliza el mismo set de campos que el alta, salvo la
+// condición (contado/crédito), que se bloquea cuando el gasto es un ítem
+// de un documento con varios ítems (es una propiedad de todo el documento).
+function FormularioEdicionGasto({
+  form, setForm, locales, cuentasBancarias, esItemDocumento, error, guardando, onGuardar, onCancelar,
+}: {
+  form: FormEdicion;
+  setForm: (f: FormEdicion) => void;
+  locales: LocalOpcion[];
+  cuentasBancarias: { id: string; bancoNombre: string; saldoActual: string }[];
+  esItemDocumento: boolean;
+  error: string | null;
+  guardando: boolean;
+  onGuardar: () => void;
+  onCancelar: () => void;
+}) {
+  const categoriasDisponibles = CATEGORIAS_POR_NATURALEZA[form.naturaleza] ?? [];
+
+  return (
+    <div style={{ padding: 14, borderBottom: "1px solid var(--line)", background: "var(--paper)" }}>
+      <div className="field">
+        <label>Descripción</label>
+        <input value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} />
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        {locales.length > 0 && (
+          <div className="field">
+            <label>Local</label>
+            <select value={form.localId} onChange={(e) => setForm({ ...form, localId: e.target.value })}>
+              <option value="">Consolidado</option>
+              {locales.map((l) => (
+                <option key={l.id} value={l.id}>{l.nombre}</option>
+              ))}
+            </select>
+          </div>
+        )}
+        <div className="field">
+          <label>Naturaleza</label>
+          <select
+            value={form.naturaleza}
+            onChange={(e) =>
+              setForm({ ...form, naturaleza: e.target.value, categoriaEspecifica: CATEGORIAS_POR_NATURALEZA[e.target.value]?.[0] ?? "" })
+            }
+          >
+            {NATURALEZAS_EGRESO.map((n) => (
+              <option key={n.value} value={n.value}>{n.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>Categoría específica</label>
+          <select value={form.categoriaEspecifica} onChange={(e) => setForm({ ...form, categoriaEspecifica: e.target.value })}>
+            {categoriasDisponibles.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>Proveedor</label>
+          <input value={form.proveedorNombre} onChange={(e) => setForm({ ...form, proveedorNombre: e.target.value })} />
+        </div>
+        <div className="field">
+          <label>Tipo de comprobante</label>
+          <select value={form.tipoComprobante} onChange={(e) => setForm({ ...form, tipoComprobante: e.target.value })}>
+            {TIPOS_COMPROBANTE.map((t) => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>N° de comprobante</label>
+          <input value={form.numeroComprobante} onChange={(e) => setForm({ ...form, numeroComprobante: e.target.value })} />
+        </div>
+        <div className="field">
+          <label>Monto total (S/)</label>
+          <input
+            type="number"
+            step="0.01"
+            value={form.montoTotal}
+            onChange={(e) => setForm({ ...form, montoTotal: Number(e.target.value) })}
+          />
+        </div>
+        <div className="field">
+          <label>Fecha</label>
+          <input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
+        </div>
+      </div>
+
+      <div className="field">
+        <label>¿Cómo se pagó?{esItemDocumento ? " (no editable — es un ítem de un documento)" : ""}</label>
+        <select
+          value={form.condicion}
+          disabled={esItemDocumento}
+          onChange={(e) => setForm({ ...form, condicion: e.target.value })}
+        >
+          <option value="contado">Al contado</option>
+          <option value="credito">Al crédito (cuenta por pagar)</option>
+        </select>
+      </div>
+
+      {form.condicion === "contado" ? (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div className="field">
+            <label>Medio de pago</label>
+            <select value={form.medioPago} onChange={(e) => setForm({ ...form, medioPago: e.target.value })}>
+              <option value="Efectivo">Efectivo</option>
+              <option value="Yape/Plin">Yape/Plin</option>
+              <option value="Tarjeta">Tarjeta</option>
+              <option value="Transferencia">Transferencia</option>
+            </select>
+          </div>
+          {cuentasBancarias.length > 0 && (
+            <div className="field">
+              <label>Cuenta bancaria</label>
+              <select value={form.cuentaBancariaId} onChange={(e) => setForm({ ...form, cuentaBancariaId: e.target.value })}>
+                <option value="">No registrar en flujo de caja</option>
+                {cuentasBancarias.map((c) => (
+                  <option key={c.id} value={c.id}>{c.bancoNombre} (S/ {Number(c.saldoActual).toFixed(2)})</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="field">
+          <label>Fecha de vencimiento (opcional)</label>
+          <input type="date" value={form.fechaVencimiento} onChange={(e) => setForm({ ...form, fechaVencimiento: e.target.value })} />
+        </div>
+      )}
+
+      {error && <p className="field error">{error}</p>}
+      <div style={{ display: "flex", gap: 10 }}>
+        <button className="btn-primary" disabled={guardando} onClick={onGuardar} style={{ fontSize: 12, padding: "6px 14px" }}>
+          {guardando ? "Guardando..." : "Guardar cambios"}
+        </button>
+        <button className="btn-ghost" onClick={onCancelar} style={{ fontSize: 12, padding: "6px 14px" }}>
+          Cancelar
+        </button>
+      </div>
+    </div>
   );
 }

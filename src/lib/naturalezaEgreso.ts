@@ -11,6 +11,11 @@
 export const NATURALEZAS_EGRESO = [
   { value: "costo_directo", label: "Costo directo", impactaResultados: true },
   { value: "mano_obra_directa", label: "Mano de obra directa", impactaResultados: true },
+  {
+    value: "mano_obra_indirecta",
+    label: "Mano de obra indirecta (supervisión, calidad, mantenimiento de planta)",
+    impactaResultados: true,
+  },
   { value: "gasto_operativo", label: "Gasto operativo", impactaResultados: true },
   { value: "gasto_financiero", label: "Gasto financiero", impactaResultados: true },
   { value: "gasto_tributario", label: "Gasto tributario", impactaResultados: true },
@@ -42,6 +47,12 @@ export function labelNaturaleza(naturaleza: string | null | undefined): string {
 export const CATEGORIAS_POR_NATURALEZA: Record<string, string[]> = {
   costo_directo: ["Materia prima / insumos", "Empaques y envases", "Insumos de producción (otros)"],
   mano_obra_directa: ["Sueldos personal de producción/cocina", "Comisiones / bonos de producción"],
+  mano_obra_indirecta: [
+    "Supervisión de producción",
+    "Control de calidad",
+    "Mantenimiento de planta/equipos",
+    "Otros (mano de obra indirecta)",
+  ],
   gasto_operativo: [
     "Alquiler",
     "Servicios básicos (luz/agua/internet)",

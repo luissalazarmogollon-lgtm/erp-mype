@@ -9,7 +9,8 @@ export const dynamic = "force-dynamic";
 // Estado de Resultados completo, calculado EN VIVO (sin cierre de período):
 //
 //   Ventas totales
-//   (−) Costo de Ventas                    [costo_directo + mano_obra_directa]
+//   (−) Costo de Ventas                    [costo_directo + mano_obra_directa +
+//                                            mano_obra_indirecta]
 //   = Utilidad Bruta
 //   (−) Gasto Operativo                    [gasto_operativo]
 //   = EBITDA                               (utilidad antes de intereses,
@@ -24,8 +25,15 @@ export const dynamic = "force-dynamic";
 //   (−) Otros Egresos                      [otros]
 //   = Utilidad Neta
 //
-// Aparte, un bloque de "egreso de caja total" (todo lo que salió,
-// incluyendo activo/deuda/retiro de socios, que NO afectan este estado).
+// Aparte, un bloque de "egreso de caja total": a diferencia de las líneas
+// de arriba (que son POR DEVENGADO — cuentan un gasto a crédito aunque
+// todavía no se haya pagado, como corresponde en un Estado de Resultados),
+// este bloque es POR CAJA — cuánto dinero salió realmente en el período:
+// los gastos al contado (se pagan al momento) más los pagos de Cuentas
+// por Pagar registrados en el período (un gasto a crédito de un mes
+// puede pagarse recién el mes siguiente, y ese pago cuenta en el período
+// en que ocurre, no en el que se registró el gasto). Incluye
+// activo/deuda/retiro de socios, que no afectan este estado.
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   const usuarioActual = await getUsuarioActual();
   if (!usuarioActual) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
@@ -51,7 +59,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
   const localIdParam = searchParams.get("localId");
   const localId = localIdParam ? BigInt(localIdParam) : undefined;
 
-  const [ventasDiarias, creditosOtorgados, gastos] = await Promise.all([
+  const [ventasDiarias, creditosOtorgados, gastos, pagosCxp] = await Promise.all([
     prisma.registroVentaDiaria.findMany({
       where: { empresaId, fecha: { gte: desde, lte: hasta }, ...(localId ? { localId } : {}) },
     }),
@@ -60,6 +68,18 @@ export async function GET(request: Request, { params }: { params: { id: string }
       : prisma.cuentaPorCobrar.findMany({ where: { empresaId, fechaEmision: { gte: desde, lte: hasta } } }),
     prisma.gasto.findMany({
       where: { empresaId, fecha: { gte: desde, lte: hasta }, ...(localId ? { localId } : {}) },
+    }),
+    // Pagos de CxP realizados EN EL PERÍODO (independiente de cuándo se
+    // registró el gasto original a crédito) — es la parte de "egreso de
+    // caja" que corresponde a deudas que se venían arrastrando.
+    prisma.pagoCxp.findMany({
+      where: {
+        fecha: { gte: desde, lte: hasta },
+        cxp: {
+          empresaId,
+          ...(localId ? { OR: [{ gasto: { localId } }, { documentoCompra: { localId } }] } : {}),
+        },
+      },
     }),
   ]);
 
@@ -84,7 +104,11 @@ export async function GET(request: Request, { params }: { params: { id: string }
   const sumaPorNaturaleza = (naturalezas: string[]) =>
     gastos.filter((g) => g.naturaleza !== null && naturalezas.includes(g.naturaleza)).reduce((acc, g) => acc + Number(g.montoTotal), 0);
 
-  const costoVentas = sumaPorNaturaleza(["costo_directo", "mano_obra_directa"]);
+  // La mano de obra indirecta (supervisión, control de calidad, mantenimiento
+  // de planta) se trata como costo indirecto de fabricación — se agrupa
+  // dentro de Costo de Ventas junto con el costo directo y la mano de obra
+  // directa, siguiendo el tratamiento contable estándar de costos.
+  const costoVentas = sumaPorNaturaleza(["costo_directo", "mano_obra_directa", "mano_obra_indirecta"]);
   const gastoOperativo = sumaPorNaturaleza(["gasto_operativo"]);
   const gastoFinanciero = sumaPorNaturaleza(["gasto_financiero"]);
   const gastoTributario = sumaPorNaturaleza(["gasto_tributario"]);
@@ -100,7 +124,19 @@ export async function GET(request: Request, { params }: { params: { id: string }
   const utilidadAntesImpuestos = utilidadOperativa - gastoFinanciero; // EBT
   const utilidadNeta = utilidadAntesImpuestos - gastoTributario - otrosEgresos;
 
-  const egresoCajaTotal = gastos.reduce((acc, g) => acc + Number(g.montoTotal), 0);
+  // Por caja, no por devengado: los gastos al contado se pagan en el
+  // acto, así que su monto total ya es caja que salió; los gastos a
+  // crédito NO cuentan aquí por su monto total (todavía no se pagan) —
+  // lo que sí cuenta es cada pago real que se les haya hecho en el
+  // período, sin importar cuándo se registró el gasto original.
+  const egresoCajaContado = gastos
+    .filter((g) => g.condicion === "contado")
+    .reduce((acc, g) => acc + Number(g.montoTotal), 0);
+  const egresoCajaPagosCredito = pagosCxp.reduce((acc, p) => acc + Number(p.monto), 0);
+  const egresoCajaTotal = egresoCajaContado + egresoCajaPagosCredito;
+  // Nota: este desglose por naturaleza sigue siendo por devengado (no
+  // reparte pagosCxp por naturaleza cuando un documento mezcla varias) —
+  // es una referencia de a qué se destinó el gasto, no una cifra de caja.
   const egresoCajaNoOperativo = sumaPorNaturaleza(["activo", "deuda", "retiro_socios"]);
 
   const detallePorNaturaleza: Record<string, number> = {};
@@ -134,6 +170,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
     utilidadNeta,
     margenNetoPct: pct(utilidadNeta),
     egresoCajaTotal,
+    egresoCajaContado,
+    egresoCajaPagosCredito,
     egresoCajaNoOperativo,
     detallePorNaturaleza,
   });

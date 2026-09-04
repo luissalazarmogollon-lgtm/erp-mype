@@ -41,29 +41,63 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
   const gastos = await prisma.gasto.findMany({
     where: { empresaId },
-    include: { local: true, cuentaPorPagar: true, cuentaBancaria: true },
+    include: {
+      local: true,
+      cuentaBancaria: true,
+      // Un gasto "suelto" (registrado directo, no como ítem de un
+      // documento) tiene su propia CxP vía gastoId. Un gasto que es ÍTEM
+      // de un "Documento con varios ítems" NO tiene esa CxP propia — la
+      // CxP se crea una sola vez para todo el documento (documentoCompraId).
+      // Antes solo se miraba `cuentaPorPagar` (la directa), así que todo
+      // ítem de un documento a crédito salía "pagado" aunque su documento
+      // siguiera pendiente — hay que mirar también la del documento.
+      cuentaPorPagar: { include: { pagos: true } },
+      documentoCompra: { include: { cuentaPorPagar: { include: { pagos: true } } } },
+      gastoCajaChica: true,
+    },
     orderBy: { fecha: "desc" },
     take: 150,
   });
 
   return NextResponse.json(
-    gastos.map((g) => ({
-      id: g.id.toString(),
-      local: g.local?.nombre ?? null,
-      naturaleza: g.naturaleza,
-      categoriaEspecifica: g.categoriaEspecifica,
-      proveedorNombre: g.proveedorNombre,
-      descripcion: g.descripcion,
-      tipoComprobante: g.tipoComprobante,
-      numeroComprobante: g.numeroComprobante,
-      montoTotal: g.montoTotal.toString(),
-      fecha: g.fecha,
-      condicion: g.condicion,
-      medioPago: g.medioPago,
-      cuentaBancaria: g.cuentaBancaria?.bancoNombre ?? null,
-      estadoPago: g.cuentaPorPagar?.estado ?? "pagado",
-      impactaResultados: impactaResultados(g.naturaleza),
-    }))
+    gastos.map((g) => {
+      const cxp = g.cuentaPorPagar ?? g.documentoCompra?.cuentaPorPagar ?? null;
+      // Se puede editar/eliminar salvo que: venga de un traslado de Caja
+      // Chica (se administra desde ese módulo), o su cuenta por pagar ya
+      // tenga pagos registrados (hay que deshacer esos pagos primero, para
+      // no dejar un pago "huérfano" sin el egreso que lo originó).
+      const tienePagos = (cxp?.pagos.length ?? 0) > 0;
+      const bloqueado = Boolean(g.gastoCajaChica) || tienePagos;
+      const motivoBloqueo = g.gastoCajaChica
+        ? "Viene de un traslado de Caja Chica — edítalo o elimínalo desde ese módulo."
+        : tienePagos
+        ? "Esta factura ya tiene pagos registrados — anúlalos en Cuentas por Pagar antes de editar o eliminar este egreso."
+        : null;
+
+      return {
+        id: g.id.toString(),
+        localId: g.localId ? g.localId.toString() : null,
+        local: g.local?.nombre ?? null,
+        naturaleza: g.naturaleza,
+        categoriaEspecifica: g.categoriaEspecifica,
+        proveedorNombre: g.proveedorNombre,
+        descripcion: g.descripcion,
+        tipoComprobante: g.tipoComprobante,
+        numeroComprobante: g.numeroComprobante,
+        montoTotal: g.montoTotal.toString(),
+        fecha: g.fecha,
+        condicion: g.condicion,
+        medioPago: g.medioPago,
+        cuentaBancariaId: g.cuentaBancariaId ? g.cuentaBancariaId.toString() : null,
+        cuentaBancaria: g.cuentaBancaria?.bancoNombre ?? null,
+        fechaVencimiento: cxp?.fechaVencimiento ?? null,
+        estadoPago: cxp?.estado ?? "pagado",
+        impactaResultados: impactaResultados(g.naturaleza),
+        esItemDocumento: g.documentoCompraId !== null,
+        editable: !bloqueado,
+        motivoBloqueo,
+      };
+    })
   );
 }
 
