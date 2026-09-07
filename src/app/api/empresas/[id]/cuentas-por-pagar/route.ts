@@ -91,6 +91,9 @@ export async function GET(request: Request, { params }: { params: { id: string }
         items,
         pendienteClasificar,
         pagos: c.pagos.map((p) => ({ monto: p.monto.toString(), fecha: p.fecha, medioPago: p.medioPago })),
+        // Eliminar esta factura es una acción reservada al superadmin, y
+        // aun para él se bloquea si ya tiene pagos registrados (ver DELETE).
+        tienePagos: c.pagos.length > 0,
       };
     })
   );

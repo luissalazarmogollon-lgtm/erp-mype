@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { mensajeErrorZod } from "@/lib/zodError";
 import { prisma } from "@/lib/prisma";
-import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
+import { getUsuarioActual, verificarAccesoEmpresa, requiereSuperadmin } from "@/lib/auth";
 import { NATURALEZAS_EGRESO } from "@/lib/naturalezaEgreso";
 import { TIPOS_COMPROBANTE } from "@/lib/tiposComprobante";
 
@@ -275,6 +275,11 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
   const empresaId = BigInt(params.id);
   try {
     await verificarAccesoEmpresa(usuarioActual.id, empresaId, "gastos");
+    // RN: eliminar un egreso es una acción destructiva sobre datos
+    // financieros — a diferencia de crear/editar (permiso "gastos"),
+    // eliminar queda reservado exclusivamente al superadmin de la
+    // plataforma, en cualquier empresa.
+    requiereSuperadmin(usuarioActual);
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 403 });
   }

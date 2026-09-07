@@ -22,6 +22,7 @@ type Cxp = {
   estado: string;
   items: ItemCxp[];
   pendienteClasificar: boolean;
+  tienePagos: boolean;
 };
 type CuentaOpcion = { id: string; bancoNombre: string; saldoActual: string };
 type LocalOpcion = { id: string; nombre: string };
@@ -42,6 +43,7 @@ export default function CuentasPorPagarPage({ params }: { params: { id: string }
   const [cuentaPago, setCuentaPago] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [mostrarPagadas, setMostrarPagadas] = useState(false);
+  const [eliminandoId, setEliminandoId] = useState<string | null>(null);
 
   // Clasificación de un ítem (naturaleza + categoría) — solo disponible
   // para quien tiene el permiso completo "cuentas_por_pagar".
@@ -173,6 +175,30 @@ export default function CuentasPorPagarPage({ params }: { params: { id: string }
       return;
     }
     setClasificando(null);
+    cargar();
+  }
+
+  async function handleEliminar(c: Cxp) {
+    if (
+      !window.confirm(
+        `¿Eliminar la factura de "${c.proveedorNombre ?? "este proveedor"}" (${c.descripcionGasto}) por S/ ${Number(c.montoTotal).toFixed(2)}? Esto no se puede deshacer.`
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    setEliminandoId(c.id);
+
+    const res = await fetch(`/api/empresas/${empresaId}/cuentas-por-pagar/${c.id}`, { method: "DELETE" });
+
+    setEliminandoId(null);
+
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error?.toString() ?? "No se pudo eliminar la factura.");
+      return;
+    }
+
     cargar();
   }
 
@@ -360,6 +386,26 @@ export default function CuentasPorPagarPage({ params }: { params: { id: string }
                   </p>
                 </div>
               </div>
+
+              {/* Eliminar una factura/CxP completa es una acción destructiva
+                  sobre datos financieros — reservada al superadmin de la
+                  plataforma, y aun para él bloqueada si ya tiene pagos. */}
+              {miAcceso?.esSuperadminPlataforma && (
+                c.tienePagos ? (
+                  <p className="mono" style={{ fontSize: 10.5, color: "var(--ink-soft)", marginTop: 8, fontStyle: "italic" }}>
+                    🔒 Ya tiene pagos registrados — no se puede eliminar.
+                  </p>
+                ) : (
+                  <button
+                    onClick={() => handleEliminar(c)}
+                    disabled={eliminandoId === c.id}
+                    className="btn-ghost"
+                    style={{ fontSize: 11, padding: "3px 10px", marginTop: 8, color: "var(--alert)" }}
+                  >
+                    {eliminandoId === c.id ? "Eliminando..." : "Eliminar factura"}
+                  </button>
+                )
+              )}
 
               {/* Ítems de la factura, con su estado de clasificación */}
               <div style={{ marginTop: 10, borderTop: "1px solid var(--line)", paddingTop: 10 }}>

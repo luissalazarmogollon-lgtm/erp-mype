@@ -85,6 +85,7 @@ export default function GastosPage({ params }: { params: { id: string } }) {
   const [errorEdicion, setErrorEdicion] = useState<string | null>(null);
   const [guardandoEdicion, setGuardandoEdicion] = useState(false);
   const [eliminandoId, setEliminandoId] = useState<string | null>(null);
+  const [esSuperadmin, setEsSuperadmin] = useState(false);
 
   const [formDoc, setFormDoc] = useState({
     localId: "",
@@ -125,13 +126,15 @@ export default function GastosPage({ params }: { params: { id: string } }) {
   });
 
   async function cargar() {
-    const [resGastos, resCatalogos] = await Promise.all([
+    const [resGastos, resCatalogos, resAcceso] = await Promise.all([
       fetch(`/api/empresas/${empresaId}/gastos`).then((r) => r.json()),
       fetch(`/api/empresas/${empresaId}/catalogos`).then((r) => r.json()),
+      fetch(`/api/empresas/${empresaId}/mi-acceso`).then((r) => r.json()),
     ]);
     setGastos(resGastos);
     setLocales(resCatalogos.locales ?? []);
     setCuentasBancarias(resCatalogos.cuentasBancarias ?? []);
+    if (!resAcceso.error) setEsSuperadmin(Boolean(resAcceso.esSuperadminPlataforma));
   }
 
   useEffect(() => {
@@ -683,7 +686,7 @@ export default function GastosPage({ params }: { params: { id: string } }) {
                           </div>
                           <p className="mono" style={{ fontSize: 13 }}>S/ {Number(g.montoTotal).toFixed(2)}</p>
                         </div>
-                        <AccionesGasto gasto={g} onEditar={() => iniciarEdicion(g)} onEliminar={() => eliminarGasto(g)} eliminando={eliminandoId === g.id} />
+                        <AccionesGasto gasto={g} esSuperadmin={esSuperadmin} onEditar={() => iniciarEdicion(g)} onEliminar={() => eliminarGasto(g)} eliminando={eliminandoId === g.id} />
                       </div>
                     )
                   )}
@@ -753,7 +756,7 @@ export default function GastosPage({ params }: { params: { id: string } }) {
                             </p>
                           </div>
                         </div>
-                        <AccionesGasto gasto={g} onEditar={() => iniciarEdicion(g)} onEliminar={() => eliminarGasto(g)} eliminando={eliminandoId === g.id} />
+                        <AccionesGasto gasto={g} esSuperadmin={esSuperadmin} onEditar={() => iniciarEdicion(g)} onEliminar={() => eliminarGasto(g)} eliminando={eliminandoId === g.id} />
                       </div>
                     )
                   )}
@@ -774,8 +777,8 @@ export default function GastosPage({ params }: { params: { id: string } }) {
 // tocar (viene de Caja Chica, o su factura ya tiene pagos registrados),
 // una nota explicando por qué está bloqueado.
 function AccionesGasto({
-  gasto, onEditar, onEliminar, eliminando,
-}: { gasto: Gasto; onEditar: () => void; onEliminar: () => void; eliminando: boolean }) {
+  gasto, esSuperadmin, onEditar, onEliminar, eliminando,
+}: { gasto: Gasto; esSuperadmin: boolean; onEditar: () => void; onEliminar: () => void; eliminando: boolean }) {
   if (!gasto.editable) {
     return (
       <p className="mono" style={{ fontSize: 10.5, color: "var(--ink-soft)", marginTop: 8, fontStyle: "italic" }}>
@@ -792,14 +795,19 @@ function AccionesGasto({
       >
         Editar
       </button>
-      <button
-        onClick={onEliminar}
-        disabled={eliminando}
-        className="btn-ghost"
-        style={{ fontSize: 11, padding: "3px 10px", color: "var(--alert)" }}
-      >
-        {eliminando ? "Eliminando..." : "Eliminar"}
-      </button>
+      {/* Eliminar un egreso es una acción reservada al superadmin de la
+          plataforma — a diferencia de editar, que sigue disponible para
+          cualquiera con acceso a Gastos y Costos en esta empresa. */}
+      {esSuperadmin && (
+        <button
+          onClick={onEliminar}
+          disabled={eliminando}
+          className="btn-ghost"
+          style={{ fontSize: 11, padding: "3px 10px", color: "var(--alert)" }}
+        >
+          {eliminando ? "Eliminando..." : "Eliminar"}
+        </button>
+      )}
     </div>
   );
 }
