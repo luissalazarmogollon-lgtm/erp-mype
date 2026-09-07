@@ -22,12 +22,15 @@ export default async function DashboardPage() {
       </div>
 
       {usuario.esSuperadminPlataforma && (
-        <div style={{ margin: "24px 0", display: "flex", gap: 10 }}>
+        <div style={{ margin: "24px 0", display: "flex", gap: 10, flexWrap: "wrap" }}>
           <Link href="/onboarding/empresa" className="btn-primary" style={{ textDecoration: "none" }}>
             + Dar de alta nueva empresa
           </Link>
           <Link href="/usuarios" className="btn-ghost" style={{ textDecoration: "none" }}>
             Usuarios y accesos
+          </Link>
+          <Link href="/cuentas-por-cobrar" className="btn-ghost" style={{ textDecoration: "none" }}>
+            Cuentas por Cobrar (todas las empresas)
           </Link>
         </div>
       )}

@@ -375,7 +375,16 @@ function FacturacionServicios({ empresaId }: { empresaId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [mostrarPagadas, setMostrarPagadas] = useState(false);
 
-  const [form, setForm] = useState({ clienteId: "", numeroFactura: "", montoTotal: 0, descripcion: "" });
+  const [form, setForm] = useState({
+    clienteId: "",
+    numeroFactura: "",
+    montoTotal: 0,
+    descripcion: "",
+    condicion: "credito",
+    medioPago: "Efectivo",
+    cuentaBancariaId: "",
+    fechaVencimiento: "",
+  });
   const [nuevoCliente, setNuevoCliente] = useState({ nombre: "", docIdentidad: "", telefono: "" });
 
   async function cargar() {
@@ -424,6 +433,10 @@ function FacturacionServicios({ empresaId }: { empresaId: string }) {
       setError("Indica el N° de factura.");
       return;
     }
+    if (form.condicion === "contado" && !form.medioPago) {
+      setError("Indica el medio de pago.");
+      return;
+    }
     const res = await fetch(`/api/empresas/${empresaId}/cuentas-por-cobrar`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -434,7 +447,16 @@ function FacturacionServicios({ empresaId }: { empresaId: string }) {
       setError(data.error?.toString() ?? "No se pudo registrar la factura.");
       return;
     }
-    setForm({ clienteId: "", numeroFactura: "", montoTotal: 0, descripcion: "" });
+    setForm({
+      clienteId: "",
+      numeroFactura: "",
+      montoTotal: 0,
+      descripcion: "",
+      condicion: "credito",
+      medioPago: "Efectivo",
+      cuentaBancariaId: "",
+      fechaVencimiento: "",
+    });
     setMostrarForm(false);
     cargar();
   }
@@ -557,9 +579,54 @@ function FacturacionServicios({ empresaId }: { empresaId: string }) {
             />
           </div>
 
+          <div className="field">
+            <label>¿Cómo paga el cliente?</label>
+            <select value={form.condicion} onChange={(e) => setForm({ ...form, condicion: e.target.value })}>
+              <option value="credito">Al crédito (queda en Cuentas por Cobrar)</option>
+              <option value="contado">Al contado (ya se pagó)</option>
+            </select>
+          </div>
+
+          {form.condicion === "contado" ? (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div className="field">
+                  <label>Medio de pago</label>
+                  <select value={form.medioPago} onChange={(e) => setForm({ ...form, medioPago: e.target.value })}>
+                    {MEDIOS_PAGO.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+                {cuentasBancarias.length > 0 && (
+                  <div className="field">
+                    <label>Cuenta a la que entra (opcional)</label>
+                    <select value={form.cuentaBancariaId} onChange={(e) => setForm({ ...form, cuentaBancariaId: e.target.value })}>
+                      <option value="">No registrar en flujo de caja</option>
+                      {cuentasBancarias.map((c) => (
+                        <option key={c.id} value={c.id}>{c.bancoNombre} (S/ {Number(c.saldoActual).toFixed(2)})</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+              <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginBottom: 12 }}>
+                Se registra como ya pagada — el cobro completo se hace en este mismo paso y, si eliges una cuenta,
+                aparece de inmediato en Flujo de Caja.
+              </p>
+            </>
+          ) : (
+            <div className="field">
+              <label>Fecha de vencimiento (opcional)</label>
+              <input type="date" value={form.fechaVencimiento} onChange={(e) => setForm({ ...form, fechaVencimiento: e.target.value })} />
+            </div>
+          )}
+
           {error && <p className="field error">{error}</p>}
           <div style={{ display: "flex", gap: 10 }}>
-            <button type="submit" className="btn-primary">Registrar factura</button>
+            <button type="submit" className="btn-primary">
+              {form.condicion === "contado" ? "Registrar factura pagada" : "Registrar factura"}
+            </button>
             <button type="button" className="btn-ghost" onClick={() => setMostrarForm(false)}>Cancelar</button>
           </div>
         </form>

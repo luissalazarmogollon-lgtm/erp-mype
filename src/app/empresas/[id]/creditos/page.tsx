@@ -35,7 +35,16 @@ export default function CreditosPage({ params }: { params: { id: string } }) {
   const [esSuperadmin, setEsSuperadmin] = useState(false);
   const [eliminandoId, setEliminandoId] = useState<string | null>(null);
 
-  const [form, setForm] = useState({ clienteId: "", numeroFactura: "", montoTotal: 0, descripcion: "" });
+  const [form, setForm] = useState({
+    clienteId: "",
+    numeroFactura: "",
+    montoTotal: 0,
+    descripcion: "",
+    condicion: "credito",
+    medioPago: "Efectivo",
+    cuentaBancariaId: "",
+    fechaVencimiento: "",
+  });
   const [nuevoCliente, setNuevoCliente] = useState({ nombre: "", docIdentidad: "", telefono: "" });
 
   async function cargar() {
@@ -82,6 +91,10 @@ export default function CreditosPage({ params }: { params: { id: string } }) {
       setError("El monto debe ser mayor a 0.");
       return;
     }
+    if (form.condicion === "contado" && !form.medioPago) {
+      setError("Indica el medio de pago.");
+      return;
+    }
     const res = await fetch(`/api/empresas/${empresaId}/cuentas-por-cobrar`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -89,10 +102,19 @@ export default function CreditosPage({ params }: { params: { id: string } }) {
     });
     if (!res.ok) {
       const data = await res.json();
-      setError(data.error?.toString() ?? "No se pudo registrar el crédito.");
+      setError(data.error?.toString() ?? "No se pudo registrar la factura.");
       return;
     }
-    setForm({ clienteId: "", numeroFactura: "", montoTotal: 0, descripcion: "" });
+    setForm({
+      clienteId: "",
+      numeroFactura: "",
+      montoTotal: 0,
+      descripcion: "",
+      condicion: "credito",
+      medioPago: "Efectivo",
+      cuentaBancariaId: "",
+      fechaVencimiento: "",
+    });
     setMostrarForm(false);
     cargar();
   }
@@ -161,7 +183,7 @@ export default function CreditosPage({ params }: { params: { id: string } }) {
 
       {!mostrarForm ? (
         <button className="btn-primary" onClick={() => setMostrarForm(true)} style={{ marginBottom: 20 }}>
-          + Registrar nuevo crédito
+          + Registrar factura
         </button>
       ) : (
         <form onSubmit={handleCrearCredito} className="card" style={{ marginBottom: 20 }}>
@@ -224,9 +246,54 @@ export default function CreditosPage({ params }: { params: { id: string } }) {
             <input value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} placeholder="Ej: consumo del 12/08" />
           </div>
 
+          <div className="field">
+            <label>¿Cómo paga el cliente?</label>
+            <select value={form.condicion} onChange={(e) => setForm({ ...form, condicion: e.target.value })}>
+              <option value="credito">Al crédito (queda en Cuentas por Cobrar)</option>
+              <option value="contado">Al contado (ya se pagó)</option>
+            </select>
+          </div>
+
+          {form.condicion === "contado" ? (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div className="field">
+                  <label>Medio de pago</label>
+                  <select value={form.medioPago} onChange={(e) => setForm({ ...form, medioPago: e.target.value })}>
+                    {MEDIOS_PAGO.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+                {cuentasBancarias.length > 0 && (
+                  <div className="field">
+                    <label>Cuenta a la que entra (opcional)</label>
+                    <select value={form.cuentaBancariaId} onChange={(e) => setForm({ ...form, cuentaBancariaId: e.target.value })}>
+                      <option value="">No registrar en flujo de caja</option>
+                      {cuentasBancarias.map((c) => (
+                        <option key={c.id} value={c.id}>{c.bancoNombre} (S/ {Number(c.saldoActual).toFixed(2)})</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+              <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginBottom: 12 }}>
+                Se registra como ya pagada — el cobro completo se hace en este mismo paso y, si eliges una cuenta,
+                aparece de inmediato en Flujo de Caja.
+              </p>
+            </>
+          ) : (
+            <div className="field">
+              <label>Fecha de vencimiento (opcional)</label>
+              <input type="date" value={form.fechaVencimiento} onChange={(e) => setForm({ ...form, fechaVencimiento: e.target.value })} />
+            </div>
+          )}
+
           {error && <p className="field error">{error}</p>}
           <div style={{ display: "flex", gap: 10 }}>
-            <button type="submit" className="btn-primary">Registrar crédito</button>
+            <button type="submit" className="btn-primary">
+              {form.condicion === "contado" ? "Registrar factura pagada" : "Registrar crédito"}
+            </button>
             <button type="button" className="btn-ghost" onClick={() => setMostrarForm(false)}>Cancelar</button>
           </div>
         </form>
