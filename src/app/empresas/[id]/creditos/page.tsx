@@ -13,6 +13,7 @@ type Cxc = {
   saldoPendiente: string;
   fechaEmision: string;
   estado: string;
+  tieneCobros: boolean;
 };
 type ClienteOpcion = { id: string; nombre: string; docIdentidad: string | null };
 
@@ -31,19 +32,23 @@ export default function CreditosPage({ params }: { params: { id: string } }) {
   const [cuentasBancarias, setCuentasBancarias] = useState<{ id: string; bancoNombre: string; saldoActual: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [mostrarPagadas, setMostrarPagadas] = useState(false);
+  const [esSuperadmin, setEsSuperadmin] = useState(false);
+  const [eliminandoId, setEliminandoId] = useState<string | null>(null);
 
   const [form, setForm] = useState({ clienteId: "", numeroFactura: "", montoTotal: 0, descripcion: "" });
   const [nuevoCliente, setNuevoCliente] = useState({ nombre: "", docIdentidad: "", telefono: "" });
 
   async function cargar() {
-    const [resCxc, resClientes, resCatalogos] = await Promise.all([
+    const [resCxc, resClientes, resCatalogos, resAcceso] = await Promise.all([
       fetch(`/api/empresas/${empresaId}/cuentas-por-cobrar`).then((r) => r.json()),
       fetch(`/api/empresas/${empresaId}/clientes`).then((r) => r.json()),
       fetch(`/api/empresas/${empresaId}/catalogos`).then((r) => r.json()),
+      fetch(`/api/empresas/${empresaId}/mi-acceso`).then((r) => r.json()),
     ]);
     setCxcs(resCxc);
     setClientes(resClientes);
     setCuentasBancarias(resCatalogos.cuentasBancarias ?? []);
+    if (!resAcceso.error) setEsSuperadmin(Boolean(resAcceso.esSuperadminPlataforma));
   }
 
   useEffect(() => {
@@ -89,6 +94,30 @@ export default function CreditosPage({ params }: { params: { id: string } }) {
     }
     setForm({ clienteId: "", numeroFactura: "", montoTotal: 0, descripcion: "" });
     setMostrarForm(false);
+    cargar();
+  }
+
+  async function handleEliminar(c: Cxc) {
+    if (
+      !window.confirm(
+        `¿Eliminar el crédito de "${c.cliente}" por S/ ${Number(c.montoTotal).toFixed(2)}? Esto no se puede deshacer.`
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    setEliminandoId(c.id);
+
+    const res = await fetch(`/api/empresas/${empresaId}/cuentas-por-cobrar/${c.id}`, { method: "DELETE" });
+
+    setEliminandoId(null);
+
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error?.toString() ?? "No se pudo eliminar el crédito.");
+      return;
+    }
+
     cargar();
   }
 
@@ -233,6 +262,26 @@ export default function CreditosPage({ params }: { params: { id: string } }) {
                 </p>
               </div>
             </div>
+
+            {/* Eliminar un crédito es una acción destructiva sobre datos
+                financieros — reservada al superadmin de la plataforma, y
+                aun para él bloqueada si ya tiene cobros registrados. */}
+            {esSuperadmin && (
+              c.tieneCobros ? (
+                <p className="mono" style={{ fontSize: 10.5, color: "var(--ink-soft)", marginTop: 8, fontStyle: "italic" }}>
+                  🔒 Ya tiene cobros registrados — no se puede eliminar.
+                </p>
+              ) : (
+                <button
+                  onClick={() => handleEliminar(c)}
+                  disabled={eliminandoId === c.id}
+                  className="btn-ghost"
+                  style={{ fontSize: 11, padding: "3px 10px", marginTop: 8, color: "var(--alert)" }}
+                >
+                  {eliminandoId === c.id ? "Eliminando..." : "Eliminar crédito"}
+                </button>
+              )
+            )}
 
             {c.estado !== "pagada" && (
               cobrando === c.id ? (

@@ -55,6 +55,9 @@ export async function GET(request: Request, { params }: { params: { id: string }
         fecha: p.fecha,
         medioPago: p.medioPago,
       })),
+      // Eliminar esta cuenta por cobrar es una acción reservada al
+      // superadmin, y aun para él se bloquea si ya tiene cobros (ver DELETE).
+      tieneCobros: c.cobros.length > 0,
     }))
   );
 }
