@@ -80,7 +80,12 @@ function VentasDiariasClasica({ empresaId }: { empresaId: string }) {
   const [guardando, setGuardando] = useState(false);
   const [conciliando, setConciliando] = useState<string | null>(null);
   const [formConciliar, setFormConciliar] = useState<Record<string, string>>({});
-  const [esSuperadmin, setEsSuperadmin] = useState(false);
+  // Actualizar Flujo de Caja (conciliar) es un permiso granular aparte —
+  // el superadmin siempre lo tiene, y además se le puede asignar a
+  // cualquier persona que apoye sin darle acceso total. `accesoTotal`
+  // cubre tanto al superadmin como a alguien con acceso total en esta
+  // empresa; `permisos` cubre a quien solo tiene este permiso puntual.
+  const [puedeConciliar, setPuedeConciliar] = useState(false);
   const [fechasAbiertas, setFechasAbiertas] = useState<Record<string, boolean>>({});
 
   const [form, setForm] = useState({
@@ -102,7 +107,13 @@ function VentasDiariasClasica({ empresaId }: { empresaId: string }) {
     setRegistros(resRegistros);
     setLocales(resCatalogos.locales ?? []);
     setCuentasBancarias(resCatalogos.cuentasBancarias ?? []);
-    setEsSuperadmin(Boolean(resAcceso.esSuperadminPlataforma));
+    if (!resAcceso.error) {
+      setPuedeConciliar(
+        Boolean(resAcceso.esSuperadminPlataforma) ||
+          Boolean(resAcceso.accesoTotal) ||
+          (resAcceso.permisos ?? []).includes("conciliar_ventas_diarias")
+      );
+    }
   }
 
   useEffect(() => {
@@ -286,7 +297,7 @@ function VentasDiariasClasica({ empresaId }: { empresaId: string }) {
                             </button>
                           )}
 
-                          {esSuperadmin && cuentasBancarias.length > 0 && legsPendientes.length > 0 && (
+                          {puedeConciliar && cuentasBancarias.length > 0 && legsPendientes.length > 0 && (
                             conciliando === r.id ? (
                               <div style={{ marginTop: 10, borderTop: "1px solid var(--line)", paddingTop: 10 }}>
                                 {legsPendientes.map((leg) => (

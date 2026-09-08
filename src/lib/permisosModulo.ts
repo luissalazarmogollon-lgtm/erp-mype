@@ -4,6 +4,10 @@
 export const MODULOS_DISPONIBLES = [
   { key: "estado_resultados", label: "Ver Estado de Resultados" },
   { key: "ventas_diarias", label: "Registrar ventas diarias" },
+  {
+    key: "conciliar_ventas_diarias",
+    label: "Actualizar Flujo de Caja desde Ventas Diarias (conciliar cada método de pago con una cuenta bancaria)",
+  },
   { key: "gastos", label: "Registrar gastos y costos" },
   { key: "creditos", label: "Gestionar créditos a clientes (CxC)" },
   { key: "cuentas_por_pagar", label: "Clasificar y pagar cuentas por pagar (finanzas/contabilidad)" },
