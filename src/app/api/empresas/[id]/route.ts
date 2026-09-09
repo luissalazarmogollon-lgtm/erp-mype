@@ -124,6 +124,7 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
     prisma.gasto.deleteMany({ where: { empresaId } }),
     prisma.documentoCompra.deleteMany({ where: { empresaId } }),
     // Ventas diarias, RRHH
+    prisma.conciliacionVentaDiaria.deleteMany({ where: { registroVentaDiaria: { empresaId } } }),
     prisma.registroVentaDiaria.deleteMany({ where: { empresaId } }),
     prisma.adelantoSueldo.deleteMany({ where: { empresaId } }),
     prisma.empleado.deleteMany({ where: { empresaId } }),

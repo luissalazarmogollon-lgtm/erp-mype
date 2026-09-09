@@ -86,6 +86,7 @@ model Usuario {
   // Ficha de RRHH (Empleado) vinculada a esta cuenta, si el trabajador
   // tiene acceso para ver "Mis actividades" en Gestión de Actividades.
   empleado                    Empleado?
+  conciliacionesVenta         ConciliacionVentaDiaria[]
 
   @@map("usuarios")
 }
@@ -540,8 +541,32 @@ model RegistroVentaDiaria {
   usuarioId      String   @map("usuario_id") @db.Uuid
   fechaRegistro  DateTime @default(now()) @map("fecha_registro")
 
+  conciliaciones ConciliacionVentaDiaria[]
+
   @@unique([empresaId, fecha, localId])
   @@map("registros_venta_diaria")
+}
+
+// Cada depósito individual hecho contra un registro de venta diaria, por
+// método de pago ("leg": efectivo | yape | plin | tarjeta). Puede haber
+// varios por leg (depósitos parciales) hasta cubrir el monto vendido —
+// ver nota en migracion_conciliacion_venta_diaria.sql. El monto puede
+// ser distinto (mayor o menor) al monto registrado en la venta del día;
+// la diferencia ("saldo por depositar") se calcula sumando estas filas,
+// no comparando 1 a 1 contra el monto de la venta.
+model ConciliacionVentaDiaria {
+  id                    BigInt              @id @default(autoincrement())
+  registroVentaDiariaId BigInt              @map("registro_venta_diaria_id")
+  registroVentaDiaria   RegistroVentaDiaria @relation(fields: [registroVentaDiariaId], references: [id])
+  leg                   String              // efectivo | yape | plin | tarjeta
+  monto                 Decimal             @db.Decimal(12, 2)
+  cuentaBancariaId      BigInt              @map("cuenta_bancaria_id")
+  cuentaBancaria        CuentaBancaria      @relation(fields: [cuentaBancariaId], references: [id])
+  fecha                 DateTime            @default(now())
+  usuarioId             String              @map("usuario_id") @db.Uuid
+  usuario               Usuario             @relation(fields: [usuarioId], references: [id])
+
+  @@map("conciliaciones_venta_diaria")
 }
 
 // Ventas al crédito por cliente ("fiado") — acumula saldo, se puede
@@ -756,6 +781,7 @@ model CuentaBancaria {
   ventasTarjeta  RegistroVentaDiaria[] @relation("TarjetaCuenta")
   cajasChicas    CajaChica[]
   documentosCompra DocumentoCompra[]
+  conciliacionesVenta ConciliacionVentaDiaria[]
 
   @@map("cuentas_bancarias")
 }

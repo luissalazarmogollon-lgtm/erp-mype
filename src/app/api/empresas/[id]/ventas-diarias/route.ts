@@ -30,31 +30,71 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
   const registros = await prisma.registroVentaDiaria.findMany({
     where: { empresaId },
-    include: { local: true, efectivoCuenta: true, yapeCuenta: true, plinCuenta: true, tarjetaCuenta: true },
+    include: {
+      local: true,
+      efectivoCuenta: true,
+      yapeCuenta: true,
+      plinCuenta: true,
+      tarjetaCuenta: true,
+      conciliaciones: { include: { cuentaBancaria: true }, orderBy: { fecha: "asc" } },
+    },
     orderBy: { fecha: "desc" },
     take: 90,
   });
 
+  // Para cada método de pago calcula cuánto se ha depositado en total
+  // (sumando cada depósito parcial registrado en ConciliacionVentaDiaria)
+  // y cuánto falta por depositar. Si el registro es de ANTES de que
+  // existieran los depósitos parciales (no tiene filas ahí) pero ya
+  // tenía la cuenta antigua asignada (*CuentaId, del sistema de "todo o
+  // nada" anterior), se asume depositado al 100% — así no reaparece como
+  // pendiente algo que ya se había conciliado.
+  function resumenLeg(
+    montoRegistrado: number,
+    cuentaLegacyId: bigint | null,
+    conciliacionesLeg: { monto: unknown; cuentaBancaria: { bancoNombre: string }; fecha: Date }[]
+  ) {
+    let depositado = conciliacionesLeg.reduce((acc, c) => acc + Number(c.monto), 0);
+    if (conciliacionesLeg.length === 0 && cuentaLegacyId !== null) {
+      depositado = montoRegistrado;
+    }
+    const pendiente = Math.max(montoRegistrado - depositado, 0);
+    const excedente = Math.max(depositado - montoRegistrado, 0);
+    return {
+      depositado: depositado.toFixed(2),
+      pendiente: pendiente.toFixed(2),
+      excedente: excedente > 0.004 ? excedente.toFixed(2) : null,
+      depositos: conciliacionesLeg.map((c) => ({
+        cuenta: c.cuentaBancaria.bancoNombre,
+        monto: Number(c.monto).toFixed(2),
+        fecha: c.fecha,
+      })),
+    };
+  }
+
   return NextResponse.json(
-    registros.map((r) => ({
-      id: r.id.toString(),
-      local: r.local?.nombre ?? null,
-      fecha: r.fecha,
-      montoEfectivo: r.montoEfectivo.toString(),
-      montoYape: r.montoYape.toString(),
-      montoPlin: r.montoPlin.toString(),
-      montoTarjeta: r.montoTarjeta.toString(),
-      total: (
-        Number(r.montoEfectivo) + Number(r.montoYape) + Number(r.montoPlin) + Number(r.montoTarjeta)
-      ).toFixed(2),
-      observacion: r.observacion,
-      conciliacion: {
-        efectivoCuenta: r.efectivoCuenta?.bancoNombre ?? null,
-        yapeCuenta: r.yapeCuenta?.bancoNombre ?? null,
-        plinCuenta: r.plinCuenta?.bancoNombre ?? null,
-        tarjetaCuenta: r.tarjetaCuenta?.bancoNombre ?? null,
-      },
-    }))
+    registros.map((r) => {
+      const porLeg = (key: string) => r.conciliaciones.filter((c) => c.leg === key);
+      return {
+        id: r.id.toString(),
+        local: r.local?.nombre ?? null,
+        fecha: r.fecha,
+        montoEfectivo: r.montoEfectivo.toString(),
+        montoYape: r.montoYape.toString(),
+        montoPlin: r.montoPlin.toString(),
+        montoTarjeta: r.montoTarjeta.toString(),
+        total: (
+          Number(r.montoEfectivo) + Number(r.montoYape) + Number(r.montoPlin) + Number(r.montoTarjeta)
+        ).toFixed(2),
+        observacion: r.observacion,
+        conciliacion: {
+          efectivo: resumenLeg(Number(r.montoEfectivo), r.efectivoCuentaId, porLeg("efectivo")),
+          yape: resumenLeg(Number(r.montoYape), r.yapeCuentaId, porLeg("yape")),
+          plin: resumenLeg(Number(r.montoPlin), r.plinCuentaId, porLeg("plin")),
+          tarjeta: resumenLeg(Number(r.montoTarjeta), r.tarjetaCuentaId, porLeg("tarjeta")),
+        },
+      };
+    })
   );
 }
 

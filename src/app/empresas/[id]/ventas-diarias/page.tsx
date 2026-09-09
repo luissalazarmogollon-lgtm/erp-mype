@@ -41,6 +41,12 @@ export default function VentasDiariasORFacturacionPage({ params }: { params: { i
 // Productos / Mixta — caja registradora diaria (sin cambios de lógica).
 // ---------------------------------------------------------------------
 
+type LegResumen = {
+  depositado: string;
+  pendiente: string;
+  excedente: string | null;
+  depositos: { cuenta: string; monto: string; fecha: string }[];
+};
 type Registro = {
   id: string;
   local: string | null;
@@ -52,24 +58,25 @@ type Registro = {
   total: string;
   observacion: string | null;
   conciliacion: {
-    efectivoCuenta: string | null;
-    yapeCuenta: string | null;
-    plinCuenta: string | null;
-    tarjetaCuenta: string | null;
+    efectivo: LegResumen;
+    yape: LegResumen;
+    plin: LegResumen;
+    tarjeta: LegResumen;
   };
 };
 type LocalOpcion = { id: string; nombre: string };
 type CuentaOpcion = { id: string; bancoNombre: string };
+type EntradaDeposito = { cuentaBancariaId: string; monto: number };
 
 function hoyISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
 const LEGS = [
-  { campo: "efectivoCuentaId" as const, conciliacionCampo: "efectivoCuenta" as const, monto: "montoEfectivo" as const, label: "Efectivo" },
-  { campo: "yapeCuentaId" as const, conciliacionCampo: "yapeCuenta" as const, monto: "montoYape" as const, label: "Yape" },
-  { campo: "plinCuentaId" as const, conciliacionCampo: "plinCuenta" as const, monto: "montoPlin" as const, label: "Plin" },
-  { campo: "tarjetaCuentaId" as const, conciliacionCampo: "tarjetaCuenta" as const, monto: "montoTarjeta" as const, label: "Tarjeta" },
+  { key: "efectivo" as const, monto: "montoEfectivo" as const, label: "Efectivo" },
+  { key: "yape" as const, monto: "montoYape" as const, label: "Yape" },
+  { key: "plin" as const, monto: "montoPlin" as const, label: "Plin" },
+  { key: "tarjeta" as const, monto: "montoTarjeta" as const, label: "Tarjeta" },
 ];
 
 function VentasDiariasClasica({ empresaId }: { empresaId: string }) {
@@ -79,7 +86,7 @@ function VentasDiariasClasica({ empresaId }: { empresaId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [conciliando, setConciliando] = useState<string | null>(null);
-  const [formConciliar, setFormConciliar] = useState<Record<string, string>>({});
+  const [formConciliar, setFormConciliar] = useState<Record<string, EntradaDeposito>>({});
   // Actualizar Flujo de Caja (conciliar) es un permiso granular aparte —
   // el superadmin siempre lo tiene, y además se le puede asignar a
   // cualquier persona que apoye sin darle acceso total. `accesoTotal`
@@ -148,10 +155,22 @@ function VentasDiariasClasica({ empresaId }: { empresaId: string }) {
 
   async function handleConciliar(registroId: string) {
     setError(null);
+    // Solo se envían los métodos con monto y cuenta indicados — el monto
+    // depositado puede ser distinto (menor o mayor) al monto registrado
+    // en la venta del día; no hace falta llenar todos los pendientes de
+    // una sola vez.
+    const body: Record<string, EntradaDeposito> = {};
+    for (const [key, entrada] of Object.entries(formConciliar)) {
+      if (entrada.cuentaBancariaId && entrada.monto > 0) body[key] = entrada;
+    }
+    if (Object.keys(body).length === 0) {
+      setError("Indica el monto depositado y la cuenta de al menos un método de pago.");
+      return;
+    }
     const res = await fetch(`/api/empresas/${empresaId}/ventas-diarias/${registroId}/conciliar`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formConciliar),
+      body: JSON.stringify(body),
     });
     if (!res.ok) {
       const data = await res.json();
@@ -269,9 +288,9 @@ function VentasDiariasClasica({ empresaId }: { empresaId: string }) {
                   <div style={{ borderTop: "1px solid var(--line)", display: "flex", flexDirection: "column" }}>
                     {registrosDelDia.map((r) => {
                       const legsPendientes = LEGS.filter(
-                        (leg) => Number(r[leg.monto]) > 0 && !r.conciliacion[leg.conciliacionCampo]
+                        (leg) => Number(r[leg.monto]) > 0 && Number(r.conciliacion[leg.key].pendiente) > 0.004
                       );
-                      const tieneAlgoConciliado = LEGS.some((leg) => r.conciliacion[leg.conciliacionCampo]);
+                      const tieneAlgoDepositado = LEGS.some((leg) => Number(r.conciliacion[leg.key].depositado) > 0.004);
                       return (
                         <div key={r.id} style={{ padding: 14, borderBottom: "1px solid var(--line)" }}>
                           <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -279,13 +298,24 @@ function VentasDiariasClasica({ empresaId }: { empresaId: string }) {
                             <span className="mono" style={{ fontSize: 13.5 }}>S/ {Number(r.total).toFixed(2)}</span>
                           </div>
                           <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 4 }}>
-                            Efectivo S/{Number(r.montoEfectivo).toFixed(2)}{r.conciliacion.efectivoCuenta ? ` ✓ ${r.conciliacion.efectivoCuenta}` : ""} ·
-                            {" "}Yape S/{Number(r.montoYape).toFixed(2)}{r.conciliacion.yapeCuenta ? ` ✓ ${r.conciliacion.yapeCuenta}` : ""} ·
-                            {" "}Plin S/{Number(r.montoPlin).toFixed(2)}{r.conciliacion.plinCuenta ? ` ✓ ${r.conciliacion.plinCuenta}` : ""} ·
-                            {" "}Tarjeta S/{Number(r.montoTarjeta).toFixed(2)}{r.conciliacion.tarjetaCuenta ? ` ✓ ${r.conciliacion.tarjetaCuenta}` : ""}
+                            {LEGS.filter((leg) => Number(r[leg.monto]) > 0)
+                              .map((leg) => {
+                                const resumen = r.conciliacion[leg.key];
+                                const pendiente = Number(resumen.pendiente);
+                                let estado = "";
+                                if (pendiente <= 0.004) {
+                                  estado = resumen.excedente ? ` ✓ (excedente S/${resumen.excedente})` : " ✓";
+                                } else if (Number(resumen.depositado) > 0.004) {
+                                  estado = ` — depositado S/${resumen.depositado}, falta S/${resumen.pendiente}`;
+                                } else {
+                                  estado = " — sin depositar";
+                                }
+                                return `${leg.label} S/${Number(r[leg.monto]).toFixed(2)}${estado}`;
+                              })
+                              .join(" · ")}
                           </p>
 
-                          {!tieneAlgoConciliado && (
+                          {!tieneAlgoDepositado && (
                             <button
                               onClick={() => handleEliminar(r.id)}
                               style={{
@@ -300,20 +330,59 @@ function VentasDiariasClasica({ empresaId }: { empresaId: string }) {
                           {puedeConciliar && cuentasBancarias.length > 0 && legsPendientes.length > 0 && (
                             conciliando === r.id ? (
                               <div style={{ marginTop: 10, borderTop: "1px solid var(--line)", paddingTop: 10 }}>
-                                {legsPendientes.map((leg) => (
-                                  <div key={leg.campo} className="field" style={{ marginBottom: 8 }}>
-                                    <label>{leg.label} (S/ {Number(r[leg.monto]).toFixed(2)}) entró a:</label>
-                                    <select
-                                      value={formConciliar[leg.campo] ?? ""}
-                                      onChange={(e) => setFormConciliar({ ...formConciliar, [leg.campo]: e.target.value })}
-                                    >
-                                      <option value="">Sin registrar</option>
-                                      {cuentasBancarias.map((c) => (
-                                        <option key={c.id} value={c.id}>{c.bancoNombre}</option>
-                                      ))}
-                                    </select>
-                                  </div>
-                                ))}
+                                {legsPendientes.map((leg) => {
+                                  const resumen = r.conciliacion[leg.key];
+                                  const pendiente = Number(resumen.pendiente);
+                                  const entrada = formConciliar[leg.key] ?? { cuentaBancariaId: "", monto: pendiente };
+                                  return (
+                                    <div key={leg.key} className="field" style={{ marginBottom: 10 }}>
+                                      <label>
+                                        {leg.label} — registrado S/{Number(r[leg.monto]).toFixed(2)}
+                                        {Number(resumen.depositado) > 0.004 && ` · ya depositado S/${resumen.depositado}`}
+                                        {" "}· falta depositar S/{resumen.pendiente}
+                                      </label>
+                                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                                        <input
+                                          type="number"
+                                          step="0.01"
+                                          min="0"
+                                          value={entrada.monto}
+                                          onChange={(e) =>
+                                            setFormConciliar({
+                                              ...formConciliar,
+                                              [leg.key]: { ...entrada, monto: Number(e.target.value) },
+                                            })
+                                          }
+                                          placeholder="Monto depositado"
+                                        />
+                                        <select
+                                          value={entrada.cuentaBancariaId}
+                                          onChange={(e) =>
+                                            setFormConciliar({
+                                              ...formConciliar,
+                                              [leg.key]: { ...entrada, cuentaBancariaId: e.target.value },
+                                            })
+                                          }
+                                        >
+                                          <option value="">¿A qué cuenta entró?</option>
+                                          {cuentasBancarias.map((c) => (
+                                            <option key={c.id} value={c.id}>{c.bancoNombre}</option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                      {entrada.monto > 0 && entrada.monto < pendiente - 0.004 && (
+                                        <p className="mono" style={{ fontSize: 11, color: "var(--stamp)", marginTop: 4 }}>
+                                          Quedará pendiente por depositar S/{(pendiente - entrada.monto).toFixed(2)} de {leg.label}.
+                                        </p>
+                                      )}
+                                      {entrada.monto > pendiente + 0.004 && (
+                                        <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 4 }}>
+                                          Depositas S/{(entrada.monto - pendiente).toFixed(2)} más de lo que faltaba — queda como excedente.
+                                        </p>
+                                      )}
+                                    </div>
+                                  );
+                                })}
                                 {error && <p className="field error">{error}</p>}
                                 <div style={{ display: "flex", gap: 10 }}>
                                   <button className="btn-primary" style={{ fontSize: 12, padding: "8px 14px" }} onClick={() => handleConciliar(r.id)}>

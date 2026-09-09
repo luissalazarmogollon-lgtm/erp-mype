@@ -6,28 +6,37 @@ import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
+const legInputSchema = z.object({
+  cuentaBancariaId: z.string().min(1, "Selecciona a qué cuenta entró"),
+  monto: z.number().positive("El monto depositado debe ser mayor a 0"),
+});
+
 const conciliarSchema = z.object({
-  efectivoCuentaId: z.string().optional(),
-  yapeCuentaId: z.string().optional(),
-  plinCuentaId: z.string().optional(),
-  tarjetaCuentaId: z.string().optional(),
+  efectivo: legInputSchema.optional(),
+  yape: legInputSchema.optional(),
+  plin: legInputSchema.optional(),
+  tarjeta: legInputSchema.optional(),
 });
 
 const LEGS = [
-  { campo: "efectivoCuentaId" as const, monto: "montoEfectivo" as const, label: "Efectivo" },
-  { campo: "yapeCuentaId" as const, monto: "montoYape" as const, label: "Yape" },
-  { campo: "plinCuentaId" as const, monto: "montoPlin" as const, label: "Plin" },
-  { campo: "tarjetaCuentaId" as const, monto: "montoTarjeta" as const, label: "Tarjeta" },
+  { key: "efectivo" as const, campo: "efectivoCuentaId" as const, monto: "montoEfectivo" as const, label: "Efectivo" },
+  { key: "yape" as const, campo: "yapeCuentaId" as const, monto: "montoYape" as const, label: "Yape" },
+  { key: "plin" as const, campo: "plinCuentaId" as const, monto: "montoPlin" as const, label: "Plin" },
+  { key: "tarjeta" as const, campo: "tarjetaCuentaId" as const, monto: "montoTarjeta" as const, label: "Tarjeta" },
 ];
 
 // POST /api/empresas/[id]/ventas-diarias/[registroId]/conciliar
 //
-// Indica a qué cuenta bancaria entró cada método de pago del día. Por cada
-// método con monto > 0 que todavía no estaba conciliado (su *CuentaId es
-// null) y que viene con una cuenta en el body, genera el movimiento
-// bancario de ingreso y suma el saldo de esa cuenta. Es idempotente: si un
-// método ya estaba conciliado, no se vuelve a procesar (evita duplicar el
-// ingreso si se envía el formulario dos veces).
+// Registra un depósito real en el banco contra un método de pago del día
+// (efectivo, Yape, Plin o Tarjeta). A diferencia de antes, el monto
+// depositado NO tiene que ser igual al monto registrado en la venta del
+// día: quien lleva el efectivo al banco a veces deposita menos (queda
+// "saldo por depositar", ver GET en ../route.ts, que lo calcula sumando
+// todas las filas de ConciliacionVentaDiaria de cada leg) o más (el
+// excedente simplemente queda registrado como parte del depósito, sin
+// bloquear nada). Por eso se puede llamar varias veces para el mismo
+// método hasta cubrir el monto vendido — cada llamada es un depósito
+// nuevo, no un reemplazo del anterior.
 //
 // Es una acción sensible (mueve saldos reales de cuentas bancarias), así
 // que requiere el permiso granular "conciliar_ventas_diarias" en esta
@@ -59,30 +68,25 @@ export async function POST(
   if (!registro) return NextResponse.json({ error: "Registro no encontrado" }, { status: 404 });
 
   const usuarioId = usuarioActual.id;
-  const procesados: string[] = [];
-  const yaConciliados: string[] = [];
+  const procesados: { label: string; monto: string }[] = [];
 
   await prisma.$transaction(async (tx) => {
     for (const leg of LEGS) {
-      const cuentaIdStr = datos[leg.campo];
-      const montoLeg = Number(registro[leg.monto]);
-      const yaConciliado = registro[leg.campo] !== null;
+      const entrada = datos[leg.key];
+      if (!entrada) continue;
 
-      if (montoLeg <= 0) continue;
-      if (yaConciliado) {
-        yaConciliados.push(leg.label);
-        continue;
-      }
-      if (!cuentaIdStr) continue;
+      const montoRegistrado = Number(registro[leg.monto]);
+      if (montoRegistrado <= 0) continue; // nada que conciliar en este método
 
-      const cuentaId = BigInt(cuentaIdStr);
+      const cuentaId = BigInt(entrada.cuentaBancariaId);
+      const montoDeposito = entrada.monto;
 
       await tx.movimientoBancario.create({
         data: {
           cuentaBancariaId: cuentaId,
           tipo: "ingreso",
-          monto: montoLeg,
-          concepto: `Venta del día (${leg.label}) — ${registro.fecha.toISOString().slice(0, 10)}`,
+          monto: montoDeposito,
+          concepto: `Venta del día (${leg.label}) — depósito — ${registro.fecha.toISOString().slice(0, 10)}`,
           referenciaTipo: "venta_diaria",
           referenciaId: registro.id,
           usuarioId,
@@ -90,11 +94,24 @@ export async function POST(
       });
       await tx.cuentaBancaria.update({
         where: { id: cuentaId },
-        data: { saldoActual: { increment: montoLeg } },
+        data: { saldoActual: { increment: montoDeposito } },
+      });
+      await tx.conciliacionVentaDiaria.create({
+        data: {
+          registroVentaDiariaId: registroId,
+          leg: leg.key,
+          monto: montoDeposito,
+          cuentaBancariaId: cuentaId,
+          usuarioId,
+        },
       });
 
-      // Se usa un switch explícito (en vez de una clave computada) para
-      // que Prisma tipe correctamente cada campo de la actualización.
+      // Guarda la última cuenta usada para este método — referencia rápida
+      // en el historial y, sobre todo, mantiene el candado que impide
+      // borrar el registro una vez que ya se movió dinero real (ver
+      // DELETE en ../[registroId]/route.ts). Se usa un switch explícito
+      // (en vez de una clave computada) para que Prisma tipe correctamente
+      // cada campo de la actualización.
       if (leg.campo === "efectivoCuentaId") {
         await tx.registroVentaDiaria.update({ where: { id: registroId }, data: { efectivoCuentaId: cuentaId } });
       } else if (leg.campo === "yapeCuentaId") {
@@ -105,9 +122,16 @@ export async function POST(
         await tx.registroVentaDiaria.update({ where: { id: registroId }, data: { tarjetaCuentaId: cuentaId } });
       }
 
-      procesados.push(leg.label);
+      procesados.push({ label: leg.label, monto: montoDeposito.toFixed(2) });
     }
   });
 
-  return NextResponse.json({ procesados, yaConciliados });
+  if (procesados.length === 0) {
+    return NextResponse.json(
+      { error: "No se indicó ningún depósito válido (monto y cuenta bancaria) para registrar." },
+      { status: 400 }
+    );
+  }
+
+  return NextResponse.json({ procesados });
 }
