@@ -32,6 +32,7 @@ export default function CajaChicaPage({ params }: { params: { id: string } }) {
   const [mostrarFormCaja, setMostrarFormCaja] = useState(false);
   const [mostrarFormGasto, setMostrarFormGasto] = useState(false);
   const [reponiendo, setReponiendo] = useState(false);
+  const [devolviendo, setDevolviendo] = useState(false);
   const [clasificando, setClasificando] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [puedeClasificar, setPuedeClasificar] = useState(false);
@@ -39,6 +40,7 @@ export default function CajaChicaPage({ params }: { params: { id: string } }) {
 
   const [formCaja, setFormCaja] = useState({ nombre: "", cuentaBancariaId: "", montoFondo: 0 });
   const [formReponer, setFormReponer] = useState({ monto: 0, cuentaBancariaId: "" });
+  const [formDevolver, setFormDevolver] = useState({ monto: 0, cuentaBancariaId: "" });
   const [formGasto, setFormGasto] = useState({ descripcion: "", monto: 0, fecha: hoyISO(), tipoComprobante: "sin_comprobante", numeroComprobante: "" });
   const [formClasificar, setFormClasificar] = useState({ naturaleza: "gasto_operativo", categoriaEspecifica: CATEGORIAS_POR_NATURALEZA.gasto_operativo[0], proveedorNombre: "" });
 
@@ -111,6 +113,24 @@ export default function CajaChicaPage({ params }: { params: { id: string } }) {
     }
     setReponiendo(false);
     setFormReponer({ monto: 0, cuentaBancariaId: "" });
+    cargarCajas();
+  }
+
+  async function handleDevolver() {
+    if (!cajaSeleccionada) return;
+    setError(null);
+    const res = await fetch(`/api/empresas/${empresaId}/caja-chica/${cajaSeleccionada}/devolver`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(formDevolver),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error?.toString() ?? "No se pudo devolver el sobrante.");
+      return;
+    }
+    setDevolviendo(false);
+    setFormDevolver({ monto: 0, cuentaBancariaId: "" });
     cargarCajas();
   }
 
@@ -275,10 +295,67 @@ export default function CajaChicaPage({ params }: { params: { id: string } }) {
                       <button className="btn-ghost" style={{ fontSize: 12, padding: "8px 14px" }} onClick={() => setReponiendo(false)}>Cancelar</button>
                     </div>
                   </div>
+                ) : devolviendo ? (
+                  <div style={{ marginTop: 10, borderTop: "1px solid var(--line)", paddingTop: 10 }}>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <input
+                        type="number" step="0.01" placeholder="Monto a devolver"
+                        value={formDevolver.monto}
+                        onChange={(e) => setFormDevolver({ ...formDevolver, monto: Number(e.target.value) })}
+                        style={{ flex: 1, padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 2 }}
+                      />
+                      <select
+                        value={formDevolver.cuentaBancariaId}
+                        onChange={(e) => setFormDevolver({ ...formDevolver, cuentaBancariaId: e.target.value })}
+                        style={{ flex: 1 }}
+                      >
+                        <option value="">{caja.cuentaBancaria ? "Cuenta por defecto" : "Selecciona una cuenta..."}</option>
+                        {cuentasBancarias.map((c) => (
+                          <option key={c.id} value={c.id}>{c.bancoNombre}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", margin: "8px 0" }}>
+                      Vas a devolver <b>S/ {formDevolver.monto.toFixed(2)}</b> desde "{caja.nombre}" hacia{" "}
+                      <b>
+                        {formDevolver.cuentaBancariaId
+                          ? cuentasBancarias.find((c) => c.id === formDevolver.cuentaBancariaId)?.bancoNombre
+                          : caja.cuentaBancaria ?? "(elige una cuenta)"}
+                      </b>
+                      {formDevolver.monto >= Number(caja.montoFondo) && Number(caja.montoFondo) > 0 && " — la caja queda en cero."}
+                    </p>
+                    {error && <p className="field error">{error}</p>}
+                    <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+                      <button
+                        className="btn-primary"
+                        style={{ fontSize: 12, padding: "8px 14px" }}
+                        disabled={formDevolver.monto <= 0 || (!formDevolver.cuentaBancariaId && !caja.cuentaBancaria)}
+                        onClick={handleDevolver}
+                      >
+                        Confirmar devolución de S/ {formDevolver.monto.toFixed(2)}
+                      </button>
+                      <button className="btn-ghost" style={{ fontSize: 12, padding: "8px 14px" }} onClick={() => setDevolviendo(false)}>Cancelar</button>
+                    </div>
+                  </div>
                 ) : (
-                  <button className="btn-ghost" style={{ marginTop: 10, fontSize: 12, padding: "6px 12px" }} onClick={() => setReponiendo(true)}>
-                    Reponer fondo
-                  </button>
+                  <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+                    <button className="btn-ghost" style={{ fontSize: 12, padding: "6px 12px" }} onClick={() => setReponiendo(true)}>
+                      Reponer fondo
+                    </button>
+                    {Number(caja.montoFondo) > 0 && (
+                      <button
+                        className="btn-ghost"
+                        style={{ fontSize: 12, padding: "6px 12px" }}
+                        onClick={() => {
+                          setDevolviendo(true);
+                          setFormDevolver({ monto: Number(caja.montoFondo), cuentaBancariaId: "" });
+                          setError(null);
+                        }}
+                      >
+                        Devolver a banco
+                      </button>
+                    )}
+                  </div>
                 )
               )}
             </div>
