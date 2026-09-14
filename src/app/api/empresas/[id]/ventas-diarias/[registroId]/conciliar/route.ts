@@ -3,6 +3,7 @@ import { z } from "zod";
 import { mensajeErrorZod } from "@/lib/zodError";
 import { prisma } from "@/lib/prisma";
 import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
+import { calcularResumenLeg } from "@/lib/conciliacionVentaDiaria";
 
 export const dynamic = "force-dynamic";
 
@@ -30,13 +31,17 @@ const LEGS = [
 // Registra un depósito real en el banco contra un método de pago del día
 // (efectivo, Yape, Plin o Tarjeta). A diferencia de antes, el monto
 // depositado NO tiene que ser igual al monto registrado en la venta del
-// día: quien lleva el efectivo al banco a veces deposita menos (queda
-// "saldo por depositar", ver GET en ../route.ts, que lo calcula sumando
-// todas las filas de ConciliacionVentaDiaria de cada leg) o más (el
-// excedente simplemente queda registrado como parte del depósito, sin
-// bloquear nada). Por eso se puede llamar varias veces para el mismo
-// método hasta cubrir el monto vendido — cada llamada es un depósito
-// nuevo, no un reemplazo del anterior.
+// día: quien lleva el efectivo al banco normalmente deposita en billetes
+// y queda un saldo suelto sin depositar (ej. vendió S/345, deposita
+// S/340, quedan S/5 "por depositar"). Ese saldo se calcula sumando todas
+// las filas de ConciliacionVentaDiaria de cada leg (ver GET en
+// ../route.ts, que también expone el total pendiente de TODA la
+// empresa). Lo que NO se permite es lo contrario: depositar más de lo
+// que vendió ese método ese día — cada depósito nuevo no puede superar
+// el saldo pendiente vigente de ese leg, se valida abajo antes de tocar
+// nada. Por eso se puede llamar varias veces para el mismo método hasta
+// cubrir el monto vendido — cada llamada es un depósito nuevo, no un
+// reemplazo del anterior.
 //
 // Es una acción sensible (mueve saldos reales de cuentas bancarias), así
 // que requiere el permiso granular "conciliar_ventas_diarias" en esta
@@ -64,8 +69,31 @@ export async function POST(
   const datos = parsed.data;
 
   const registroId = BigInt(params.registroId);
-  const registro = await prisma.registroVentaDiaria.findFirst({ where: { id: registroId, empresaId } });
+  const registro = await prisma.registroVentaDiaria.findFirst({
+    where: { id: registroId, empresaId },
+    include: { conciliaciones: true },
+  });
   if (!registro) return NextResponse.json({ error: "Registro no encontrado" }, { status: 404 });
+
+  // Valida ANTES de mover cualquier saldo: ningún depósito puede superar
+  // lo que todavía falta por depositar de ese método (recalculado desde
+  // la base de datos, no confiando en lo que muestra el navegador — el
+  // saldo pudo cambiar si alguien más ya depositó parte mientras tanto).
+  for (const leg of LEGS) {
+    const entrada = datos[leg.key];
+    if (!entrada) continue;
+    const montoRegistrado = Number(registro[leg.monto]);
+    const conciliacionesLeg = registro.conciliaciones.filter((c) => c.leg === leg.key);
+    const { pendiente } = calcularResumenLeg(montoRegistrado, registro[leg.campo], conciliacionesLeg);
+    if (entrada.monto > pendiente + 0.004) {
+      return NextResponse.json(
+        {
+          error: `El depósito de ${leg.label} (S/ ${entrada.monto.toFixed(2)}) supera el saldo pendiente por depositar de ese método (S/ ${pendiente.toFixed(2)}). No se puede depositar más de lo que vendió ese día.`,
+        },
+        { status: 400 }
+      );
+    }
+  }
 
   const usuarioId = usuarioActual.id;
   const procesados: { label: string; monto: string }[] = [];

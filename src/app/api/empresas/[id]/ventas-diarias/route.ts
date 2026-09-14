@@ -3,6 +3,7 @@ import { z } from "zod";
 import { mensajeErrorZod } from "@/lib/zodError";
 import { prisma } from "@/lib/prisma";
 import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
+import { calcularResumenLeg } from "@/lib/conciliacionVentaDiaria";
 
 export const dynamic = "force-dynamic";
 
@@ -42,24 +43,14 @@ export async function GET(request: Request, { params }: { params: { id: string }
     take: 90,
   });
 
-  // Para cada método de pago calcula cuánto se ha depositado en total
-  // (sumando cada depósito parcial registrado en ConciliacionVentaDiaria)
-  // y cuánto falta por depositar. Si el registro es de ANTES de que
-  // existieran los depósitos parciales (no tiene filas ahí) pero ya
-  // tenía la cuenta antigua asignada (*CuentaId, del sistema de "todo o
-  // nada" anterior), se asume depositado al 100% — así no reaparece como
-  // pendiente algo que ya se había conciliado.
-  function resumenLeg(
+  // Resumen para el historial (últimos 90): cuánto se depositó y cuánto
+  // falta por depositar de cada método de pago.
+  function resumenLegDisplay(
     montoRegistrado: number,
     cuentaLegacyId: bigint | null,
     conciliacionesLeg: { monto: unknown; cuentaBancaria: { bancoNombre: string }; fecha: Date }[]
   ) {
-    let depositado = conciliacionesLeg.reduce((acc, c) => acc + Number(c.monto), 0);
-    if (conciliacionesLeg.length === 0 && cuentaLegacyId !== null) {
-      depositado = montoRegistrado;
-    }
-    const pendiente = Math.max(montoRegistrado - depositado, 0);
-    const excedente = Math.max(depositado - montoRegistrado, 0);
+    const { depositado, pendiente, excedente } = calcularResumenLeg(montoRegistrado, cuentaLegacyId, conciliacionesLeg);
     return {
       depositado: depositado.toFixed(2),
       pendiente: pendiente.toFixed(2),
@@ -72,8 +63,40 @@ export async function GET(request: Request, { params }: { params: { id: string }
     };
   }
 
-  return NextResponse.json(
-    registros.map((r) => {
+  // Saldo total pendiente por depositar — a diferencia del historial de
+  // arriba (limitado a los últimos 90 registros, para no cargar de más),
+  // este total suma TODOS los registros de la empresa, porque un saldo
+  // pendiente de hace varios meses sigue siendo dinero que falta llevar
+  // al banco y no debe perderse de vista solo porque salió de la lista
+  // reciente.
+  const registrosParaTotal = await prisma.registroVentaDiaria.findMany({
+    where: { empresaId },
+    select: {
+      montoEfectivo: true,
+      montoYape: true,
+      montoPlin: true,
+      montoTarjeta: true,
+      efectivoCuentaId: true,
+      yapeCuentaId: true,
+      plinCuentaId: true,
+      tarjetaCuentaId: true,
+      conciliaciones: { select: { leg: true, monto: true } },
+    },
+  });
+  const totalPendiente = registrosParaTotal.reduce((acc, r) => {
+    const porLeg = (key: string) => r.conciliaciones.filter((c) => c.leg === key);
+    return (
+      acc +
+      calcularResumenLeg(Number(r.montoEfectivo), r.efectivoCuentaId, porLeg("efectivo")).pendiente +
+      calcularResumenLeg(Number(r.montoYape), r.yapeCuentaId, porLeg("yape")).pendiente +
+      calcularResumenLeg(Number(r.montoPlin), r.plinCuentaId, porLeg("plin")).pendiente +
+      calcularResumenLeg(Number(r.montoTarjeta), r.tarjetaCuentaId, porLeg("tarjeta")).pendiente
+    );
+  }, 0);
+
+  return NextResponse.json({
+    totalPendiente: totalPendiente.toFixed(2),
+    registros: registros.map((r) => {
       const porLeg = (key: string) => r.conciliaciones.filter((c) => c.leg === key);
       return {
         id: r.id.toString(),
@@ -88,14 +111,14 @@ export async function GET(request: Request, { params }: { params: { id: string }
         ).toFixed(2),
         observacion: r.observacion,
         conciliacion: {
-          efectivo: resumenLeg(Number(r.montoEfectivo), r.efectivoCuentaId, porLeg("efectivo")),
-          yape: resumenLeg(Number(r.montoYape), r.yapeCuentaId, porLeg("yape")),
-          plin: resumenLeg(Number(r.montoPlin), r.plinCuentaId, porLeg("plin")),
-          tarjeta: resumenLeg(Number(r.montoTarjeta), r.tarjetaCuentaId, porLeg("tarjeta")),
+          efectivo: resumenLegDisplay(Number(r.montoEfectivo), r.efectivoCuentaId, porLeg("efectivo")),
+          yape: resumenLegDisplay(Number(r.montoYape), r.yapeCuentaId, porLeg("yape")),
+          plin: resumenLegDisplay(Number(r.montoPlin), r.plinCuentaId, porLeg("plin")),
+          tarjeta: resumenLegDisplay(Number(r.montoTarjeta), r.tarjetaCuentaId, porLeg("tarjeta")),
         },
       };
-    })
-  );
+    }),
+  });
 }
 
 // POST /api/empresas/[id]/ventas-diarias — crea o actualiza (upsert) el

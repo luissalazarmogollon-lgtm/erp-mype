@@ -94,6 +94,10 @@ function VentasDiariasClasica({ empresaId }: { empresaId: string }) {
   // empresa; `permisos` cubre a quien solo tiene este permiso puntual.
   const [puedeConciliar, setPuedeConciliar] = useState(false);
   const [fechasAbiertas, setFechasAbiertas] = useState<Record<string, boolean>>({});
+  // Suma de todo lo que falta por depositar al banco, de TODOS los
+  // registros de la empresa (no solo los que se muestran en el
+  // historial reciente) — se muestra arriba a la derecha.
+  const [totalPendiente, setTotalPendiente] = useState("0.00");
 
   const [form, setForm] = useState({
     localId: "",
@@ -111,7 +115,8 @@ function VentasDiariasClasica({ empresaId }: { empresaId: string }) {
       fetch(`/api/empresas/${empresaId}/catalogos`).then((r) => r.json()),
       fetch(`/api/empresas/${empresaId}/mi-acceso`).then((r) => r.json()),
     ]);
-    setRegistros(resRegistros);
+    setRegistros(resRegistros.registros ?? []);
+    setTotalPendiente(resRegistros.totalPendiente ?? "0.00");
     setLocales(resCatalogos.locales ?? []);
     setCuentasBancarias(resCatalogos.cuentasBancarias ?? []);
     if (!resAcceso.error) {
@@ -202,11 +207,25 @@ function VentasDiariasClasica({ empresaId }: { empresaId: string }) {
         </Link>{" "}
         → <b>Ventas diarias</b>
       </p>
-      <h1 style={{ fontSize: 26, marginBottom: 6 }}>Ventas diarias</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+        <h1 style={{ fontSize: 26 }}>Ventas diarias</h1>
+        {Number(totalPendiente) > 0.004 && (
+          <div style={{ textAlign: "right" }}>
+            <p className="mono" style={{ fontSize: 10, color: "var(--ink-soft)", textTransform: "uppercase" }}>
+              Saldo por depositar
+            </p>
+            <p className="mono" style={{ fontSize: 26, fontWeight: 600, color: "var(--stamp)" }}>
+              S/ {totalPendiente}
+            </p>
+          </div>
+        )}
+      </div>
       <p style={{ color: "var(--ink-soft)", fontSize: 13, marginBottom: 20 }}>
         Registra el total que te reporta el punto de venta del cliente, por método de pago
         {locales.length > 0 ? " y por local" : ""}. Después, desde cada registro, puedes indicar a qué cuenta
-        bancaria entró cada método de pago para que se refleje en el Flujo de Caja.
+        bancaria entró cada método de pago para que se refleje en el Flujo de Caja — el monto depositado puede
+        quedar por debajo de lo vendido (billetes exactos, por ejemplo) y el saldo suelto queda marcado como
+        pendiente hasta que lo deposites.
       </p>
 
       <form onSubmit={handleGuardar} className="card" style={{ marginBottom: 24 }}>
@@ -346,6 +365,7 @@ function VentasDiariasClasica({ empresaId }: { empresaId: string }) {
                                           type="number"
                                           step="0.01"
                                           min="0"
+                                          max={pendiente}
                                           value={entrada.monto}
                                           onChange={(e) =>
                                             setFormConciliar({
@@ -376,8 +396,8 @@ function VentasDiariasClasica({ empresaId }: { empresaId: string }) {
                                         </p>
                                       )}
                                       {entrada.monto > pendiente + 0.004 && (
-                                        <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 4 }}>
-                                          Depositas S/{(entrada.monto - pendiente).toFixed(2)} más de lo que faltaba — queda como excedente.
+                                        <p className="mono" style={{ fontSize: 11, color: "var(--alert)", marginTop: 4 }}>
+                                          No puedes depositar más de lo pendiente (S/ {pendiente.toFixed(2)}) de {leg.label}.
                                         </p>
                                       )}
                                     </div>
@@ -385,7 +405,15 @@ function VentasDiariasClasica({ empresaId }: { empresaId: string }) {
                                 })}
                                 {error && <p className="field error">{error}</p>}
                                 <div style={{ display: "flex", gap: 10 }}>
-                                  <button className="btn-primary" style={{ fontSize: 12, padding: "8px 14px" }} onClick={() => handleConciliar(r.id)}>
+                                  <button
+                                    className="btn-primary"
+                                    style={{ fontSize: 12, padding: "8px 14px" }}
+                                    disabled={legsPendientes.some((leg) => {
+                                      const entrada = formConciliar[leg.key];
+                                      return entrada && entrada.monto > Number(r.conciliacion[leg.key].pendiente) + 0.004;
+                                    })}
+                                    onClick={() => handleConciliar(r.id)}
+                                  >
                                     Guardar
                                   </button>
                                   <button className="btn-ghost" style={{ fontSize: 12, padding: "8px 14px" }} onClick={() => setConciliando(null)}>
