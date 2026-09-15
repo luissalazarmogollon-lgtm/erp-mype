@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogoutButton } from "./LogoutButton";
@@ -18,6 +19,30 @@ import { LogoutButton } from "./LogoutButton";
 export function AppChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const sinChrome = pathname === "/login";
+
+  // Bug conocido de los navegadores basados en Chromium (Chrome, Edge) y
+  // también de Firefox: si el mouse queda sobre un <input type="number">
+  // que tiene el foco y la persona hace scroll para bajar/subir la
+  // página, el navegador interpreta la rueda como "sube/baja el valor" y
+  // cambia el monto EN SILENCIO, de a "step" (0.01 en todos los campos de
+  // montos de este sistema) por cada click de rueda — así es como una
+  // factura de S/ 1,000.00 puede terminar guardándose como S/ 999.97 (3
+  // clicks de rueda hacia abajo) sin que nadie haya tocado el teclado ni
+  // se haya dado cuenta, porque el campo sigue mostrando el cursor ahí
+  // mismo. Se desactiva ese comportamiento a nivel de toda la aplicación:
+  // cualquier scroll mientras un campo numérico tiene el foco simplemente
+  // le quita el foco (blur) en vez de cambiarle el valor — igual de
+  // cómodo para seguir bajando la página, pero ya no toca el monto.
+  useEffect(() => {
+    function evitarScrollCambieNumero(e: WheelEvent) {
+      const activo = document.activeElement;
+      if (activo instanceof HTMLInputElement && activo.type === "number") {
+        activo.blur();
+      }
+    }
+    document.addEventListener("wheel", evitarScrollCambieNumero, { passive: true });
+    return () => document.removeEventListener("wheel", evitarScrollCambieNumero);
+  }, []);
 
   if (sinChrome) return <>{children}</>;
 
