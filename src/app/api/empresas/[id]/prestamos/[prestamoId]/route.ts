@@ -44,12 +44,18 @@ export async function DELETE(
   }
 
   const usuarioId = usuarioActual.id;
+  // Se extraen a variables sueltas porque TypeScript no conserva el chequeo
+  // de "no es null" de "prestamo" dentro del closure de la transacción de
+  // abajo, aunque ya se validó arriba que no es null.
+  const prestamoCuentaBancariaId = prestamo.cuentaBancariaId;
+  const prestamoEntidadFinanciera = prestamo.entidadFinanciera;
+  const prestamoMontoOriginal = prestamo.montoOriginal;
 
   await prisma.$transaction(async (tx) => {
-    if (prestamo.cuentaBancariaId) {
+    if (prestamoCuentaBancariaId) {
       // Reversa el desembolso: el ingreso original a la cuenta bancaria.
       const movimiento = await tx.movimientoBancario.findFirst({
-        where: { referenciaTipo: "prestamo", referenciaId: prestamo.id },
+        where: { referenciaTipo: "prestamo", referenciaId: prestamoId },
       });
       if (movimiento) {
         await tx.cuentaBancaria.update({
@@ -70,8 +76,8 @@ export async function DELETE(
         registroId: prestamoId,
         accion: "eliminar",
         valorAnterior: {
-          entidadFinanciera: prestamo.entidadFinanciera,
-          montoOriginal: prestamo.montoOriginal.toString(),
+          entidadFinanciera: prestamoEntidadFinanciera,
+          montoOriginal: prestamoMontoOriginal.toString(),
         },
       },
     });

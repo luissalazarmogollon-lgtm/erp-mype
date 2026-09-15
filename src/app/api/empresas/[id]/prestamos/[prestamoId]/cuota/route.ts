@@ -58,6 +58,14 @@ export async function POST(
   if (!prestamo) return NextResponse.json({ error: "Préstamo no encontrado" }, { status: 404 });
 
   const saldoActual = Number(prestamo.saldoPendiente);
+  // Se extraen a variables sueltas (en vez de seguir usando "prestamo.xxx"
+  // dentro del closure de la transacción más abajo) porque TypeScript no
+  // conserva el chequeo de "no es null" de "prestamo" dentro de una función
+  // anidada — aunque ya se validó arriba que no es null, dentro de
+  // registrarParte() TypeScript lo vuelve a marcar como "posiblemente null".
+  const prestamoLocalId = prestamo.localId;
+  const prestamoEntidadFinanciera = prestamo.entidadFinanciera;
+  const prestamoNumeroCredito = prestamo.numeroCredito;
   if (datos.montoCapital > saldoActual + 0.004) {
     return NextResponse.json(
       {
@@ -77,18 +85,18 @@ export async function POST(
       const nuevoGasto = await tx.gasto.create({
         data: {
           empresaId,
-          localId: prestamo.localId,
+          localId: prestamoLocalId,
           naturaleza,
           categoriaEspecifica,
-          proveedorNombre: prestamo.entidadFinanciera,
-          descripcion: `Cuota préstamo ${prestamo.entidadFinanciera}${prestamo.numeroCredito ? ` N° ${prestamo.numeroCredito}` : ""} — ${etiqueta}`,
+          proveedorNombre: prestamoEntidadFinanciera,
+          descripcion: `Cuota préstamo ${prestamoEntidadFinanciera}${prestamoNumeroCredito ? ` N° ${prestamoNumeroCredito}` : ""} — ${etiqueta}`,
           tipoComprobante: "sin_comprobante",
           montoTotal: monto,
           fecha,
           condicion: "contado",
           medioPago: "Transferencia",
           cuentaBancariaId,
-          prestamoId: prestamo.id,
+          prestamoId,
           usuarioId,
         },
       });
