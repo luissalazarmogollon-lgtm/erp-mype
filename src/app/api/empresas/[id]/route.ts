@@ -123,6 +123,10 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
     prisma.cuentaPorPagar.deleteMany({ where: { empresaId } }),
     prisma.gasto.deleteMany({ where: { empresaId } }),
     prisma.documentoCompra.deleteMany({ where: { empresaId } }),
+    // Préstamos — después de Gastos (las cuotas son Gasto con
+    // prestamoId) y antes de Cuentas Bancarias (el préstamo puede
+    // referenciar la cuenta que recibió el desembolso).
+    prisma.prestamo.deleteMany({ where: { empresaId } }),
     // Ventas diarias, RRHH
     prisma.conciliacionVentaDiaria.deleteMany({ where: { registroVentaDiaria: { empresaId } } }),
     prisma.registroVentaDiaria.deleteMany({ where: { empresaId } }),

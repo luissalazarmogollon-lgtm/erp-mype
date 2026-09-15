@@ -87,6 +87,7 @@ model Usuario {
   // tiene acceso para ver "Mis actividades" en Gestión de Actividades.
   empleado                    Empleado?
   conciliacionesVenta         ConciliacionVentaDiaria[]
+  prestamos                   Prestamo[]
 
   @@map("usuarios")
 }
@@ -137,6 +138,7 @@ model Empresa {
   cuentasBancarias       CuentaBancaria[]
   cajasChicas            CajaChica[]
   documentosCompra       DocumentoCompra[]
+  prestamos              Prestamo[]
   areas                  Area[]
   solicitudesPedido      SolicitudPedido[]
   lotesCompra            LoteCompra[]
@@ -302,6 +304,7 @@ model Local {
   registrosVentaDiaria  RegistroVentaDiaria[]
   gastos                Gasto[]
   documentosCompra      DocumentoCompra[]
+  prestamos             Prestamo[]
 
   @@map("locales")
 }
@@ -643,12 +646,52 @@ model Gasto {
   // varias líneas), aquí queda el vínculo al documento que los agrupa.
   documentoCompraId    BigInt?   @map("documento_compra_id")
   documentoCompra      DocumentoCompra? @relation(fields: [documentoCompraId], references: [id])
+  // Si este gasto es la cuota (capital o interés) de un préstamo, aquí
+  // queda el vínculo — así el módulo de Préstamos puede descontar el
+  // saldo pendiente automáticamente y mostrar el historial de cuotas.
+  prestamoId           BigInt?   @map("prestamo_id")
+  prestamo             Prestamo? @relation(fields: [prestamoId], references: [id])
   usuarioId            String    @map("usuario_id") @db.Uuid
 
   cuentaPorPagar       CuentaPorPagar?
   gastoCajaChica       GastoCajaChica?
 
   @@map("gastos")
+}
+
+// Un préstamo recibido (banco, entidad financiera, socio, etc.) — a
+// diferencia de Cuentas por Pagar (que nace de una compra y no mueve
+// banco hasta que se paga), un préstamo mueve banco DESDE el inicio (el
+// desembolso) y se va reduciendo con cada cuota. saldoPendiente arranca
+// igual a montoOriginal y se descuenta con la parte de CAPITAL de cada
+// cuota (el interés es gasto financiero, no reduce el pasivo). Ver
+// migracion_prestamos.sql para el detalle del diseño.
+model Prestamo {
+  id                BigInt          @id @default(autoincrement())
+  empresaId         BigInt          @map("empresa_id")
+  empresa           Empresa         @relation(fields: [empresaId], references: [id])
+  entidadFinanciera String          @map("entidad_financiera")
+  numeroCredito     String?         @map("numero_credito")
+  montoOriginal     Decimal         @map("monto_original") @db.Decimal(12, 2)
+  saldoPendiente    Decimal         @map("saldo_pendiente") @db.Decimal(12, 2)
+  tasaInteres       Decimal?        @map("tasa_interes") @db.Decimal(6, 3)
+  fecha             DateTime        @db.Date
+  cuentaBancariaId  BigInt?         @map("cuenta_bancaria_id")
+  cuentaBancaria    CuentaBancaria? @relation(fields: [cuentaBancariaId], references: [id])
+  // Si el préstamo financia un proyecto/local específico (ej. la
+  // inversión de un local nuevo), vincularlo aquí deja que el Estado de
+  // Resultados filtrado por ese local muestre también sus cuotas.
+  localId           BigInt?         @map("local_id")
+  local             Local?          @relation(fields: [localId], references: [id])
+  estado            String          @default("activo") // activo | pagado
+  observacion       String?
+  usuarioId         String          @map("usuario_id") @db.Uuid
+  usuario           Usuario         @relation(fields: [usuarioId], references: [id])
+  fechaRegistro     DateTime        @default(now()) @map("fecha_registro")
+
+  cuotas            Gasto[]
+
+  @@map("prestamos")
 }
 
 model CuentaPorPagar {
@@ -775,6 +818,7 @@ model CuentaBancaria {
   cajasChicas    CajaChica[]
   documentosCompra DocumentoCompra[]
   conciliacionesVenta ConciliacionVentaDiaria[]
+  prestamos      Prestamo[]
 
   @@map("cuentas_bancarias")
 }

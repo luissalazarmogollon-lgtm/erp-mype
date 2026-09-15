@@ -47,6 +47,9 @@ export async function POST(request: Request, { params }: { params: { id: string 
     prisma.cuentaPorPagar.deleteMany({ where: { empresaId } }),
     prisma.gasto.deleteMany({ where: { empresaId } }),
     prisma.documentoCompra.deleteMany({ where: { empresaId } }),
+    // Préstamos — después de Gastos, porque las cuotas (capital/interés)
+    // son Gasto con prestamoId apuntando aquí.
+    prisma.prestamo.deleteMany({ where: { empresaId } }),
     // Ventas diarias, RRHH
     prisma.conciliacionVentaDiaria.deleteMany({ where: { registroVentaDiaria: { empresaId } } }),
     prisma.registroVentaDiaria.deleteMany({ where: { empresaId } }),

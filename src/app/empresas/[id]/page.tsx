@@ -57,6 +57,7 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
   const ACCESOS_DIRECTOS: { modulos: string[]; href: string; label: string; primario?: boolean }[] = [
     { modulos: ["estado_resultados"], href: "estado-resultados", label: "Estado de Resultados", primario: true },
     { modulos: ["flujo_caja"], href: "flujo-caja", label: "Flujo de Caja" },
+    { modulos: ["prestamos"], href: "prestamos", label: "Préstamos" },
     { modulos: ["ventas_diarias"], href: "ventas-diarias", label: esServicios ? "Facturación" : "Ventas diarias" },
     { modulos: ["ventas_pos"], href: "ventas", label: "Ventas (POS)" },
     { modulos: ["productos"], href: "productos", label: "Productos" },

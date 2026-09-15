@@ -20,6 +20,7 @@ export const MODULOS_DISPONIBLES = [
   { key: "rrhh", label: "Gestionar RRHH (empleados y adelantos de sueldo)" },
   { key: "flujo_caja", label: "Gestionar flujo de caja y cuentas bancarias" },
   { key: "caja_chica", label: "Registrar gastos de caja chica" },
+  { key: "prestamos", label: "Registrar préstamos y sus cuotas" },
   { key: "solicitudes_pedido", label: "Crear y ver solicitudes de pedido" },
   { key: "aprobar_solicitudes_pedido", label: "Aprobar solicitudes de pedido y gestionar áreas" },
   { key: "despachar_solicitudes_pedido", label: "Despachar solicitudes aprobadas (logística)" },
