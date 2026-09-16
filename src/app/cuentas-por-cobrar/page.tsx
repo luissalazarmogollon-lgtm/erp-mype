@@ -79,10 +79,15 @@ export default function CuentasPorCobrarConsolidadoPage() {
           </p>
         </div>
       </div>
-      <p style={{ color: "var(--ink-soft)", fontSize: 13, marginBottom: 24 }}>
-        Agrupado por empresa, de mayor a menor deuda pendiente. Para cobrar o eliminar una cuenta, entra a la empresa
-        correspondiente.
-      </p>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
+        <p style={{ color: "var(--ink-soft)", fontSize: 13, margin: 0 }}>
+          Agrupado por empresa, de mayor a menor deuda pendiente. Para cobrar o eliminar una cuenta, entra a la
+          empresa correspondiente.
+        </p>
+        <a href="/api/cuentas-por-cobrar/pdf" className="btn-ghost" style={{ textDecoration: "none", fontSize: 12.5, whiteSpace: "nowrap" }}>
+          Descargar PDF
+        </a>
+      </div>
 
       {cargando ? (
         <p style={{ color: "var(--ink-soft)" }}>Cargando...</p>
