@@ -58,6 +58,11 @@ export async function POST(
 ) {
   const usuarioActual = await getUsuarioActual();
   if (!usuarioActual) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  // Igual que con `detalleSolicitud` más abajo: TypeScript no arrastra este
+  // "if (!usuarioActual) return" hacia dentro de la función anidada
+  // `decidirAprobacionYGuardar` — de ahí este build error real en Vercel
+  // ("'usuarioActual' is possibly 'null'") al usar usuarioActual.id allí.
+  const usuarioId = usuarioActual.id;
 
   const empresaId = BigInt(params.id);
   try {
@@ -96,14 +101,14 @@ export async function POST(
         where: { id: solicitudId },
         data: {
           estado: "rechazada",
-          aprobadorId: usuarioActual.id,
+          aprobadorId: usuarioId,
           fechaAprobacion: new Date(),
           comentarioAprobador: datos.comentario || null,
         },
       }),
       prisma.auditoria.create({
         data: {
-          usuarioId: usuarioActual.id,
+          usuarioId,
           empresaId,
           tablaAfectada: "solicitudes_pedido",
           registroId: solicitudId,
@@ -231,7 +236,7 @@ export async function POST(
       where: { id: solicitudId },
       data: {
         estado: "aprobada",
-        aprobadorId: usuarioActual.id,
+        aprobadorId: usuarioId,
         fechaAprobacion: new Date(),
         comentarioAprobador: datos.comentario || null,
       },
@@ -240,7 +245,7 @@ export async function POST(
   operaciones.push(
     prisma.auditoria.create({
       data: {
-        usuarioId: usuarioActual.id,
+        usuarioId,
         empresaId,
         tablaAfectada: "solicitudes_pedido",
         registroId: solicitudId,

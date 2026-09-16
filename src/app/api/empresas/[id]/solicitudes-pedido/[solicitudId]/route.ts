@@ -120,11 +120,17 @@ export async function PATCH(
 ) {
   const usuarioActual = await getUsuarioActual();
   if (!usuarioActual) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  // Se extrae a una variable local porque TypeScript no arrastra este
+  // "if (!usuarioActual) return" hacia dentro de la función anidada de
+  // prisma.$transaction(async (tx) => {...}) más abajo — el mismo error de
+  // build ("'usuarioActual' is possibly 'null'") que ya pasó en
+  // decidir/route.ts.
+  const usuarioId = usuarioActual.id;
 
   const empresaId = BigInt(params.id);
   let acceso;
   try {
-    acceso = await verificarAccesoEmpresa(usuarioActual.id, empresaId, "solicitudes_pedido");
+    acceso = await verificarAccesoEmpresa(usuarioId, empresaId, "solicitudes_pedido");
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 403 });
   }
@@ -140,7 +146,7 @@ export async function PATCH(
   const solicitud = await prisma.solicitudPedido.findFirst({ where: { id: solicitudId, empresaId } });
   if (!solicitud) return NextResponse.json({ error: "Solicitud no encontrada" }, { status: 404 });
 
-  if (solicitud.responsableId !== usuarioActual.id && !acceso.accesoTotal) {
+  if (solicitud.responsableId !== usuarioId && !acceso.accesoTotal) {
     return NextResponse.json({ error: "Solo quien creó la solicitud puede modificarla" }, { status: 403 });
   }
   if (solicitud.estado !== "enviada") {
@@ -181,7 +187,7 @@ export async function PATCH(
     });
     await tx.auditoria.create({
       data: {
-        usuarioId: usuarioActual.id,
+        usuarioId,
         empresaId,
         tablaAfectada: "solicitudes_pedido",
         registroId: solicitudId,
