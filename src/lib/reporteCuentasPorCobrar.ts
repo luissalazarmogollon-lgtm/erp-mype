@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 
 export type CuentaCxCResumen = {
   id: string;
+  clienteId: string;
   cliente: string;
   clienteRuc: string | null;
   numeroFactura: string | null;
@@ -26,13 +27,17 @@ export type ReporteCuentasPorCobrar = {
   empresas: EmpresaCxCResumen[];
 };
 
-// Consolidado de Cuentas por Cobrar de TODAS las empresas, agrupado por
-// empresa — base compartida por la pantalla (JSON) y por el PDF, para que
-// ambos muestren siempre exactamente los mismos números. Solo incluye
+// Consolidado de Cuentas por Cobrar de TODAS las empresas (o de una sola,
+// pasando "empresaId"), agrupado por empresa — base compartida por la
+// pantalla (JSON), el PDF consolidado y el PDF por empresa, para que los
+// tres muestren siempre exactamente los mismos números. Solo incluye
 // cuentas pendientes/vencidas (no las ya cobradas).
-export async function calcularCuentasPorCobrarConsolidado(): Promise<ReporteCuentasPorCobrar> {
+export async function calcularCuentasPorCobrarConsolidado(empresaId?: bigint): Promise<ReporteCuentasPorCobrar> {
   const cxcs = await prisma.cuentaPorCobrar.findMany({
-    where: { estado: { not: "pagada" } },
+    where: {
+      estado: { not: "pagada" },
+      ...(empresaId !== undefined ? { empresaId } : {}),
+    },
     include: { cliente: true, empresa: true },
     orderBy: [{ fechaVencimiento: "asc" }, { fechaEmision: "asc" }],
   });
@@ -57,6 +62,7 @@ export async function calcularCuentasPorCobrarConsolidado(): Promise<ReporteCuen
     grupo.totalPorCobrar += Number(c.saldoPendiente);
     grupo.cuentas.push({
       id: c.id.toString(),
+      clienteId: c.clienteId.toString(),
       cliente: c.cliente.nombre,
       clienteRuc: c.cliente.docIdentidad,
       numeroFactura: c.numeroFactura,

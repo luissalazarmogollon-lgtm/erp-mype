@@ -103,15 +103,24 @@ export default function CuentasPorCobrarConsolidadoPage() {
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {grupos.map((g) => (
             <div key={g.empresaId} className="card">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 10 }}>
                 <Link href={`/empresas/${g.empresaId}/creditos`} style={{ color: "inherit", textDecoration: "none" }}>
                   <h3 style={{ fontSize: 16 }}>{g.nombreComercial} →</h3>
                 </Link>
-                <div style={{ textAlign: "right" }}>
-                  <p className="mono" style={{ fontSize: 15, fontWeight: 500 }}>S/ {Number(g.totalPorCobrar).toFixed(2)}</p>
-                  <p className="mono" style={{ fontSize: 10, color: "var(--ink-soft)" }}>
-                    {g.cantidadPendientes} cuenta{g.cantidadPendientes !== 1 ? "s" : ""} pendiente{g.cantidadPendientes !== 1 ? "s" : ""}
-                  </p>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <div style={{ textAlign: "right" }}>
+                    <p className="mono" style={{ fontSize: 15, fontWeight: 500 }}>S/ {Number(g.totalPorCobrar).toFixed(2)}</p>
+                    <p className="mono" style={{ fontSize: 10, color: "var(--ink-soft)" }}>
+                      {g.cantidadPendientes} cuenta{g.cantidadPendientes !== 1 ? "s" : ""} pendiente{g.cantidadPendientes !== 1 ? "s" : ""}
+                    </p>
+                  </div>
+                  <a
+                    href={`/api/cuentas-por-cobrar/${g.empresaId}/pdf`}
+                    className="btn-ghost"
+                    style={{ textDecoration: "none", fontSize: 11.5, whiteSpace: "nowrap" }}
+                  >
+                    Descargar PDF
+                  </a>
                 </div>
               </div>
 
