@@ -134,7 +134,7 @@ export default function SolicitudesPedidoPage({ params }: { params: { id: string
             >
               Mis solicitudes
             </button>
-            {puedeAprobar && (
+            {(puedeAprobar || puedeDespachar) && (
               <button
                 className={vista === "aprobacion" ? "btn-primary" : "btn-ghost"}
                 onClick={() => setVista("aprobacion")}
@@ -172,17 +172,21 @@ export default function SolicitudesPedidoPage({ params }: { params: { id: string
               <p style={{ fontWeight: 500, marginBottom: 14 }}>Nueva solicitud de pedido</p>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                {areas.length > 0 && (
-                  <div className="field">
-                    <label>Área (opcional)</label>
-                    <select value={areaId} onChange={(e) => setAreaId(e.target.value)}>
-                      <option value="">Sin especificar</option>
-                      {areas.map((a) => (
-                        <option key={a.id} value={a.id}>{a.nombre}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                <div className="field">
+                  <label>Área que solicita{areas.length === 0 ? " (opcional)" : ""}</label>
+                  <select value={areaId} onChange={(e) => setAreaId(e.target.value)}>
+                    <option value="">Sin especificar</option>
+                    {areas.map((a) => (
+                      <option key={a.id} value={a.id}>{a.nombre}</option>
+                    ))}
+                  </select>
+                  {areas.length === 0 && (
+                    <p className="mono" style={{ fontSize: 10.5, color: "var(--ink-soft)", marginTop: 4 }}>
+                      Todavía no hay áreas creadas — pide a quien aprueba solicitudes que cree una en &quot;Gestionar
+                      áreas&quot;.
+                    </p>
+                  )}
+                </div>
                 <div className="field">
                   <label>Motivo (opcional)</label>
                   <input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej: reposición semanal" />

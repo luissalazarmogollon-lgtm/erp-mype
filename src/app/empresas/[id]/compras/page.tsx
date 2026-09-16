@@ -15,6 +15,7 @@ type ItemPendiente = {
 };
 type GrupoPendiente = { proveedorId: string | null; proveedorNombre: string; items: ItemPendiente[] };
 type PedidoCompra = { id: string; proveedor: string; estado: string; fecha: string; cantidadItems: number };
+type Proveedor = { id: string; nombre: string };
 
 const ESTADO_OC_LABEL: Record<string, { label: string; color: string; bg: string }> = {
   emitida: { label: "Emitida", color: "var(--stamp)", bg: "var(--stamp-bg)" },
@@ -27,17 +28,21 @@ export default function ComprasPage({ params }: { params: { id: string } }) {
   const empresaId = params.id;
   const [grupos, setGrupos] = useState<GrupoPendiente[]>([]);
   const [pedidos, setPedidos] = useState<PedidoCompra[]>([]);
+  const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [seleccion, setSeleccion] = useState<Record<string, boolean>>({});
+  const [proveedorAdHoc, setProveedorAdHoc] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [creando, setCreando] = useState<string | null>(null);
 
   async function cargar() {
-    const [resPendientes, resPedidos] = await Promise.all([
+    const [resPendientes, resPedidos, resCatalogos] = await Promise.all([
       fetch(`/api/empresas/${empresaId}/compras/pendientes`).then((r) => r.json()),
       fetch(`/api/empresas/${empresaId}/pedidos-compra`).then((r) => r.json()),
+      fetch(`/api/empresas/${empresaId}/catalogos`).then((r) => r.json()),
     ]);
     setGrupos(Array.isArray(resPendientes) ? resPendientes : []);
     setPedidos(Array.isArray(resPedidos) ? resPedidos : []);
+    setProveedores(resCatalogos.proveedores ?? []);
   }
 
   useEffect(() => {
@@ -51,8 +56,12 @@ export default function ComprasPage({ params }: { params: { id: string } }) {
 
   async function crearOC(grupo: GrupoPendiente) {
     setError(null);
-    if (!grupo.proveedorId) {
-      setError("Este grupo no tiene proveedor asignado. Asígnalo en Insumos antes de consolidar.");
+    // Si el grupo no tiene proveedor preferido asignado en Insumos, se
+    // puede elegir uno al vuelo aquí mismo (sin ir a Insumos primero) —
+    // solo para esta orden de compra, sin guardarlo como preferido.
+    const proveedorId = grupo.proveedorId ?? proveedorAdHoc;
+    if (!proveedorId) {
+      setError("Elige un proveedor para este grupo antes de crear la orden de compra.");
       return;
     }
     const detalleIds = grupo.items.filter((i) => seleccion[i.detalleId]).map((i) => i.detalleId);
@@ -60,11 +69,11 @@ export default function ComprasPage({ params }: { params: { id: string } }) {
       setError("Selecciona al menos un ítem de este proveedor.");
       return;
     }
-    setCreando(grupo.proveedorId);
+    setCreando(grupo.proveedorId ?? "sin_proveedor");
     const res = await fetch(`/api/empresas/${empresaId}/pedidos-compra`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ proveedorId: grupo.proveedorId, detalleIds }),
+      body: JSON.stringify({ proveedorId, detalleIds }),
     });
     setCreando(null);
 
@@ -74,6 +83,7 @@ export default function ComprasPage({ params }: { params: { id: string } }) {
       return;
     }
     setSeleccion({});
+    setProveedorAdHoc("");
     cargar();
   }
 
@@ -99,47 +109,64 @@ export default function ComprasPage({ params }: { params: { id: string } }) {
       <h2 style={{ fontSize: 16, marginBottom: 10 }}>Pendientes de consolidar por proveedor</h2>
       {error && <p className="field error" style={{ marginBottom: 10 }}>{error}</p>}
       <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 32 }}>
-        {grupos.map((grupo) => (
-          <div key={grupo.proveedorId ?? "sin_proveedor"} className="card">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <p style={{ fontWeight: 500, fontSize: 14 }}>
-                {grupo.proveedorNombre}
-                {!grupo.proveedorId && <span style={{ color: "var(--alert)", fontSize: 11 }}> — asigna proveedor en Insumos</span>}
-              </p>
-              {grupo.proveedorId && (
+        {grupos.map((grupo) => {
+          const habilitado = !!grupo.proveedorId || !!proveedorAdHoc;
+          return (
+            <div key={grupo.proveedorId ?? "sin_proveedor"} className="card">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, gap: 12, flexWrap: "wrap" }}>
+                <p style={{ fontWeight: 500, fontSize: 14 }}>{grupo.proveedorNombre}</p>
+                {!grupo.proveedorId && (
+                  <select
+                    value={proveedorAdHoc}
+                    onChange={(e) => setProveedorAdHoc(e.target.value)}
+                    className="mono"
+                    style={{ fontSize: 12 }}
+                  >
+                    <option value="">Elegir proveedor para esta OC...</option>
+                    {proveedores.map((p) => (
+                      <option key={p.id} value={p.id}>{p.nombre}</option>
+                    ))}
+                  </select>
+                )}
                 <button
                   className="btn-primary"
                   style={{ fontSize: 12, padding: "6px 12px" }}
-                  disabled={creando === grupo.proveedorId}
+                  disabled={!habilitado || creando === (grupo.proveedorId ?? "sin_proveedor")}
                   onClick={() => crearOC(grupo)}
                 >
-                  {creando === grupo.proveedorId ? "Creando..." : "Crear OC con seleccionados"}
+                  {creando === (grupo.proveedorId ?? "sin_proveedor") ? "Creando..." : "Crear OC con seleccionados"}
                 </button>
+              </div>
+              {!grupo.proveedorId && (
+                <p className="mono" style={{ fontSize: 10.5, color: "var(--ink-soft)", marginBottom: 8 }}>
+                  Este proveedor se usará solo para esta orden de compra. Para que quede recordado la próxima vez,
+                  asígnalo como proveedor preferido en Insumos.
+                </p>
               )}
+              {grupo.items.map((item, i) => (
+                <label
+                  key={item.detalleId}
+                  className="checkbox-row"
+                  style={{
+                    padding: "8px 0", borderTop: i > 0 ? "1px solid var(--line)" : "none",
+                    opacity: habilitado ? 1 : 0.6,
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    disabled={!habilitado}
+                    checked={!!seleccion[item.detalleId]}
+                    onChange={() => toggle(item.detalleId)}
+                  />
+                  <span style={{ fontSize: 13, flex: 1 }}>
+                    {item.insumoNombre} — {Number(item.cantidad).toFixed(2)} {item.unidadMedida ?? ""}
+                    <span className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}> · {item.area ?? "Sin área"}</span>
+                  </span>
+                </label>
+              ))}
             </div>
-            {grupo.items.map((item, i) => (
-              <label
-                key={item.detalleId}
-                className="checkbox-row"
-                style={{
-                  padding: "8px 0", borderTop: i > 0 ? "1px solid var(--line)" : "none",
-                  opacity: grupo.proveedorId ? 1 : 0.6,
-                }}
-              >
-                <input
-                  type="checkbox"
-                  disabled={!grupo.proveedorId}
-                  checked={!!seleccion[item.detalleId]}
-                  onChange={() => toggle(item.detalleId)}
-                />
-                <span style={{ fontSize: 13, flex: 1 }}>
-                  {item.insumoNombre} — {Number(item.cantidad).toFixed(2)} {item.unidadMedida ?? ""}
-                  <span className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}> · {item.area ?? "Sin área"}</span>
-                </span>
-              </label>
-            ))}
-          </div>
-        ))}
+          );
+        })}
         {grupos.length === 0 && (
           <p style={{ color: "var(--ink-soft)", fontSize: 14 }}>No hay ítems pendientes de compra en este momento.</p>
         )}

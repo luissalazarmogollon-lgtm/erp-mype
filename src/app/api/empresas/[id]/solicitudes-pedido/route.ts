@@ -47,7 +47,11 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
   let solicitudes;
   if (vista === "aprobacion") {
-    if (!tienePermiso("aprobar_solicitudes_pedido")) {
+    // Quien decide (aprueba y define si sale de almacén o va a compra) es
+    // el encargado de almacén ("despachar_solicitudes_pedido") — pero
+    // quien solo gestiona áreas ("aprobar_solicitudes_pedido") también
+    // puede ver esta bandeja, aunque no pueda decidir (ver decidir/route.ts).
+    if (!tienePermiso("aprobar_solicitudes_pedido") && !tienePermiso("despachar_solicitudes_pedido")) {
       return NextResponse.json({ error: "No tienes permiso para ver la bandeja de aprobación" }, { status: 403 });
     }
     solicitudes = await prisma.solicitudPedido.findMany({

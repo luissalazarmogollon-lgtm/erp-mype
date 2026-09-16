@@ -14,8 +14,11 @@ export const dynamic = "force-dynamic";
 // de las cuentas bancarias y la lista de proveedores — datos que no tienen
 // relación con su módulo. Ahora cada sección solo se incluye si la
 // persona tiene permiso sobre algún módulo que realmente la necesita
-// (o acceso total). `areas`, `empleados` y `tiposGasto` se quitaron del
-// todo: no los usa ningún formulario actual.
+// (o acceso total). `empleados` y `tiposGasto` se quitaron del todo: no
+// los usa ningún formulario actual. `areas` SÍ se necesita — lo usa el
+// formulario de Nueva Solicitud de Pedido para elegir qué área solicita
+// (Cocina, Salón, etc.); se había quitado por error, dejando ese campo
+// siempre vacío y oculto.
 //
 // IMPORTANTE: cada fila de Prisma trae campos BigInt (id, empresaId, y a
 // veces otras llaves foráneas) que NextResponse.json() NO puede serializar
@@ -52,6 +55,10 @@ export async function GET(request: Request, { params }: { params: { id: string }
   ]);
   // Proveedores solo lo usa el formulario de Insumos (proveedor preferido).
   const incluirProveedores = tienePermiso(["insumos", "compras"]);
+  // Áreas: las necesita quien crea solicitudes de pedido (para elegir cuál
+  // área solicita) y quien las aprueba o las despacha (para ver a qué área
+  // pertenece cada solicitud).
+  const incluirAreas = tienePermiso(["solicitudes_pedido", "aprobar_solicitudes_pedido", "despachar_solicitudes_pedido"]);
 
   const [
     categoriasInsumo,
@@ -64,6 +71,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
     locales,
     cuentasBancarias,
     proveedores,
+    areas,
   ] = await Promise.all([
     prisma.categoriaInsumo.findMany({ where: { empresaId }, orderBy: { nombre: "asc" } }),
     prisma.categoriaProducto.findMany({ where: { empresaId }, orderBy: { nombre: "asc" } }),
@@ -78,6 +86,9 @@ export async function GET(request: Request, { params }: { params: { id: string }
       : Promise.resolve([]),
     incluirProveedores
       ? prisma.proveedor.findMany({ where: { empresaId, estado: "activo" }, orderBy: { nombre: "asc" } })
+      : Promise.resolve([]),
+    incluirAreas
+      ? prisma.area.findMany({ where: { empresaId, estado: "activo" }, orderBy: { nombre: "asc" } })
       : Promise.resolve([]),
   ]);
 
@@ -107,5 +118,6 @@ export async function GET(request: Request, { params }: { params: { id: string }
       saldoActual: c.saldoActual.toString(),
     })),
     proveedores: proveedores.map((p) => ({ id: p.id.toString(), nombre: p.nombre })),
+    areas: areas.map((a) => ({ id: a.id.toString(), nombre: a.nombre })),
   });
 }

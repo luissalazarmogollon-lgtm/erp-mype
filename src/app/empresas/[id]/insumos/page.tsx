@@ -7,7 +7,9 @@ type Insumo = {
   id: string;
   codigo: string | null;
   nombre: string;
+  categoriaId: string | null;
   categoria: string | null;
+  unidadMedidaId: string | null;
   unidadMedida: string | null;
   stockMinimo: string;
   stockActual: string;
@@ -28,10 +30,13 @@ export default function InsumosPage({ params }: { params: { id: string } }) {
   const [mostrarForm, setMostrarForm] = useState(false);
   const [ajustando, setAjustando] = useState<string | null>(null);
   const [asignandoProveedor, setAsignandoProveedor] = useState<string | null>(null);
+  const [editando, setEditando] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorEdicion, setErrorEdicion] = useState<string | null>(null);
 
   const [form, setForm] = useState({ nombre: "", codigo: "", categoriaId: "", unidadMedidaId: "", stockMinimo: 0 });
   const [ajuste, setAjuste] = useState({ cantidad: 0, costoUnitario: 0, observacion: "" });
+  const [editForm, setEditForm] = useState({ nombre: "", codigo: "", categoriaId: "", unidadMedidaId: "", stockMinimo: 0 });
 
   async function cargarTodo() {
     const resInsumos = await fetch(`/api/empresas/${empresaId}/insumos`).then((r) => r.json());
@@ -93,6 +98,34 @@ export default function InsumosPage({ params }: { params: { id: string } }) {
       body: JSON.stringify({ proveedorId: proveedorId || null }),
     });
     setAsignandoProveedor(null);
+    cargarTodo();
+  }
+
+  function iniciarEdicion(i: Insumo) {
+    setEditForm({
+      nombre: i.nombre,
+      codigo: i.codigo ?? "",
+      categoriaId: i.categoriaId ?? "",
+      unidadMedidaId: i.unidadMedidaId ?? "",
+      stockMinimo: Number(i.stockMinimo),
+    });
+    setErrorEdicion(null);
+    setEditando(i.id);
+  }
+
+  async function handleGuardarEdicion(insumoId: string) {
+    setErrorEdicion(null);
+    const res = await fetch(`/api/empresas/${empresaId}/insumos/${insumoId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(editForm),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      setErrorEdicion(data.error?.toString() ?? "No se pudo guardar los cambios.");
+      return;
+    }
+    setEditando(null);
     cargarTodo();
   }
 
@@ -205,6 +238,65 @@ export default function InsumosPage({ params }: { params: { id: string } }) {
               </div>
             </div>
 
+            {editando === i.id && (
+              <div style={{ marginTop: 12, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <div className="field">
+                    <label>Nombre</label>
+                    <input
+                      value={editForm.nombre}
+                      onChange={(e) => setEditForm({ ...editForm, nombre: e.target.value })}
+                    />
+                  </div>
+                  <div className="field">
+                    <label>Código (opcional)</label>
+                    <input
+                      value={editForm.codigo}
+                      onChange={(e) => setEditForm({ ...editForm, codigo: e.target.value })}
+                    />
+                  </div>
+                  <div className="field">
+                    <label>Categoría</label>
+                    <select
+                      value={editForm.categoriaId}
+                      onChange={(e) => setEditForm({ ...editForm, categoriaId: e.target.value })}
+                    >
+                      <option value="">Sin categoría</option>
+                      {categorias.map((c) => (
+                        <option key={c.id} value={c.id}>{c.nombre}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label>Unidad de medida</label>
+                    <select
+                      value={editForm.unidadMedidaId}
+                      onChange={(e) => setEditForm({ ...editForm, unidadMedidaId: e.target.value })}
+                    >
+                      <option value="">Sin unidad</option>
+                      {unidades.map((u) => (
+                        <option key={u.id} value={u.id}>{u.nombre}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label>Stock mínimo</label>
+                    <input
+                      type="number"
+                      step="0.001"
+                      value={editForm.stockMinimo}
+                      onChange={(e) => setEditForm({ ...editForm, stockMinimo: Number(e.target.value) })}
+                    />
+                  </div>
+                </div>
+                {errorEdicion && <p className="field error">{errorEdicion}</p>}
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button className="btn-primary" onClick={() => handleGuardarEdicion(i.id)}>Guardar cambios</button>
+                  <button className="btn-ghost" onClick={() => setEditando(null)}>Cancelar</button>
+                </div>
+              </div>
+            )}
+
             {ajustando === i.id ? (
               <div style={{ marginTop: 12, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -235,6 +327,13 @@ export default function InsumosPage({ params }: { params: { id: string } }) {
               </div>
             ) : (
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button
+                  className="btn-ghost"
+                  style={{ fontSize: 12, padding: "6px 12px" }}
+                  onClick={() => iniciarEdicion(i)}
+                >
+                  Editar
+                </button>
                 <button
                   className="btn-ghost"
                   style={{ fontSize: 12, padding: "6px 12px" }}
