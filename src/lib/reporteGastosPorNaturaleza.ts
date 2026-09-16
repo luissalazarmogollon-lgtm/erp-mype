@@ -43,9 +43,13 @@ export function rangoPorDefecto(): { desde: string; hasta: string } {
 // todavía sin clasificar) se agrupa aparte como "Sin clasificar" — así la
 // gerencia ve de un vistazo si hay gastos pendientes de que finanzas los
 // clasifique, en vez de que desaparezcan silenciosamente del reporte.
+// "empresaId" es opcional: sin él, calcula el consolidado de todas las
+// empresas (la pantalla del reporte); pasándolo, filtra a una sola — lo usa
+// el PDF individual que se envía a los dueños de esa empresa.
 export async function calcularReporteGastosPorNaturaleza(
   desde: string,
-  hasta: string
+  hasta: string,
+  empresaId?: bigint
 ): Promise<ReporteGastosPorNaturaleza> {
   const gastos = await prisma.gasto.findMany({
     where: {
@@ -53,6 +57,7 @@ export async function calcularReporteGastosPorNaturaleza(
         gte: new Date(`${desde}T00:00:00.000Z`),
         lte: new Date(`${hasta}T23:59:59.999Z`),
       },
+      ...(empresaId !== undefined ? { empresaId } : {}),
     },
     include: { empresa: true },
   });

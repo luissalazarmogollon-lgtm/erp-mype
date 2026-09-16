@@ -173,7 +173,16 @@ export default function GastosPorNaturalezaPage() {
                     <Link href={`/empresas/${empresa.empresaId}/estado-resultados`} style={{ color: "inherit", textDecoration: "none" }}>
                       <h3 style={{ fontSize: 16 }}>{empresa.nombreComercial} →</h3>
                     </Link>
-                    <p className="mono" style={{ fontSize: 17, fontWeight: 600 }}>{soles(empresa.total)}</p>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <a
+                        href={`/api/reportes/gastos-por-naturaleza/${empresa.empresaId}/pdf?desde=${reporte.desde}&hasta=${reporte.hasta}`}
+                        className="btn-ghost"
+                        style={{ textDecoration: "none", fontSize: 11.5, padding: "5px 10px" }}
+                      >
+                        Descargar PDF
+                      </a>
+                      <p className="mono" style={{ fontSize: 17, fontWeight: 600 }}>{soles(empresa.total)}</p>
+                    </div>
                   </div>
                   <p className="mono" style={{ fontSize: 10.5, color: "var(--ink-soft)", marginBottom: 12 }}>
                     {soles(empresa.totalImpactaResultados)} afecta resultados · {soles(empresa.totalNoImpactaResultados)} inversión/deuda/retiros
