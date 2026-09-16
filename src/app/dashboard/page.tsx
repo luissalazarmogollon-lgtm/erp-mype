@@ -32,6 +32,9 @@ export default async function DashboardPage() {
           <Link href="/cuentas-por-cobrar" className="btn-ghost" style={{ textDecoration: "none" }}>
             Cuentas por Cobrar (todas las empresas)
           </Link>
+          <Link href="/reportes/gastos-por-naturaleza" className="btn-ghost" style={{ textDecoration: "none" }}>
+            Gastos por Naturaleza (todas las empresas)
+          </Link>
         </div>
       )}
 
