@@ -26,6 +26,25 @@ const recepcionSchema = z.object({
 //   4. Devuelve el ítem de la Solicitud original a "por_despachar" con la
 //      cantidad realmente recibida, para que Logística lo despache al área
 //      con el mismo mecanismo del Sprint 5 (PEPS) — no se duplica lógica.
+//
+// --- Cierre contable de la recepción (modelo tipo SAP B1: "Recepción de
+// mercancías" ≠ "Factura de proveedor") ---
+// Lo que entra aquí es MERCADERÍA para el almacén general: todavía no se
+// usó, así que NO es Costo de Venta (eso ocurre recién en el Despacho —
+// ver despachar/route.ts). Pero sí es una deuda real con el proveedor
+// (o, si ya se pagó, una salida de caja real), así que cada recepción:
+//   - Crea (o amplía, si el pedido ya tenía una recepción previa) UN
+//     DocumentoCompra con un Gasto por cada línea recibida, naturaleza
+//     "compra_mercaderia_almacen" (activo — no impacta el Estado de
+//     Resultados) y condición "crédito".
+//   - Crea (o amplía) la Cuenta por Pagar al proveedor por ese monto.
+// El encargado de almacén NO elige aquí forma de pago ni sube el
+// comprobante — eso lo hace después Finanzas desde Cuentas por Pagar,
+// igual que ya hace hoy con cualquier factura registrada "sin
+// clasificar" (el comprobante suele llegar después que la mercadería).
+// Estos Gasto quedan marcados con origenAutomatico="recepcion_compra_almacen"
+// y no se pueden editar/eliminar desde Gastos y Costos (ver gastos/route.ts
+// y gastos/[gastoId]/route.ts) — se corrigen re-haciendo la recepción.
 export async function POST(
   request: Request,
   { params }: { params: { id: string; pedidoCompraId: string } }
@@ -47,14 +66,27 @@ export async function POST(
   }
 
   const pedidoCompraId = BigInt(params.pedidoCompraId);
-  const pedido = await prisma.pedidoCompra.findFirst({ where: { id: pedidoCompraId, empresaId } });
+  const pedido = await prisma.pedidoCompra.findFirst({
+    where: { id: pedidoCompraId, empresaId },
+    include: { proveedor: true },
+  });
   if (!pedido) return NextResponse.json({ error: "Pedido de compra no encontrado" }, { status: 404 });
+
+  // Se extraen a variables locales (en vez de seguir referenciando
+  // `pedido.proveedor.nombre` / `pedido.documentoCompraId` dentro del
+  // closure de la transacción) porque TypeScript no arrastra el
+  // "if (!pedido) return" hacia dentro de una función anidada — ya nos
+  // pasó exactamente esto con `prestamo` en el módulo de Préstamos.
+  const proveedorNombreOC = pedido.proveedor.nombre;
+  const documentoCompraIdExistente = pedido.documentoCompraId;
 
   const empresa = await prisma.empresa.findUnique({ where: { id: empresaId } });
   const umbral = Number(empresa!.umbralAlertaAnomaliaPct);
 
   try {
     await prisma.$transaction(async (tx) => {
+      const itemsRecibidos: { insumoNombre: string; monto: number }[] = [];
+
       for (const itemInput of parsed.data.items) {
         const detalleId = BigInt(itemInput.detalleId);
         const detalle = await tx.pedidoCompraDetalle.findFirst({
@@ -145,6 +177,81 @@ export async function POST(
           where: { id: detalle.solicitudDetalleId },
           data: { estadoItem: "por_despachar", cantidadAprobada: itemInput.cantidadRecibida },
         });
+
+        itemsRecibidos.push({
+          insumoNombre: insumo.nombre,
+          monto: itemInput.cantidadRecibida * itemInput.costoUnitarioReal,
+        });
+      }
+
+      // --- 6. Cuenta por Pagar al proveedor por esta recepción (activo,
+      // no Costo de Venta todavía — ver nota de diseño arriba) ---
+      const montoRecepcion = itemsRecibidos.reduce((acc, i) => acc + i.monto, 0);
+      if (montoRecepcion > 0) {
+        const proveedorNombre = proveedorNombreOC;
+        const fechaRecepcion = new Date();
+
+        const documentoCompraId = documentoCompraIdExistente
+          ? documentoCompraIdExistente
+          : (
+              await tx.documentoCompra.create({
+                data: {
+                  empresaId,
+                  proveedorNombre,
+                  tipoComprobante: "sin_comprobante",
+                  fecha: fechaRecepcion,
+                  condicion: "credito",
+                  montoTotal: 0,
+                  usuarioId: usuarioActual.id,
+                },
+              })
+            ).id;
+
+        if (!documentoCompraIdExistente) {
+          await tx.pedidoCompra.update({ where: { id: pedidoCompraId }, data: { documentoCompraId } });
+        }
+
+        for (const item of itemsRecibidos) {
+          await tx.gasto.create({
+            data: {
+              empresaId,
+              documentoCompraId,
+              naturaleza: "compra_mercaderia_almacen",
+              categoriaEspecifica: "Insumos / materia prima (almacén general)",
+              proveedorNombre,
+              descripcion: `${item.insumoNombre} — recepción de almacén (OC N° ${pedidoCompraId})`,
+              tipoComprobante: "sin_comprobante",
+              montoTotal: item.monto,
+              fecha: fechaRecepcion,
+              condicion: "credito",
+              origenAutomatico: "recepcion_compra_almacen",
+              usuarioId: usuarioActual.id,
+            },
+          });
+        }
+
+        await tx.documentoCompra.update({
+          where: { id: documentoCompraId },
+          data: { montoTotal: { increment: montoRecepcion } },
+        });
+
+        const cxpExistente = await tx.cuentaPorPagar.findUnique({ where: { documentoCompraId } });
+        if (cxpExistente) {
+          await tx.cuentaPorPagar.update({
+            where: { id: cxpExistente.id },
+            data: { montoTotal: { increment: montoRecepcion }, saldoPendiente: { increment: montoRecepcion } },
+          });
+        } else {
+          await tx.cuentaPorPagar.create({
+            data: {
+              empresaId,
+              documentoCompraId,
+              proveedorNombre,
+              montoTotal: montoRecepcion,
+              saldoPendiente: montoRecepcion,
+            },
+          });
+        }
       }
 
       // --- Estado de la OC según cuánto quedó pendiente ---

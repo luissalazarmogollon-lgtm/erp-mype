@@ -162,7 +162,10 @@ export default function PedidoCompraDetallePage({ params }: { params: { id: stri
           <p style={{ fontWeight: 500, marginBottom: 10 }}>Registrar recepción</p>
           <p style={{ fontSize: 13, color: "var(--ink-soft)", marginBottom: 10 }}>
             Ajusta cantidad y costo real si difieren de lo pedido. Se creará un lote nuevo por cada ítem, se actualizará el
-            inventario, y si el costo varía mucho respecto al lote anterior se generará una alerta.
+            inventario, y si el costo varía mucho respecto al lote anterior se generará una alerta. Además, se
+            generará automáticamente una Cuenta por Pagar al proveedor por el valor recibido — como compra de
+            mercadería para almacén (activo, todavía no es Costo de Venta) — para que Finanzas la clasifique, le
+            asigne comprobante y la pague desde Cuentas por Pagar cuando corresponda.
           </p>
           {error && <p className="field error">{error}</p>}
           <button className="btn-primary" disabled={guardando} onClick={handleRecepcionar}>

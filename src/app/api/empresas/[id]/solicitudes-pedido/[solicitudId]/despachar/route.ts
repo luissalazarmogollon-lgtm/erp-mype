@@ -16,6 +16,20 @@ const despacharSchema = z.object({
 // (su cantidadAprobada) y consume Lotes en orden PEPS — puede tocar
 // varios lotes con costos distintos, generando un movimiento de Kardex
 // por cada uno.
+//
+// --- Costo de Venta automático (modelo tipo SAP B1: "Salida de mercancías") ---
+// Este es el momento en que la mercadería del almacén general DEJA de ser
+// un activo (inventario) y pasa a ser un gasto real: el área que la pidió
+// (Cocina, Salón, etc.) ya la va a usar. Por cada ítem despachado se crea
+// un Gasto con naturaleza "costo_directo" (si impacta el Estado de
+// Resultados) por el costo REAL de los lotes PEPS consumidos — puede ser
+// distinto al costo pagado en la última compra, porque puede tocar varios
+// lotes con costos distintos. Va con condición "crédito" pero SIN Cuenta
+// por Pagar propia (el dinero ya se comprometió en la Recepción — ver
+// recepcion/route.ts — esto es solo una reclasificación contable de
+// Inventario a Costo de Venta, no un nuevo movimiento de caja). Queda
+// marcado con origenAutomatico="despacho_almacen" y no se edita ni elimina
+// desde Gastos y Costos.
 export async function POST(
   request: Request,
   { params }: { params: { id: string; solicitudId: string } }
@@ -39,6 +53,7 @@ export async function POST(
   const solicitudId = BigInt(params.solicitudId);
   const solicitud = await prisma.solicitudPedido.findFirst({
     where: { id: solicitudId, empresaId },
+    include: { area: true },
   });
   if (!solicitud) return NextResponse.json({ error: "Solicitud no encontrada" }, { status: 404 });
   if (solicitud.estado !== "aprobada") {
@@ -48,17 +63,23 @@ export async function POST(
   const detalleIds = parsed.data.detalleIds.map(BigInt);
   const items = await prisma.solicitudPedidoDetalle.findMany({
     where: { id: { in: detalleIds }, solicitudId, estadoItem: "por_despachar" },
+    include: { insumo: true },
   });
   if (items.length === 0) {
     return NextResponse.json({ error: "No hay ítems válidos para despachar (ya despachados o inválidos)" }, { status: 400 });
   }
 
+  const areaNombre = solicitud.area?.nombre ?? "sin área asignada";
+
   try {
     const resultado = await prisma.$transaction(async (tx) => {
       const despachados: { detalleId: string; insumoId: string; cantidad: number }[] = [];
 
+      const fechaDespacho = new Date();
+
       for (const item of items) {
         let faltante = Number(item.cantidadAprobada);
+        let costoConsumidoItem = 0;
         const lotes = await tx.loteCompra.findMany({
           where: { insumoId: item.insumoId, cantidadDisponible: { gt: 0 } },
           orderBy: { fechaIngreso: "asc" },
@@ -86,6 +107,7 @@ export async function POST(
               referenciaId: item.id,
             },
           });
+          costoConsumidoItem += consumir * Number(lote.costoUnitario);
           faltante -= consumir;
         }
 
@@ -105,6 +127,24 @@ export async function POST(
           where: { id: item.id },
           data: { estadoItem: "despachado", fechaDespacho: new Date() },
         });
+
+        // --- Costo de Venta automático (ver nota de diseño arriba) ---
+        if (costoConsumidoItem > 0) {
+          await tx.gasto.create({
+            data: {
+              empresaId,
+              naturaleza: "costo_directo",
+              categoriaEspecifica: "Materia prima / insumos",
+              descripcion: `${item.insumo.nombre} — consumo de almacén (Área: ${areaNombre}, Solicitud N° ${solicitudId})`,
+              tipoComprobante: "sin_comprobante",
+              montoTotal: costoConsumidoItem,
+              fecha: fechaDespacho,
+              condicion: "credito",
+              origenAutomatico: "despacho_almacen",
+              usuarioId: usuarioActual.id,
+            },
+          });
+        }
 
         despachados.push({
           detalleId: item.id.toString(),

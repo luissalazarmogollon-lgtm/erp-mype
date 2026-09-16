@@ -3,11 +3,13 @@
 //
 // impactaResultados = true  → costo_directo, mano_obra_directa,
 //   gasto_operativo, gasto_financiero, gasto_tributario, otros
-// impactaResultados = false → activo, deuda, retiro_socios (son egresos
-//   de caja reales, pero NO son gasto contable en el momento en que
-//   ocurren — un activo se deprecia con el tiempo, la porción capital de
-//   una deuda reduce el pasivo, un retiro de socios es un movimiento de
-//   patrimonio, no una pérdida del negocio)
+// impactaResultados = false → activo, compra_mercaderia_almacen, deuda,
+//   retiro_socios (son egresos de caja reales, o compromisos de pago
+//   reales, pero NO son gasto contable en el momento en que ocurren — un
+//   activo se deprecia con el tiempo, una compra de mercadería para
+//   almacén es inventario hasta que se despacha y se usa, la porción
+//   capital de una deuda reduce el pasivo, un retiro de socios es un
+//   movimiento de patrimonio, no una pérdida del negocio)
 export const NATURALEZAS_EGRESO = [
   { value: "costo_directo", label: "Costo directo", impactaResultados: true },
   { value: "mano_obra_directa", label: "Mano de obra directa", impactaResultados: true },
@@ -20,6 +22,11 @@ export const NATURALEZAS_EGRESO = [
   { value: "gasto_financiero", label: "Gasto financiero", impactaResultados: true },
   { value: "gasto_tributario", label: "Gasto tributario", impactaResultados: true },
   { value: "activo", label: "Activo / Inversión (compra de equipos, maquinaria...)", impactaResultados: false },
+  {
+    value: "compra_mercaderia_almacen",
+    label: "Compra de mercadería para almacén (activo — recién es costo cuando se despacha)",
+    impactaResultados: false,
+  },
   { value: "deuda", label: "Pago de deuda / préstamo (capital)", impactaResultados: false },
   { value: "retiro_socios", label: "Distribución / retiro de socios", impactaResultados: false },
   { value: "otros", label: "Otros egresos extraordinarios", impactaResultados: true },
@@ -67,6 +74,7 @@ export const CATEGORIAS_POR_NATURALEZA: Record<string, string[]> = {
   gasto_financiero: ["Intereses de préstamo", "Comisiones bancarias", "Otros gastos financieros"],
   gasto_tributario: ["Impuesto a la renta", "IGV / tributos municipales", "Multas y otros"],
   activo: ["Maquinaria y equipos de producción", "Mobiliario y equipos de local", "Vehículos", "Equipos informáticos", "Otros activos"],
+  compra_mercaderia_almacen: ["Insumos / materia prima (almacén general)", "Abarrotes y suministros (almacén general)"],
   deuda: ["Préstamo bancario", "Préstamo de socio", "Crédito de proveedor"],
   retiro_socios: ["Retiro de utilidades", "Distribución a socios"],
   otros: ["Egreso extraordinario / no operativo"],

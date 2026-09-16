@@ -88,6 +88,11 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       if (gasto.gastoCajaChica) {
         throw new Error("Este egreso viene de un traslado de Caja Chica — edítalo desde ese módulo.");
       }
+      if (gasto.origenAutomatico) {
+        throw new Error(
+          "Este egreso fue generado automáticamente por el módulo de Almacén/Compras — no se edita desde aquí."
+        );
+      }
 
       const esItemDeDocumento = gasto.documentoCompraId !== null;
       const cxpPropia = gasto.cuentaPorPagar;
@@ -294,6 +299,11 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
 
       if (gasto.gastoCajaChica) {
         throw new Error("Este egreso viene de un traslado de Caja Chica — elimínalo desde ese módulo, no desde aquí.");
+      }
+      if (gasto.origenAutomatico) {
+        throw new Error(
+          "Este egreso fue generado automáticamente por el módulo de Almacén/Compras — no se elimina desde aquí."
+        );
       }
 
       const cxpPropia = gasto.cuentaPorPagar;

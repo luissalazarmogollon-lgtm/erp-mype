@@ -651,6 +651,14 @@ model Gasto {
   // saldo pendiente automáticamente y mostrar el historial de cuotas.
   prestamoId           BigInt?   @map("prestamo_id")
   prestamo             Prestamo? @relation(fields: [prestamoId], references: [id])
+  // NULL = registrado a mano por una persona (el caso de siempre).
+  // "recepcion_compra_almacen" | "despacho_almacen" = lo generó el propio
+  // sistema (módulo de Almacén/Compras) — ver recepcion/route.ts y
+  // despachar/route.ts. Estos registros NO se editan ni eliminan desde
+  // Gastos y Costos (RN nueva): la recepción de mercadería se corrige
+  // desde el Pedido de Compra, y el consumo de almacén es un reflejo
+  // automático del Despacho — no una decisión manual.
+  origenAutomatico     String?   @map("origen_automatico")
   usuarioId            String    @map("usuario_id") @db.Uuid
 
   cuentaPorPagar       CuentaPorPagar?
@@ -927,6 +935,11 @@ model DocumentoCompra {
 
   items             Gasto[]
   cuentaPorPagar    CuentaPorPagar?
+  // Presente solo cuando este documento nace SOLO de una recepción de
+  // mercadería en Almacén (ver PedidoCompra.documentoCompraId) — el
+  // vínculo inverso vive del lado de PedidoCompra porque un documento le
+  // pertenece a un único pedido de compra, nunca al revés.
+  pedidoCompra      PedidoCompra?
 
   @@map("documentos_compra")
 }
@@ -1097,6 +1110,14 @@ model PedidoCompra {
   usuarioId   String    @map("usuario_id") @db.Uuid
 
   detalle     PedidoCompraDetalle[]
+
+  // Se crea (o se amplía, si ya existía por una recepción parcial previa)
+  // automáticamente en la PRIMERA recepción de este pedido: registra la
+  // mercadería recibida como Cuenta por Pagar al proveedor — como compra
+  // de mercadería para almacén (activo, NO Costo de Venta todavía). Ver
+  // nota de diseño completa en recepcion/route.ts.
+  documentoCompraId BigInt?      @unique @map("documento_compra_id")
+  documentoCompra   DocumentoCompra? @relation(fields: [documentoCompraId], references: [id])
 
   @@index([empresaId, estado])
   @@map("pedidos_compra")

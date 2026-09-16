@@ -137,7 +137,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
   // Nota: este desglose por naturaleza sigue siendo por devengado (no
   // reparte pagosCxp por naturaleza cuando un documento mezcla varias) —
   // es una referencia de a qué se destinó el gasto, no una cifra de caja.
-  const egresoCajaNoOperativo = sumaPorNaturaleza(["activo", "deuda", "retiro_socios"]);
+  const egresoCajaNoOperativo = sumaPorNaturaleza(["activo", "compra_mercaderia_almacen", "deuda", "retiro_socios"]);
 
   const detallePorNaturaleza: Record<string, number> = {};
   for (const g of gastos) {

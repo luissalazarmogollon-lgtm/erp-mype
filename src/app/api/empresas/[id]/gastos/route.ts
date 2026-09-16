@@ -67,11 +67,15 @@ export async function GET(request: Request, { params }: { params: { id: string }
       // tenga pagos registrados (hay que deshacer esos pagos primero, para
       // no dejar un pago "huérfano" sin el egreso que lo originó).
       const tienePagos = (cxp?.pagos.length ?? 0) > 0;
-      const bloqueado = Boolean(g.gastoCajaChica) || tienePagos;
+      const bloqueado = Boolean(g.gastoCajaChica) || tienePagos || Boolean(g.origenAutomatico);
       const motivoBloqueo = g.gastoCajaChica
         ? "Viene de un traslado de Caja Chica — edítalo o elimínalo desde ese módulo."
         : tienePagos
         ? "Esta factura ya tiene pagos registrados — anúlalos en Cuentas por Pagar antes de editar o eliminar este egreso."
+        : g.origenAutomatico === "recepcion_compra_almacen"
+        ? "Generado automáticamente al recepcionar mercadería en Almacén — para corregirlo, ajusta la recepción desde el Pedido de Compra."
+        : g.origenAutomatico === "despacho_almacen"
+        ? "Generado automáticamente al despachar mercadería del Almacén al área que la consumió — no se edita aquí."
         : null;
 
       return {
@@ -94,6 +98,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
         estadoPago: cxp?.estado ?? "pagado",
         impactaResultados: impactaResultados(g.naturaleza),
         esItemDocumento: g.documentoCompraId !== null,
+        origenAutomatico: g.origenAutomatico,
         editable: !bloqueado,
         motivoBloqueo,
       };

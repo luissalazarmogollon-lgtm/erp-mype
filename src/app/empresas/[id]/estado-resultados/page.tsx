@@ -22,6 +22,8 @@ type EstadoResultados = {
   utilidadNeta: number;
   margenNetoPct: number;
   egresoCajaTotal: number;
+  egresoCajaContado: number;
+  egresoCajaPagosCredito: number;
   egresoCajaNoOperativo: number;
   detallePorNaturaleza: Record<string, number>;
 };
@@ -199,7 +201,15 @@ export default function EstadoResultadosPage({ params }: { params: { id: string 
               ¿Cuánto dinero salió realmente de la empresa? (egreso de caja)
             </p>
             <Linea label="Egreso de caja total" valor={data.egresoCajaTotal} />
-            <Linea label="De lo cual, no afecta el resultado (activos, pago de deuda, retiros)" valor={data.egresoCajaNoOperativo} />
+            <p className="mono" style={{ fontSize: 10.5, color: "var(--ink-soft)", marginBottom: 8 }}>
+              Al contado: S/ {data.egresoCajaContado.toFixed(2)} · Pagos de facturas a crédito en este período: S/{" "}
+              {data.egresoCajaPagosCredito.toFixed(2)}. Un gasto a crédito NO cuenta aquí hasta que se registre su
+              pago en Cuentas por Pagar — puede pagarse en un período distinto al que se registró.
+            </p>
+            <Linea
+              label="De lo cual, no afecta el resultado (activos, compras de mercadería para almacén, pago de deuda, retiros)"
+              valor={data.egresoCajaNoOperativo}
+            />
             <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 8 }}>
               La depreciación y amortización todavía está en S/ 0.00 — se activará automáticamente cuando esté
               listo el módulo de Activos Fijos.
