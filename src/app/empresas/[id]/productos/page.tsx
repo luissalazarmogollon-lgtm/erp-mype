@@ -100,7 +100,12 @@ export default function ProductosPage({ params }: { params: { id: string } }) {
         </Link>{" "}
         → <b>Productos</b>
       </p>
-      <h1 style={{ fontSize: 26, marginBottom: 20 }}>Productos</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <h1 style={{ fontSize: 26 }}>Productos</h1>
+        <Link href={`/empresas/${empresaId}/productos/importar`} className="mono" style={{ fontSize: 12, color: "var(--ink-soft)" }}>
+          Cargar por plantilla →
+        </Link>
+      </div>
 
       {!mostrarForm ? (
         <button className="btn-primary" onClick={() => setMostrarForm(true)} style={{ marginBottom: 20 }}>
