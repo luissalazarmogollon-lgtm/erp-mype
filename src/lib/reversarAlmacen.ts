@@ -29,9 +29,18 @@ type PrismaTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
  * "despachado"): devuelve la cantidad consumida a sus lotes de origen,
  * restaura Insumo.stockActual, borra los movimientos de Kardex
  * ("salida_solicitud") y el Gasto de Costo de Venta ("despacho_almacen")
- * que generó — con eso desaparece del Estado de Resultados. Deja el ítem
- * en estadoItem "por_despachar" (como si nunca se hubiera entregado al
- * área, pero conservando el stock que sí tiene disponible en almacén).
+ * que generó — con eso desaparece del Estado de Resultados.
+ *
+ * `estadoFinal` decide en qué queda el ítem después de revertir:
+ *   - "por_despachar" (default): como si nunca se hubiera entregado al
+ *     área, pero conservando el stock que sí tiene disponible en almacén
+ *     — es lo que usa el DELETE de toda la Solicitud (../[solicitudId]/
+ *     route.ts), que sigue borrando la Solicitud completa justo después.
+ *   - "eliminado": además deja `cantidadAprobada` en null (mismo criterio
+ *     que el resto de "eliminados" de esta tabla) — lo usa el DELETE
+ *     granular de un solo ítem despachado (.../detalle/[detalleId]/
+ *     route.ts), que NO borra la Solicitud ni el resto de sus ítems, solo
+ *     cancela este uno y todo lo que su despacho generó.
  *
  * El Gasto de despacho NUNCA tiene Cuenta por Pagar propia (es una
  * reclasificación de Inventario a Costo de Venta, no un nuevo movimiento
@@ -42,7 +51,8 @@ type PrismaTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
  */
 export async function reversarDespachoItem(
   tx: PrismaTx,
-  solicitudPedidoDetalleId: bigint
+  solicitudPedidoDetalleId: bigint,
+  estadoFinal: "por_despachar" | "eliminado" = "por_despachar"
 ): Promise<{ cantidadRestaurada: number; montoReversado: number }> {
   const movimientos = await tx.movimientoInventario.findMany({
     where: { referenciaTipo: "solicitud_pedido_detalle", referenciaId: solicitudPedidoDetalleId },
@@ -102,7 +112,11 @@ export async function reversarDespachoItem(
 
   await tx.solicitudPedidoDetalle.update({
     where: { id: solicitudPedidoDetalleId },
-    data: { estadoItem: "por_despachar", fechaDespacho: null },
+    data: {
+      estadoItem: estadoFinal,
+      fechaDespacho: null,
+      ...(estadoFinal === "eliminado" ? { cantidadAprobada: null } : {}),
+    },
   });
 
   return { cantidadRestaurada, montoReversado };

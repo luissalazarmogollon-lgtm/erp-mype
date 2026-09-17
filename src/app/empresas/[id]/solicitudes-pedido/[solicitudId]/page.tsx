@@ -71,6 +71,10 @@ export default function SolicitudDetallePage({ params }: { params: { id: string;
   const [eliminando, setEliminando] = useState(false);
   const [errorEliminar, setErrorEliminar] = useState<string | null>(null);
 
+  // --- Eliminar un ítem ya despachado (granular, sin tocar el resto) ---
+  const [eliminandoItemId, setEliminandoItemId] = useState<string | null>(null);
+  const [errorEliminarItem, setErrorEliminarItem] = useState<{ id: string; mensaje: string } | null>(null);
+
   async function cargarAcceso() {
     const res = await fetch(`/api/empresas/${empresaId}/mi-acceso`).then((r) => r.json());
     setPuedeDespachar(res.accesoTotal || res.permisos?.includes("despachar_solicitudes_pedido"));
@@ -231,6 +235,31 @@ export default function SolicitudDetallePage({ params }: { params: { id: string;
       return;
     }
     router.push(`/empresas/${empresaId}/solicitudes-pedido`);
+  }
+
+  async function eliminarItemDespachado(item: DetalleItem) {
+    if (
+      !confirm(
+        `¿Eliminar el despacho de "${item.insumoNombre}"? Se revertirá el stock, el Kardex y el Costo de Venta que generó esa entrega. No se puede deshacer.`
+      )
+    ) {
+      return;
+    }
+    setErrorEliminarItem(null);
+    setEliminandoItemId(item.id);
+    const res = await fetch(
+      `/api/empresas/${empresaId}/solicitudes-pedido/${solicitudId}/detalle/${item.id}`,
+      { method: "DELETE" }
+    );
+    setEliminandoItemId(null);
+
+    if (!res.ok) {
+      const json = await res.json();
+      setErrorEliminarItem({ id: item.id, mensaje: json.error?.toString() ?? "No se pudo eliminar este ítem." });
+      return;
+    }
+    setErrorEliminarItem(null);
+    cargar();
   }
 
   if (error && !data) {
@@ -411,6 +440,23 @@ export default function SolicitudDetallePage({ params }: { params: { id: string;
                   />
                   Despachar {item.cantidadAprobada} {item.unidadMedida ?? ""}
                 </label>
+              )}
+
+              {puedeDespachar && item.estadoItem === "despachado" && (
+                <div style={{ marginTop: 10 }}>
+                  <button
+                    className="btn-ghost"
+                    type="button"
+                    style={{ fontSize: 12, color: "var(--alert)" }}
+                    disabled={eliminandoItemId === item.id}
+                    onClick={() => eliminarItemDespachado(item)}
+                  >
+                    {eliminandoItemId === item.id ? "Eliminando..." : "Eliminar despacho de este ítem"}
+                  </button>
+                  {errorEliminarItem?.id === item.id && (
+                    <p className="field error" style={{ marginTop: 6 }}>{errorEliminarItem.mensaje}</p>
+                  )}
+                </div>
               )}
 
               {enDecision && (
