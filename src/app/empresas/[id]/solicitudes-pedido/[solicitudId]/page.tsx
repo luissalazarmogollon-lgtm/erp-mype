@@ -34,7 +34,7 @@ type Origen = "" | "almacen" | "compra";
 
 const ESTADO_ITEM_LABEL: Record<string, string> = {
   pendiente: "Pendiente de decisión",
-  eliminado: "Eliminado por el aprobador",
+  eliminado: "Eliminado (no se compró/despachó)",
   por_despachar: "Con stock — por despachar",
   pendiente_compra: "Sin stock — pasará a compra",
   despachado: "Despachado",

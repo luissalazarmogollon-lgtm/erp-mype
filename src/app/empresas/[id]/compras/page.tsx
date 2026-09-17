@@ -33,6 +33,7 @@ export default function ComprasPage({ params }: { params: { id: string } }) {
   const [proveedorAdHoc, setProveedorAdHoc] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [creando, setCreando] = useState<string | null>(null);
+  const [eliminando, setEliminando] = useState<string | null>(null);
 
   async function cargar() {
     const [resPendientes, resPedidos, resCatalogos] = await Promise.all([
@@ -84,6 +85,29 @@ export default function ComprasPage({ params }: { params: { id: string } }) {
     }
     setSeleccion({});
     setProveedorAdHoc("");
+    cargar();
+  }
+
+  async function eliminarPendiente(item: ItemPendiente) {
+    if (
+      !confirm(
+        `¿Eliminar "${item.insumoNombre}" de los pendientes de compra? Esta cantidad ya no se comprará (queda registrada como eliminada en su Solicitud de Pedido de origen). No se puede deshacer.`
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    setEliminando(item.detalleId);
+    const res = await fetch(`/api/empresas/${empresaId}/compras/pendientes/${item.detalleId}`, {
+      method: "DELETE",
+    });
+    setEliminando(null);
+
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error?.toString() ?? "No se pudo eliminar el ítem.");
+      return;
+    }
     cargar();
   }
 
@@ -144,25 +168,36 @@ export default function ComprasPage({ params }: { params: { id: string } }) {
                 </p>
               )}
               {grupo.items.map((item, i) => (
-                <label
+                <div
                   key={item.detalleId}
-                  className="checkbox-row"
                   style={{
+                    display: "flex", alignItems: "center", gap: 8,
                     padding: "8px 0", borderTop: i > 0 ? "1px solid var(--line)" : "none",
-                    opacity: habilitado ? 1 : 0.6,
                   }}
                 >
-                  <input
-                    type="checkbox"
-                    disabled={!habilitado}
-                    checked={!!seleccion[item.detalleId]}
-                    onChange={() => toggle(item.detalleId)}
-                  />
-                  <span style={{ fontSize: 13, flex: 1 }}>
-                    {item.insumoNombre} — {Number(item.cantidad).toFixed(2)} {item.unidadMedida ?? ""}
-                    <span className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}> · {item.area ?? "Sin área"}</span>
-                  </span>
-                </label>
+                  <label className="checkbox-row" style={{ flex: 1, opacity: habilitado ? 1 : 0.6 }}>
+                    <input
+                      type="checkbox"
+                      disabled={!habilitado}
+                      checked={!!seleccion[item.detalleId]}
+                      onChange={() => toggle(item.detalleId)}
+                    />
+                    <span style={{ fontSize: 13 }}>
+                      {item.insumoNombre} — {Number(item.cantidad).toFixed(2)} {item.unidadMedida ?? ""}
+                      <span className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}> · {item.area ?? "Sin área"}</span>
+                    </span>
+                  </label>
+                  <button
+                    className="btn-ghost"
+                    type="button"
+                    title="Eliminar de pendientes de compra"
+                    style={{ fontSize: 11, color: "var(--alert)", padding: "4px 8px" }}
+                    disabled={eliminando === item.detalleId}
+                    onClick={() => eliminarPendiente(item)}
+                  >
+                    {eliminando === item.detalleId ? "Eliminando..." : "Eliminar"}
+                  </button>
+                </div>
               ))}
             </div>
           );
