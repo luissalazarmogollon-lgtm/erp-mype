@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { mensajeErrorZod } from "@/lib/zodError";
 import { prisma } from "@/lib/prisma";
-import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
+import { getUsuarioActual, verificarAccesoAlguno } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -29,12 +29,18 @@ const decidirSchema = z.object({
 
 // POST /api/empresas/[id]/solicitudes-pedido/[solicitudId]/decidir
 //
-// Quién puede decidir (RN nueva): SOLO el encargado de almacén — permiso
-// "despachar_solicitudes_pedido" — o alguien con acceso total/superadmin.
-// Es quien conoce de verdad el estado del almacén y debe ser quien define
-// de dónde sale el pedido de Cocina/Salón; quien solo tiene
-// "aprobar_solicitudes_pedido" (gestiona áreas) puede VER la bandeja y el
-// detalle, pero no decidir (ver GET de ./route.ts, campo `puedeDecidir`).
+// Quién puede decidir (RN nueva, depende de QUIÉN hizo la solicitud):
+//   - Si la hizo Cocina/Salón (o no tiene área): SOLO el encargado de
+//     almacén — permiso "despachar_solicitudes_pedido" — o acceso
+//     total/superadmin. Es quien conoce de verdad el estado del almacén y
+//     debe ser quien define de dónde sale el pedido.
+//   - Si la hizo el propio Almacén (área marcada esAlmacen=true, para
+//     autoabastecimiento): SOLO quien tenga "aprobar_solicitudes_almacen"
+//     — una persona DISTINTA al encargado de almacén, para que almacén no
+//     apruebe su propio pedido — o acceso total/superadmin.
+// Quien solo tiene "aprobar_solicitudes_pedido" (gestiona áreas) puede VER
+// la bandeja y el detalle, pero no decidir ninguna de las dos (ver GET de
+// ./route.ts, campo `puedeDecidir`).
 //
 // Modifica cantidades o elimina ítems, y aprueba o rechaza. Al aprobar,
 // cada ítem se separa según el `origen` que haya elegido quien decide:
@@ -65,8 +71,9 @@ export async function POST(
   const usuarioId = usuarioActual.id;
 
   const empresaId = BigInt(params.id);
+  let acceso;
   try {
-    await verificarAccesoEmpresa(usuarioActual.id, empresaId, "despachar_solicitudes_pedido");
+    acceso = await verificarAccesoAlguno(usuarioId, empresaId, ["despachar_solicitudes_pedido", "aprobar_solicitudes_almacen"]);
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 403 });
   }
@@ -81,11 +88,28 @@ export async function POST(
   const solicitudId = BigInt(params.solicitudId);
   const solicitud = await prisma.solicitudPedido.findFirst({
     where: { id: solicitudId, empresaId },
-    include: { detalle: { include: { insumo: true } } },
+    include: { detalle: { include: { insumo: true } }, area: true },
   });
   if (!solicitud) return NextResponse.json({ error: "Solicitud no encontrada" }, { status: 404 });
   if (solicitud.estado !== "enviada") {
     return NextResponse.json({ error: "Esta solicitud ya fue decidida" }, { status: 400 });
+  }
+
+  // Defensa en profundidad, ahora que verificarAccesoAlguno solo confirmó
+  // que la persona tiene AL MENOS UNO de los dos permisos: se valida el
+  // que corresponde según el origen exacto de ESTA solicitud.
+  const puedeDespachar = acceso.accesoTotal || acceso.permisos.includes("despachar_solicitudes_pedido");
+  const puedeAprobarAlmacen = acceso.accesoTotal || acceso.permisos.includes("aprobar_solicitudes_almacen");
+  const puedeDecidirEstaSolicitud = solicitud.area?.esAlmacen ? puedeAprobarAlmacen : puedeDespachar;
+  if (!puedeDecidirEstaSolicitud) {
+    return NextResponse.json(
+      {
+        error: solicitud.area?.esAlmacen
+          ? "Esta solicitud la hizo Almacén para reponer su propio stock — solo quien tenga el permiso \"Aprobar solicitudes de Almacén\" puede decidirla (no el encargado de almacén, para evitar autoaprobación)."
+          : "Solo el encargado de almacén (permiso \"despachar_solicitudes_pedido\") puede decidir esta solicitud.",
+      },
+      { status: 403 }
+    );
   }
   // Se extrae a una variable local (en vez de seguir usando
   // `solicitud.detalle` dentro de la función anidada más abajo) porque

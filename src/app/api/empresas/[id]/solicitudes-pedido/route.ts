@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { mensajeErrorZod } from "@/lib/zodError";
@@ -47,15 +48,24 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
   let solicitudes;
   if (vista === "aprobacion") {
-    // Quien decide (aprueba y define si sale de almacén o va a compra) es
-    // el encargado de almacén ("despachar_solicitudes_pedido") — pero
-    // quien solo gestiona áreas ("aprobar_solicitudes_pedido") también
-    // puede ver esta bandeja, aunque no pueda decidir (ver decidir/route.ts).
-    if (!tienePermiso("aprobar_solicitudes_pedido") && !tienePermiso("despachar_solicitudes_pedido")) {
+    // Quien decide una solicitud de Cocina/Salón es el encargado de
+    // almacén ("despachar_solicitudes_pedido"); quien decide una que el
+    // propio Almacén se hizo a sí mismo (área con esAlmacen=true) es
+    // "aprobar_solicitudes_almacen" — alguien distinto, para que almacén
+    // no se autoapruebe (ver decidir/route.ts). Quien solo gestiona áreas
+    // ("aprobar_solicitudes_pedido") ve TODA la bandeja, aunque no pueda
+    // decidir ninguna (ver puedeDecidir en .../[solicitudId]/route.ts).
+    const puedeVerCocinaSalon = tienePermiso("despachar_solicitudes_pedido");
+    const puedeVerAlmacen = tienePermiso("aprobar_solicitudes_almacen");
+    const puedeVerTodo = acceso.accesoTotal || tienePermiso("aprobar_solicitudes_pedido");
+    if (!puedeVerTodo && !puedeVerCocinaSalon && !puedeVerAlmacen) {
       return NextResponse.json({ error: "No tienes permiso para ver la bandeja de aprobación" }, { status: 403 });
     }
+    const condicionesOrigen: Prisma.SolicitudPedidoWhereInput[] = [];
+    if (puedeVerCocinaSalon) condicionesOrigen.push({ OR: [{ areaId: null }, { area: { esAlmacen: false } }] });
+    if (puedeVerAlmacen) condicionesOrigen.push({ area: { esAlmacen: true } });
     solicitudes = await prisma.solicitudPedido.findMany({
-      where: { empresaId, estado: "enviada" },
+      where: { empresaId, estado: "enviada", ...(puedeVerTodo ? {} : { OR: condicionesOrigen }) },
       include: { area: true, detalle: true },
       orderBy: { fecha: "desc" },
     });

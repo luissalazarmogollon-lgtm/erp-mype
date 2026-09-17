@@ -2,23 +2,33 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { mensajeErrorZod } from "@/lib/zodError";
 import { prisma } from "@/lib/prisma";
-import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
+import { getUsuarioActual, verificarAccesoAlguno, verificarAccesoEmpresa } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 const crearPedidoSchema = z.object({
   proveedorId: z.string().min(1),
-  detalleIds: z.array(z.string()).min(1, "Selecciona al menos un ítem"),
+  // Antes era `detalleIds: string[]` — ahora cada ítem trae también el
+  // costo unitario que negocia el comprador (RN nueva: "el precio de
+  // costo del insumo lo coloca el comprador", al momento de generar la
+  // orden de compra — no lo pone quien luego solo registra la recepción
+  // en almacén, ver recepcion/route.ts). Se prellena en pantalla con el
+  // costo promedio actual como sugerencia, pero el comprador lo edita.
+  items: z
+    .array(z.object({ detalleId: z.string(), costoUnitario: z.number().min(0) }))
+    .min(1, "Selecciona al menos un ítem"),
 });
 
-// GET /api/empresas/[id]/pedidos-compra
+// GET /api/empresas/[id]/pedidos-compra — el comprador ("compras") ve y
+// gestiona todo; quien solo tiene "recepcionar_compras_almacen" también
+// puede listar las OC para poder abrir una y registrar su recepción.
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   const usuarioActual = await getUsuarioActual();
   if (!usuarioActual) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
   const empresaId = BigInt(params.id);
   try {
-    await verificarAccesoEmpresa(usuarioActual.id, empresaId, "compras");
+    await verificarAccesoAlguno(usuarioActual.id, empresaId, ["compras", "recepcionar_compras_almacen"]);
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 403 });
   }
@@ -67,7 +77,8 @@ export async function POST(request: Request, { params }: { params: { id: string 
   const proveedor = await prisma.proveedor.findFirst({ where: { id: proveedorId, empresaId } });
   if (!proveedor) return NextResponse.json({ error: "Proveedor no válido" }, { status: 400 });
 
-  const detalleIds = datos.detalleIds.map(BigInt);
+  const costoPorDetalleId = new Map(datos.items.map((i) => [i.detalleId, i.costoUnitario]));
+  const detalleIds = datos.items.map((i) => BigInt(i.detalleId));
   const items = await prisma.solicitudPedidoDetalle.findMany({
     where: {
       id: { in: detalleIds },
@@ -95,7 +106,10 @@ export async function POST(request: Request, { params }: { params: { id: string 
           solicitudDetalleId: item.id,
           insumoId: item.insumoId,
           cantidad: item.cantidadAprobada ?? item.cantidadSolicitada,
-          costoUnitarioEstimado: item.insumo.costoPromedioActual,
+          // El comprador define este costo aquí, al generar la OC (RN
+          // nueva) — si por lo que sea no llegó (versión vieja del
+          // formulario), se cae al promedio actual del insumo como antes.
+          costoUnitarioEstimado: costoPorDetalleId.get(item.id.toString()) ?? item.insumo.costoPromedioActual,
         })),
       },
     },

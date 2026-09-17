@@ -8,6 +8,9 @@ export const dynamic = "force-dynamic";
 
 const crearAreaSchema = z.object({
   nombre: z.string().min(2, "El nombre es obligatorio"),
+  // Marca esta área como el propio Almacén (autoabastecimiento) — ver
+  // nota de diseño en schema.prisma (Area.esAlmacen).
+  esAlmacen: z.boolean().default(false),
 });
 
 // GET /api/empresas/[id]/areas — lista de áreas de la empresa (para el
@@ -29,7 +32,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
     orderBy: { nombre: "asc" },
   });
 
-  return NextResponse.json(areas.map((a) => ({ id: a.id.toString(), nombre: a.nombre })));
+  return NextResponse.json(areas.map((a) => ({ id: a.id.toString(), nombre: a.nombre, esAlmacen: a.esAlmacen })));
 }
 
 // POST /api/empresas/[id]/areas — crea un área nueva (ej. Cocina, Barra,
@@ -54,9 +57,9 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
   try {
     const area = await prisma.area.create({
-      data: { empresaId, nombre: parsed.data.nombre },
+      data: { empresaId, nombre: parsed.data.nombre, esAlmacen: parsed.data.esAlmacen },
     });
-    return NextResponse.json({ id: area.id.toString(), nombre: area.nombre }, { status: 201 });
+    return NextResponse.json({ id: area.id.toString(), nombre: area.nombre, esAlmacen: area.esAlmacen }, { status: 201 });
   } catch {
     return NextResponse.json({ error: "Ya existe un área con ese nombre" }, { status: 400 });
   }

@@ -22,9 +22,20 @@ export const MODULOS_DISPONIBLES = [
   { key: "caja_chica", label: "Registrar gastos de caja chica" },
   { key: "prestamos", label: "Registrar préstamos y sus cuotas" },
   { key: "solicitudes_pedido", label: "Crear y ver solicitudes de pedido" },
-  { key: "aprobar_solicitudes_pedido", label: "Aprobar solicitudes de pedido y gestionar áreas" },
-  { key: "despachar_solicitudes_pedido", label: "Despachar solicitudes aprobadas (logística)" },
-  { key: "compras", label: "Gestionar proveedores, pedidos de compra y recepciones" },
+  { key: "aprobar_solicitudes_pedido", label: "Ver todas las solicitudes de pedido y gestionar áreas" },
+  {
+    key: "despachar_solicitudes_pedido",
+    label: "Aprobar solicitudes de Cocina/Salón y despacharlas (encargado de almacén)",
+  },
+  {
+    key: "aprobar_solicitudes_almacen",
+    label: "Aprobar solicitudes que el propio Almacén hace para reponer stock (no las decide quien las pide)",
+  },
+  { key: "compras", label: "Gestionar proveedores, pedidos de compra y su costo (comprador)" },
+  {
+    key: "recepcionar_compras_almacen",
+    label: "Registrar cantidades recibidas de compras y actualizar el Kardex (el costo lo define Compras)",
+  },
   { key: "actividades", label: "Gestionar actividades y carga laboral (empresas de Servicios)" },
   { key: "actividades_propias", label: "Ver y actualizar solo sus actividades asignadas (auto-servicio, sin gestionar al equipo)" },
 ] as const;
@@ -47,7 +58,9 @@ export const MODULOS_SOLO_PRODUCTOS: ModuloKey[] = [
   "solicitudes_pedido",
   "aprobar_solicitudes_pedido",
   "despachar_solicitudes_pedido",
+  "aprobar_solicitudes_almacen",
   "compras",
+  "recepcionar_compras_almacen",
 ];
 
 // Simétrico a MODULOS_SOLO_PRODUCTOS: módulos que solo tienen sentido para

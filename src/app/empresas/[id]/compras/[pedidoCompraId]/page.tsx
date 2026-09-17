@@ -19,6 +19,13 @@ type PedidoDetalle = {
   id: string;
   estado: string;
   fecha: string;
+  // Solo "compras" (el comprador) puede fijar/corregir el costo real y
+  // eliminar el pedido; quien tenga "recepcionar_compras_almacen" también
+  // puede registrar la recepción (cantidades — el costo queda fijo en lo
+  // que el comprador ya puso al crear la OC).
+  puedeEditarCosto: boolean;
+  puedeRecepcionar: boolean;
+  puedeEliminar: boolean;
   proveedor: { id: string; nombre: string; ruc: string | null; contacto: string | null; telefono: string | null };
   detalle: DetalleItem[];
 };
@@ -59,10 +66,14 @@ export default function PedidoCompraDetallePage({ params }: { params: { id: stri
 
   async function handleRecepcionar() {
     setError(null);
+    // Si no puede editar el costo (solo tiene "recepcionar_compras_almacen"),
+    // no se manda costoUnitarioReal — el servidor usa el que el comprador
+    // ya dejó fijado al crear la orden de compra (defensa en profundidad;
+    // aunque se mandara, el servidor lo ignora para esta persona).
     const items = Object.entries(recepcion).map(([detalleId, v]) => ({
       detalleId,
       cantidadRecibida: v.cantidad,
-      costoUnitarioReal: v.costo,
+      ...(data?.puedeEditarCosto ? { costoUnitarioReal: v.costo } : {}),
     }));
     if (items.length === 0) {
       setError("No hay ítems pendientes de recepción.");
@@ -133,14 +144,16 @@ export default function PedidoCompraDetallePage({ params }: { params: { id: stri
           >
             Descargar PDF
           </a>
-          <button
-            className="btn-ghost"
-            style={{ fontSize: 13, color: "var(--alert)" }}
-            disabled={eliminando}
-            onClick={handleEliminar}
-          >
-            {eliminando ? "Eliminando..." : "Eliminar pedido"}
-          </button>
+          {data.puedeEliminar && (
+            <button
+              className="btn-ghost"
+              style={{ fontSize: 13, color: "var(--alert)" }}
+              disabled={eliminando}
+              onClick={handleEliminar}
+            >
+              {eliminando ? "Eliminando..." : "Eliminar pedido"}
+            </button>
+          )}
         </div>
       </div>
       {errorEliminar && <p className="field error" style={{ marginTop: 10 }}>{errorEliminar}</p>}
@@ -176,32 +189,43 @@ export default function PedidoCompraDetallePage({ params }: { params: { id: stri
                     }
                   />
                 </div>
-                <div className="field" style={{ margin: 0, width: 140 }}>
-                  <label>Costo unitario real (S/)</label>
-                  <input
-                    type="number"
-                    step="0.0001"
-                    value={recepcion[item.id].costo}
-                    onChange={(e) =>
-                      setRecepcion({ ...recepcion, [item.id]: { ...recepcion[item.id], costo: Number(e.target.value) } })
-                    }
-                  />
-                </div>
+                {data.puedeEditarCosto ? (
+                  <div className="field" style={{ margin: 0, width: 140 }}>
+                    <label>Costo unitario real (S/)</label>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      value={recepcion[item.id].costo}
+                      onChange={(e) =>
+                        setRecepcion({ ...recepcion, [item.id]: { ...recepcion[item.id], costo: Number(e.target.value) } })
+                      }
+                    />
+                  </div>
+                ) : (
+                  <div className="field" style={{ margin: 0, width: 140 }}>
+                    <label>Costo unitario (S/)</label>
+                    <p className="mono" style={{ fontSize: 13, padding: "8px 0", color: "var(--ink-soft)" }}>
+                      {Number(item.costoUnitarioEstimado ?? 0).toFixed(4)} · lo define Compras
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>
         ))}
       </div>
 
-      {pendientes.length > 0 && (
+      {pendientes.length > 0 && data.puedeRecepcionar && (
         <div className="card">
           <p style={{ fontWeight: 500, marginBottom: 10 }}>Registrar recepción</p>
           <p style={{ fontSize: 13, color: "var(--ink-soft)", marginBottom: 10 }}>
-            Ajusta cantidad y costo real si difieren de lo pedido. Se creará un lote nuevo por cada ítem, se actualizará el
-            inventario, y si el costo varía mucho respecto al lote anterior se generará una alerta. Además, se
-            generará automáticamente una Cuenta por Pagar al proveedor por el valor recibido — como compra de
-            mercadería para almacén (activo, todavía no es Costo de Venta) — para que Finanzas la clasifique, le
-            asigne comprobante y la pague desde Cuentas por Pagar cuando corresponda.
+            Ajusta la cantidad recibida si difiere de lo pedido{data.puedeEditarCosto ? " (y el costo real, si corresponde)" : ""}.
+            Se creará un lote nuevo por cada ítem, se actualizará el inventario (Kardex), y si el costo varía mucho
+            respecto al lote anterior se generará una alerta. Además, se generará automáticamente una Cuenta por
+            Pagar al proveedor por el valor recibido — como compra de mercadería para almacén (activo, todavía no es
+            Costo de Venta) — para que Finanzas la clasifique, le asigne comprobante y la pague desde Cuentas por
+            Pagar cuando corresponda.
+            {!data.puedeEditarCosto && " El costo unitario ya lo dejó fijado Compras al generar esta orden."}
           </p>
           {error && <p className="field error">{error}</p>}
           <button className="btn-primary" disabled={guardando} onClick={handleRecepcionar}>

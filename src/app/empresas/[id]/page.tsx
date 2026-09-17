@@ -71,11 +71,16 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
     { modulos: ["caja_chica"], href: "caja-chica", label: "Caja Chica" },
     { modulos: ["locales"], href: "locales", label: "Locales" },
     {
-      modulos: ["solicitudes_pedido", "aprobar_solicitudes_pedido", "despachar_solicitudes_pedido"],
+      modulos: [
+        "solicitudes_pedido",
+        "aprobar_solicitudes_pedido",
+        "despachar_solicitudes_pedido",
+        "aprobar_solicitudes_almacen",
+      ],
       href: "solicitudes-pedido",
       label: "Solicitudes de Pedido",
     },
-    { modulos: ["compras"], href: "compras", label: "Compras" },
+    { modulos: ["compras", "recepcionar_compras_almacen"], href: "compras", label: "Compras" },
     { modulos: ["compras"], href: "proveedores", label: "Proveedores" },
     { modulos: ["actividades", "actividades_propias"], href: "actividades", label: "Gestión de Actividades" },
   ];

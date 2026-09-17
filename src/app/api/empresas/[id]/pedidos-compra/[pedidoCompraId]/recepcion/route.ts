@@ -2,14 +2,19 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { mensajeErrorZod } from "@/lib/zodError";
 import { prisma } from "@/lib/prisma";
-import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
+import { getUsuarioActual, verificarAccesoAlguno } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 const itemRecepcionSchema = z.object({
   detalleId: z.string(),
   cantidadRecibida: z.number().positive("La cantidad recibida debe ser mayor a 0"),
-  costoUnitarioReal: z.number().min(0),
+  // Opcional ahora: quien SOLO tiene "recepcionar_compras_almacen" (no
+  // "compras") no puede fijar el costo — RN nueva: "el precio de costo
+  // del insumo lo coloca el comprador". Si lo envía igual, el servidor lo
+  // IGNORA para esa persona y usa el costo que el comprador ya dejó fijado
+  // al crear la orden de compra (costoUnitarioEstimado) — ver más abajo.
+  costoUnitarioReal: z.number().min(0).optional(),
 });
 
 const recepcionSchema = z.object({
@@ -17,6 +22,17 @@ const recepcionSchema = z.object({
 });
 
 // POST /api/empresas/[id]/pedidos-compra/[pedidoCompraId]/recepcion
+//
+// Quién puede recepcionar (RN nueva): el comprador ("compras", como
+// siempre) o quien tenga el permiso nuevo "recepcionar_compras_almacen"
+// (encargada de almacén) — para que pueda registrar lo que llegó
+// físicamente y así el Kardex quede al día sin depender de Compras. La
+// diferencia es el COSTO: "el precio de costo del insumo lo coloca el
+// comprador" — solo "compras" puede fijarlo/corregirlo aquí; quien solo
+// tiene el permiso nuevo no manda costo (o si lo manda, se ignora) y se
+// usa el que el comprador ya dejó al crear la orden de compra
+// (costoUnitarioEstimado, ver pedidos-compra/route.ts POST).
+//
 // El proveedor entregó la mercadería. Por cada línea recibida:
 //   1. Crea un LoteCompra nuevo (origen "compra") con el costo REAL pagado.
 //   2. Actualiza Insumo.stockActual y su costo promedio (RN-031, igual que
@@ -53,11 +69,17 @@ export async function POST(
   if (!usuarioActual) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
   const empresaId = BigInt(params.id);
+  let acceso;
   try {
-    await verificarAccesoEmpresa(usuarioActual.id, empresaId, "compras");
+    acceso = await verificarAccesoAlguno(usuarioActual.id, empresaId, ["compras", "recepcionar_compras_almacen"]);
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 403 });
   }
+  // Solo "compras" (el comprador) puede fijar el costo real — quien solo
+  // tiene "recepcionar_compras_almacen" (encargada de almacén) registra
+  // cantidades y el Kardex se actualiza, pero el costo se ignora y se usa
+  // el que el comprador ya dejó en la orden de compra (ver más abajo).
+  const puedeEditarCosto = acceso.accesoTotal || acceso.permisos.includes("compras");
 
   const body = await request.json();
   const parsed = recepcionSchema.safeParse(body);
@@ -95,6 +117,20 @@ export async function POST(
         if (!detalle) throw new Error(`Ítem ${itemInput.detalleId} no pertenece a este pedido`);
         if (detalle.fechaRecepcion) throw new Error(`El ítem de "${detalle.insumoId}" ya fue recepcionado`);
 
+        // RN nueva: "el precio de costo del insumo lo coloca el
+        // comprador". Quien tiene "compras" puede fijar/corregir el costo
+        // real aquí mismo (o dejar el estimado si no manda uno); quien
+        // SOLO tiene "recepcionar_compras_almacen" no puede — se ignora
+        // cualquier costo que haya mandado y se usa el que el comprador ya
+        // dejó al crear la orden de compra.
+        const costoEstimado = detalle.costoUnitarioEstimado ? Number(detalle.costoUnitarioEstimado) : null;
+        const costoReal = puedeEditarCosto ? itemInput.costoUnitarioReal ?? costoEstimado : costoEstimado;
+        if (costoReal === null) {
+          throw new Error(
+            `El ítem de "${detalle.insumoId}" no tiene un costo definido por Compras todavía — pide que alguien con permiso de Compras lo fije antes de recepcionarlo.`
+          );
+        }
+
         const insumo = await tx.insumo.findUniqueOrThrow({ where: { id: detalle.insumoId } });
 
         // --- 1. Lote nuevo ---
@@ -105,7 +141,7 @@ export async function POST(
             origen: "compra",
             cantidadInicial: itemInput.cantidadRecibida,
             cantidadDisponible: itemInput.cantidadRecibida,
-            costoUnitario: itemInput.costoUnitarioReal,
+            costoUnitario: costoReal,
             referenciaTipo: "pedido_compra_detalle",
             referenciaId: detalle.id,
           },
@@ -118,7 +154,7 @@ export async function POST(
             insumoId: detalle.insumoId,
             tipo: "entrada_compra",
             cantidad: itemInput.cantidadRecibida,
-            costoUnitario: itemInput.costoUnitarioReal,
+            costoUnitario: costoReal,
             loteId: nuevoLote.id,
             usuarioId: usuarioActual.id,
             referenciaTipo: "pedido_compra_detalle",
@@ -130,7 +166,7 @@ export async function POST(
         const costoActual = Number(insumo.costoPromedioActual);
         const nuevoStock = stockActual + itemInput.cantidadRecibida;
         const nuevoCostoPromedio =
-          (stockActual * costoActual + itemInput.cantidadRecibida * itemInput.costoUnitarioReal) / nuevoStock;
+          (stockActual * costoActual + itemInput.cantidadRecibida * costoReal) / nuevoStock;
 
         await tx.insumo.update({
           where: { id: detalle.insumoId },
@@ -145,7 +181,7 @@ export async function POST(
         if (loteAnterior) {
           const costoAnterior = Number(loteAnterior.costoUnitario);
           if (costoAnterior > 0) {
-            const variacionPct = (Math.abs(itemInput.costoUnitarioReal - costoAnterior) / costoAnterior) * 100;
+            const variacionPct = (Math.abs(costoReal - costoAnterior) / costoAnterior) * 100;
             if (variacionPct > umbral) {
               await tx.alertaAnomaliaCosto.create({
                 data: {
@@ -154,7 +190,7 @@ export async function POST(
                   loteAnteriorId: loteAnterior.id,
                   loteNuevoId: nuevoLote.id,
                   costoAnterior,
-                  costoNuevo: itemInput.costoUnitarioReal,
+                  costoNuevo: costoReal,
                   variacionPct,
                 },
               });
@@ -167,7 +203,7 @@ export async function POST(
           where: { id: detalle.id },
           data: {
             cantidadRecibida: itemInput.cantidadRecibida,
-            costoUnitarioReal: itemInput.costoUnitarioReal,
+            costoUnitarioReal: costoReal,
             fechaRecepcion: new Date(),
           },
         });
@@ -181,7 +217,7 @@ export async function POST(
         itemsRecibidos.push({
           detalleId: detalle.id,
           insumoNombre: insumo.nombre,
-          monto: itemInput.cantidadRecibida * itemInput.costoUnitarioReal,
+          monto: itemInput.cantidadRecibida * costoReal,
         });
       }
 

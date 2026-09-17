@@ -16,6 +16,10 @@ const asignarSchema = z.object({
   rolOperativoNombre: z.enum(["Gerencial", "Admin Local", "Cajero", "Almacén-Cocina"]),
   accesoTotal: z.boolean().default(true),
   permisos: z.array(z.enum(CLAVES_VALIDAS)).default([]),
+  // Área donde trabaja esta persona EN ESTA EMPRESA (opcional) — al
+  // crear una Solicitud de Pedido, se autocompleta con esta área en vez
+  // de tener que elegirla a mano. "" / null / ausente = sin área.
+  areaId: z.string().nullable().optional(),
 });
 
 // POST /api/usuarios/[usuarioId]/asignaciones — asigna (o reactiva) el
@@ -47,6 +51,13 @@ export async function POST(request: Request, { params }: { params: { usuarioId: 
   if (!empresa) return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
   if (!rolOperativo) return NextResponse.json({ error: "Rol operativo inválido" }, { status: 400 });
 
+  let areaId: bigint | null = null;
+  if (datos.areaId) {
+    const area = await prisma.area.findFirst({ where: { id: BigInt(datos.areaId), empresaId } });
+    if (!area) return NextResponse.json({ error: "El área seleccionada no existe en esta empresa" }, { status: 400 });
+    areaId = area.id;
+  }
+
   // upsert: si ya tuvo (o tiene) una asignación a esta empresa, la
   // actualiza/reactiva en vez de duplicar (la llave única es usuario+empresa).
   const asignacion = await prisma.usuarioEmpresa.upsert({
@@ -57,6 +68,7 @@ export async function POST(request: Request, { params }: { params: { usuarioId: 
       estado: "activo",
       accesoTotal: datos.accesoTotal,
       permisos: datos.accesoTotal ? Prisma.JsonNull : datos.permisos,
+      areaId,
     },
     create: {
       usuarioId,
@@ -65,6 +77,7 @@ export async function POST(request: Request, { params }: { params: { usuarioId: 
       rolOperativoId: rolOperativo.id,
       accesoTotal: datos.accesoTotal,
       permisos: datos.accesoTotal ? Prisma.JsonNull : datos.permisos,
+      areaId,
     },
   });
 

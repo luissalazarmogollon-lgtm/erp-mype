@@ -30,10 +30,21 @@ export default function ComprasPage({ params }: { params: { id: string } }) {
   const [pedidos, setPedidos] = useState<PedidoCompra[]>([]);
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [seleccion, setSeleccion] = useState<Record<string, boolean>>({});
+  const [costos, setCostos] = useState<Record<string, string>>({});
   const [proveedorAdHoc, setProveedorAdHoc] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [creando, setCreando] = useState<string | null>(null);
   const [eliminando, setEliminando] = useState<string | null>(null);
+  // Solo "compras" (el comprador) consolida pendientes en una OC — quien
+  // solo tiene "recepcionar_compras_almacen" no ve esta sección (no le
+  // corresponde fijar el costo ni crear órdenes), pero sí la lista de
+  // Órdenes de compra de abajo, para poder abrir una y recepcionarla.
+  const [puedeCompras, setPuedeCompras] = useState(false);
+
+  async function cargarAcceso() {
+    const res = await fetch(`/api/empresas/${empresaId}/mi-acceso`).then((r) => r.json());
+    setPuedeCompras(res.accesoTotal || res.permisos?.includes("compras"));
+  }
 
   async function cargar() {
     const [resPendientes, resPedidos, resCatalogos] = await Promise.all([
@@ -47,6 +58,7 @@ export default function ComprasPage({ params }: { params: { id: string } }) {
   }
 
   useEffect(() => {
+    cargarAcceso();
     cargar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [empresaId]);
@@ -65,16 +77,23 @@ export default function ComprasPage({ params }: { params: { id: string } }) {
       setError("Elige un proveedor para este grupo antes de crear la orden de compra.");
       return;
     }
-    const detalleIds = grupo.items.filter((i) => seleccion[i.detalleId]).map((i) => i.detalleId);
-    if (detalleIds.length === 0) {
+    const seleccionados = grupo.items.filter((i) => seleccion[i.detalleId]);
+    if (seleccionados.length === 0) {
       setError("Selecciona al menos un ítem de este proveedor.");
       return;
     }
+    // El comprador coloca (o confirma) el costo unitario de cada ítem al
+    // generar la orden de compra — se prellena con el costo promedio
+    // actual como referencia, pero se puede editar antes de crear la OC.
+    const items = seleccionados.map((i) => ({
+      detalleId: i.detalleId,
+      costoUnitario: Number(costos[i.detalleId] ?? i.costoReferencia),
+    }));
     setCreando(grupo.proveedorId ?? "sin_proveedor");
     const res = await fetch(`/api/empresas/${empresaId}/pedidos-compra`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ proveedorId, detalleIds }),
+      body: JSON.stringify({ proveedorId, items }),
     });
     setCreando(null);
 
@@ -130,6 +149,8 @@ export default function ComprasPage({ params }: { params: { id: string } }) {
         </div>
       </div>
 
+      {puedeCompras && (
+      <>
       <h2 style={{ fontSize: 16, marginBottom: 10 }}>Pendientes de consolidar por proveedor</h2>
       {error && <p className="field error" style={{ marginBottom: 10 }}>{error}</p>}
       <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 32 }}>
@@ -187,6 +208,16 @@ export default function ComprasPage({ params }: { params: { id: string } }) {
                       <span className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}> · {item.area ?? "Sin área"}</span>
                     </span>
                   </label>
+                  <div className="field" style={{ margin: 0, width: 110 }}>
+                    <label style={{ fontSize: 10 }}>Costo unitario (S/)</label>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      value={costos[item.detalleId] ?? item.costoReferencia}
+                      onChange={(e) => setCostos({ ...costos, [item.detalleId]: e.target.value })}
+                      style={{ padding: "4px 6px", fontSize: 12 }}
+                    />
+                  </div>
                   <button
                     className="btn-ghost"
                     type="button"
@@ -206,6 +237,8 @@ export default function ComprasPage({ params }: { params: { id: string } }) {
           <p style={{ color: "var(--ink-soft)", fontSize: 14 }}>No hay ítems pendientes de compra en este momento.</p>
         )}
       </div>
+      </>
+      )}
 
       <h2 style={{ fontSize: 16, marginBottom: 10 }}>Órdenes de compra</h2>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

@@ -12,6 +12,8 @@ type Asignacion = {
   rolOperativo: string;
   accesoTotal: boolean;
   permisos: string[];
+  areaId: string | null;
+  areaNombre: string | null;
 };
 type Usuario = {
   id: string;
@@ -22,6 +24,7 @@ type Usuario = {
   asignaciones: Asignacion[];
 };
 type EmpresaOpcion = { id: string; nombreComercial: string };
+type AreaOpcion = { id: string; nombre: string };
 
 export default function UsuariosPage() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
@@ -45,7 +48,9 @@ export default function UsuariosPage() {
     rolOperativoNombre: "Admin Local",
     accesoTotal: true,
     permisos: [] as string[],
+    areaId: "",
   });
+  const [areasEmpresa, setAreasEmpresa] = useState<AreaOpcion[]>([]);
 
   async function cargar() {
     setCargando(true);
@@ -61,6 +66,19 @@ export default function UsuariosPage() {
   useEffect(() => {
     cargar();
   }, []);
+
+  // Carga las áreas de la empresa elegida en el formulario de asignación,
+  // para el selector "Área de trabajo" — cambia cada vez que se elige (o
+  // se edita) una empresa distinta.
+  useEffect(() => {
+    if (!formAsignar.empresaId) {
+      setAreasEmpresa([]);
+      return;
+    }
+    fetch(`/api/empresas/${formAsignar.empresaId}/areas`)
+      .then((r) => r.json())
+      .then((res) => setAreasEmpresa(Array.isArray(res) ? res : []));
+  }, [formAsignar.empresaId]);
 
   async function handleCrearUsuario(e: React.FormEvent) {
     e.preventDefault();
@@ -98,7 +116,7 @@ export default function UsuariosPage() {
     }
     setAsignandoEn(null);
     setEditando(null);
-    setFormAsignar({ empresaId: "", tipoActor: "cliente", rolOperativoNombre: "Admin Local", accesoTotal: true, permisos: [] });
+    setFormAsignar({ empresaId: "", tipoActor: "cliente", rolOperativoNombre: "Admin Local", accesoTotal: true, permisos: [], areaId: "" });
     cargar();
   }
 
@@ -109,6 +127,7 @@ export default function UsuariosPage() {
       rolOperativoNombre: a.rolOperativo,
       accesoTotal: a.accesoTotal,
       permisos: a.permisos,
+      areaId: a.areaId ?? "",
     });
     setEditando({ asignacionId: a.asignacionId, empresaNombre: a.empresaNombre });
     setAsignandoEn(usuarioId);
@@ -116,7 +135,7 @@ export default function UsuariosPage() {
   }
 
   function abrirNuevaAsignacion(usuarioId: string) {
-    setFormAsignar({ empresaId: "", tipoActor: "cliente", rolOperativoNombre: "Admin Local", accesoTotal: true, permisos: [] });
+    setFormAsignar({ empresaId: "", tipoActor: "cliente", rolOperativoNombre: "Admin Local", accesoTotal: true, permisos: [], areaId: "" });
     setEditando(null);
     setAsignandoEn(asignandoEn === usuarioId && !editando ? null : usuarioId);
     setError(null);
@@ -230,6 +249,7 @@ export default function UsuariosPage() {
                       <div>
                         <p className="mono" style={{ fontSize: 12 }}>
                           {a.empresaNombre} — {a.tipoActor} / {a.rolOperativo}
+                          {a.areaNombre && ` · Área: ${a.areaNombre}`}
                         </p>
                         <p className="mono" style={{ fontSize: 10, color: "var(--ink-soft)" }}>
                           {a.accesoTotal
@@ -293,6 +313,22 @@ export default function UsuariosPage() {
                       </select>
                     </div>
                   </div>
+
+                  {formAsignar.empresaId && (
+                    <div className="field" style={{ marginTop: 10 }}>
+                      <label>Área donde trabaja (opcional)</label>
+                      <select value={formAsignar.areaId} onChange={(e) => setFormAsignar({ ...formAsignar, areaId: e.target.value })}>
+                        <option value="">Sin área específica</option>
+                        {areasEmpresa.map((ar) => (
+                          <option key={ar.id} value={ar.id}>{ar.nombre}</option>
+                        ))}
+                      </select>
+                      <p className="mono" style={{ fontSize: 10.5, color: "var(--ink-soft)", marginTop: 4 }}>
+                        Si esta persona crea Solicitudes de Pedido, esta área se usará automáticamente sin que tenga
+                        que elegirla. {areasEmpresa.length === 0 && "Esta empresa todavía no tiene áreas creadas."}
+                      </p>
+                    </div>
+                  )}
                   {error && <p className="field error" style={{ marginTop: 10 }}>{error}</p>}
 
                   <div className="field" style={{ marginTop: 10 }}>

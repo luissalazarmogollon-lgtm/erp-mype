@@ -39,15 +39,20 @@ export async function GET(
   const esDueno = solicitud.responsableId === usuarioActual.id;
   const puedeAprobar = acceso.accesoTotal || acceso.permisos.includes("aprobar_solicitudes_pedido");
   const puedeDespachar = acceso.accesoTotal || acceso.permisos.includes("despachar_solicitudes_pedido");
-  if (!esDueno && !puedeAprobar && !puedeDespachar) {
+  const puedeAprobarAlmacen = acceso.accesoTotal || acceso.permisos.includes("aprobar_solicitudes_almacen");
+  if (!esDueno && !puedeAprobar && !puedeDespachar && !puedeAprobarAlmacen) {
     return NextResponse.json({ error: "No tienes acceso a esta solicitud" }, { status: 403 });
   }
   // Quien de verdad puede DECIDIR (aprobar/rechazar y definir si sale de
-  // almacén o va a compra) es solo el encargado de almacén — mismo
-  // permiso que exige POST .../decidir — o acceso total/superadmin.
-  // `puedeAprobar` se mantiene para el acceso de lectura de arriba (quien
-  // solo gestiona áreas también puede ver esta pantalla).
-  const puedeDecidir = puedeDespachar;
+  // almacén o va a compra) depende de QUIÉN hizo la solicitud (RN nueva):
+  // si la hizo el propio Almacén (área con esAlmacen=true), decide quien
+  // tenga "aprobar_solicitudes_almacen" — para que almacén no se
+  // autoapruebe; si la hizo Cocina/Salón (o no tiene área), decide el
+  // encargado de almacén ("despachar_solicitudes_pedido"), como siempre —
+  // mismo criterio que exige POST .../decidir. `puedeAprobar` se mantiene
+  // para el acceso de lectura de arriba (quien solo gestiona áreas
+  // también puede ver esta pantalla, aunque no pueda decidir).
+  const puedeDecidir = solicitud.area?.esAlmacen ? puedeAprobarAlmacen : puedeDespachar;
 
   // Stock "comprometido": suma de lo que YA quedó por_despachar en otras
   // solicitudes para el mismo insumo (todavía no descontado del Kardex,
@@ -250,15 +255,26 @@ export async function DELETE(
   const solicitudId = BigInt(params.solicitudId);
   const solicitud = await prisma.solicitudPedido.findFirst({
     where: { id: solicitudId, empresaId },
-    include: { detalle: true },
+    include: { detalle: true, area: true },
   });
   if (!solicitud) return NextResponse.json({ error: "Solicitud no encontrada" }, { status: 404 });
 
+  // Mismo criterio que decidir/route.ts y el GET de arriba: quien puede
+  // eliminar una solicitud YA decidida es quien podía decidirla según su
+  // origen (Almacén -> "aprobar_solicitudes_almacen", Cocina/Salón ->
+  // "despachar_solicitudes_pedido") — o acceso total. Mientras siga
+  // "enviada" (sin decidir, nada que revertir), el propio dueño también
+  // puede eliminarla, igual que ya puede editarla.
   const puedeDespachar = acceso.accesoTotal || acceso.permisos.includes("despachar_solicitudes_pedido");
+  const puedeAprobarAlmacen = acceso.accesoTotal || acceso.permisos.includes("aprobar_solicitudes_almacen");
+  const puedeDecidirEstaSolicitud = solicitud.area?.esAlmacen ? puedeAprobarAlmacen : puedeDespachar;
   const esDuenoDeSolicitudSinDecidir = solicitud.responsableId === usuarioId && solicitud.estado === "enviada";
-  if (!puedeDespachar && !esDuenoDeSolicitudSinDecidir) {
+  if (!puedeDecidirEstaSolicitud && !esDuenoDeSolicitudSinDecidir) {
     return NextResponse.json(
-      { error: "Solo el encargado de almacén (o acceso total) puede eliminar una solicitud ya decidida" },
+      {
+        error:
+          "Solo quien puede decidir esta solicitud según su origen (encargado de almacén para Cocina/Salón, o quien aprueba Almacén para autoabastecimiento), o acceso total, puede eliminar una solicitud ya decidida",
+      },
       { status: 403 }
     );
   }

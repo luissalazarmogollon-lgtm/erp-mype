@@ -214,6 +214,12 @@ model UsuarioEmpresa {
   // (ver MODULOS_DISPONIBLES en src/lib/permisosModulo.ts).
   accesoTotal      Boolean  @default(true) @map("acceso_total")
   permisos         Json?
+  // Área donde trabaja esta persona EN ESTA EMPRESA (ej. Cocina, Salón,
+  // Almacén) — opcional. RN nueva: al crear una Solicitud de Pedido, si
+  // quien la crea tiene un área asignada aquí, se usa automáticamente sin
+  // tener que elegirla a mano (ver .../solicitudes-pedido/page.tsx).
+  areaId           BigInt?  @map("area_id")
+  area             Area?    @relation(fields: [areaId], references: [id])
   estado           String   @default("activo")
   fechaAsignacion  DateTime @default(now()) @map("fecha_asignacion")
 
@@ -980,8 +986,21 @@ model Area {
   empresa     Empresa  @relation(fields: [empresaId], references: [id])
   nombre      String
   estado      String   @default("activo")
+  // Marca el área que representa al propio Almacén (autoabastecimiento —
+  // ej. "reponer stock de mercadería") en vez de un área operativa como
+  // Cocina o Salón. RN nueva: quien decide una Solicitud de Pedido hecha
+  // POR esta área es quien tenga el permiso "aprobar_solicitudes_almacen"
+  // (alguien distinto al encargado de almacén — para no autoaprobarse),
+  // mientras que las solicitudes de Cocina/Salón las sigue decidiendo
+  // "despachar_solicitudes_pedido" como siempre — ver decidir/route.ts.
+  // Normalmente solo UNA área de la empresa debería tener esto en true.
+  esAlmacen   Boolean  @default(false) @map("es_almacen")
 
   solicitudes SolicitudPedido[]
+  // Usuarios cuya área de trabajo (en esta empresa) es esta — ver
+  // UsuarioEmpresa.areaId. Se usa para autocompletar el área al crear una
+  // Solicitud de Pedido, sin que la persona tenga que elegirla a mano.
+  usuariosAsignados UsuarioEmpresa[]
 
   @@unique([empresaId, nombre])
   @@map("areas")

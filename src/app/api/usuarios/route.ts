@@ -31,7 +31,7 @@ export async function GET() {
     include: {
       asignaciones: {
         where: { estado: "activo" },
-        include: { empresa: true, rolOperativo: true },
+        include: { empresa: true, rolOperativo: true, area: true },
       },
     },
     orderBy: { fechaCreacion: "desc" },
@@ -52,6 +52,10 @@ export async function GET() {
         rolOperativo: a.rolOperativo.nombre,
         accesoTotal: a.accesoTotal,
         permisos: (a.permisos as unknown as string[] | null) ?? [],
+        // Área de trabajo de esta persona en esa empresa (ej. Cocina,
+        // Almacén) — null si no se le asignó ninguna todavía.
+        areaId: a.areaId ? a.areaId.toString() : null,
+        areaNombre: a.area?.nombre ?? null,
       })),
     }))
   );

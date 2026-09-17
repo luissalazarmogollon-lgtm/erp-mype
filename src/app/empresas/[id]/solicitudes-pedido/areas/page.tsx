@@ -3,14 +3,16 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
-type AreaItem = { id: string; nombre: string };
+type AreaItem = { id: string; nombre: string; esAlmacen: boolean };
 
 export default function AreasPage({ params }: { params: { id: string } }) {
   const empresaId = params.id;
   const [areas, setAreas] = useState<AreaItem[]>([]);
   const [nombre, setNombre] = useState("");
+  const [esAlmacen, setEsAlmacen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const [actualizando, setActualizando] = useState<string | null>(null);
 
   async function cargar() {
     const res = await fetch(`/api/empresas/${empresaId}/areas`).then((r) => r.json());
@@ -33,7 +35,7 @@ export default function AreasPage({ params }: { params: { id: string } }) {
     const res = await fetch(`/api/empresas/${empresaId}/areas`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nombre }),
+      body: JSON.stringify({ nombre, esAlmacen }),
     });
     setGuardando(false);
 
@@ -44,12 +46,24 @@ export default function AreasPage({ params }: { params: { id: string } }) {
     }
 
     setNombre("");
+    setEsAlmacen(false);
     cargar();
   }
 
   async function handleEliminar(areaId: string) {
     if (!confirm("¿Desactivar esta área? Dejará de aparecer al crear nuevas solicitudes.")) return;
     await fetch(`/api/empresas/${empresaId}/areas/${areaId}`, { method: "DELETE" });
+    cargar();
+  }
+
+  async function handleToggleAlmacen(area: AreaItem) {
+    setActualizando(area.id);
+    await fetch(`/api/empresas/${empresaId}/areas/${area.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ esAlmacen: !area.esAlmacen }),
+    });
+    setActualizando(null);
     cargar();
   }
 
@@ -72,6 +86,15 @@ export default function AreasPage({ params }: { params: { id: string } }) {
             {guardando ? "Guardando..." : "+ Agregar"}
           </button>
         </div>
+        <label className="checkbox-row" style={{ fontSize: 12, marginTop: 10 }}>
+          <input type="checkbox" checked={esAlmacen} onChange={(e) => setEsAlmacen(e.target.checked)} />
+          Esta área representa al propio Almacén (autoabastecimiento)
+        </label>
+        <p className="mono" style={{ fontSize: 10.5, color: "var(--ink-soft)", marginTop: 4 }}>
+          Marca esto solo en el área que use Almacén para pedirse mercadería a sí mismo — normalmente una sola. Sus
+          solicitudes las decide quien tenga el permiso &quot;Aprobar solicitudes de Almacén&quot;, no el encargado
+          de almacén (para que nadie apruebe su propio pedido).
+        </p>
         {error && <p className="field error">{error}</p>}
       </form>
 
@@ -82,14 +105,33 @@ export default function AreasPage({ params }: { params: { id: string } }) {
             className="card"
             style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px" }}
           >
-            <span style={{ fontSize: 14 }}>{a.nombre}</span>
-            <button
-              onClick={() => handleEliminar(a.id)}
-              className="btn-ghost"
-              style={{ fontSize: 12, padding: "4px 10px" }}
-            >
-              Desactivar
-            </button>
+            <div>
+              <span style={{ fontSize: 14 }}>{a.nombre}</span>
+              {a.esAlmacen && (
+                <span
+                  className="mono"
+                  style={{ marginLeft: 8, fontSize: 10, textTransform: "uppercase", color: "var(--stamp)", background: "var(--stamp-bg)", padding: "2px 8px", borderRadius: "var(--radius)" }}
+                >
+                  Almacén
+                </span>
+              )}
+            </div>
+            <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+              <button
+                onClick={() => handleToggleAlmacen(a)}
+                disabled={actualizando === a.id}
+                style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "var(--ink-soft)" }}
+              >
+                {a.esAlmacen ? "Quitar marca de Almacén" : "Marcar como Almacén"}
+              </button>
+              <button
+                onClick={() => handleEliminar(a.id)}
+                className="btn-ghost"
+                style={{ fontSize: 12, padding: "4px 10px" }}
+              >
+                Desactivar
+              </button>
+            </div>
           </div>
         ))}
         {areas.length === 0 && <p style={{ color: "var(--ink-soft)", fontSize: 14 }}>Todavía no hay áreas creadas.</p>}

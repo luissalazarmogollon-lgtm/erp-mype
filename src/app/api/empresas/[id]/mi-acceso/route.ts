@@ -32,6 +32,10 @@ export async function GET(request: Request, { params }: { params: { id: string }
       accesoTotal: acceso.accesoTotal,
       permisos: acceso.permisos,
       esServicios: esEmpresaDeServicios(empresa?.tipoNegocio?.nombre),
+      // Área de trabajo asignada a esta persona en esta empresa (o null si
+      // no tiene una) — la usa el formulario de Nueva Solicitud de Pedido
+      // para autocompletarla sin que la persona tenga que elegirla.
+      areaId: acceso.areaId,
     });
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 403 });

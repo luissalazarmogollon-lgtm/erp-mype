@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
+import { getUsuarioActual, verificarAccesoAlguno, verificarAccesoEmpresa } from "@/lib/auth";
 import { reversarLineaCompra } from "@/lib/reversarAlmacen";
 
 export const dynamic = "force-dynamic";
 
-// GET /api/empresas/[id]/pedidos-compra/[pedidoCompraId]
+// GET /api/empresas/[id]/pedidos-compra/[pedidoCompraId] — el comprador
+// ("compras") o quien registra recepciones de almacén
+// ("recepcionar_compras_almacen") pueden abrir el detalle; devuelve
+// `puedeEditarCosto` (solo "compras" — RN nueva: "el precio de costo del
+// insumo lo coloca el comprador") y `puedeRecepcionar`/`puedeEliminar`
+// para que la pantalla sepa qué mostrar y permitir.
 export async function GET(
   request: Request,
   { params }: { params: { id: string; pedidoCompraId: string } }
@@ -14,11 +19,14 @@ export async function GET(
   if (!usuarioActual) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
   const empresaId = BigInt(params.id);
+  let acceso;
   try {
-    await verificarAccesoEmpresa(usuarioActual.id, empresaId, "compras");
+    acceso = await verificarAccesoAlguno(usuarioActual.id, empresaId, ["compras", "recepcionar_compras_almacen"]);
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 403 });
   }
+  const puedeEditarCosto = acceso.accesoTotal || acceso.permisos.includes("compras");
+  const puedeRecepcionar = puedeEditarCosto || acceso.permisos.includes("recepcionar_compras_almacen");
 
   const pedido = await prisma.pedidoCompra.findFirst({
     where: { id: BigInt(params.pedidoCompraId), empresaId },
@@ -33,6 +41,11 @@ export async function GET(
     id: pedido.id.toString(),
     estado: pedido.estado,
     fecha: pedido.fecha,
+    puedeEditarCosto,
+    puedeRecepcionar,
+    // Solo "compras" puede eliminar el pedido (ver DELETE más abajo) — la
+    // pantalla usa esto para mostrar u ocultar el botón "Eliminar pedido".
+    puedeEliminar: puedeEditarCosto,
     proveedor: {
       id: pedido.proveedor.id.toString(),
       nombre: pedido.proveedor.nombre,

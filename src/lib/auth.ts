@@ -71,7 +71,13 @@ export async function verificarAccesoEmpresa(
   if (!usuario) throw new Error("Usuario no encontrado");
 
   if (usuario.esSuperadminPlataforma) {
-    return { rolOperativo: "Gerencial", tipoActor: "superadmin" as const, accesoTotal: true, permisos: [] as string[] };
+    return {
+      rolOperativo: "Gerencial",
+      tipoActor: "superadmin" as const,
+      accesoTotal: true,
+      permisos: [] as string[],
+      areaId: null as string | null,
+    };
   }
 
   const asignacion = await prisma.usuarioEmpresa.findFirst({
@@ -111,6 +117,10 @@ export async function verificarAccesoEmpresa(
     tipoActor: asignacion.tipoActor,
     accesoTotal: asignacion.accesoTotal,
     permisos: (asignacion.permisos as unknown as string[] | null) ?? [],
+    // Área de trabajo de esta persona EN ESTA EMPRESA (ver nota en
+    // schema.prisma, UsuarioEmpresa.areaId) — la usa el formulario de
+    // Nueva Solicitud de Pedido para autocompletarla sin preguntar.
+    areaId: asignacion.areaId ? asignacion.areaId.toString() : null,
   };
 }
 
@@ -131,7 +141,13 @@ export async function verificarAccesoAlguno(
   if (!usuario) throw new Error("Usuario no encontrado");
 
   if (usuario.esSuperadminPlataforma) {
-    return { rolOperativo: "Gerencial", tipoActor: "superadmin" as const, accesoTotal: true, permisos: [] as string[] };
+    return {
+      rolOperativo: "Gerencial",
+      tipoActor: "superadmin" as const,
+      accesoTotal: true,
+      permisos: [] as string[],
+      areaId: null as string | null,
+    };
   }
 
   const asignacion = await prisma.usuarioEmpresa.findFirst({
@@ -177,6 +193,7 @@ export async function verificarAccesoAlguno(
     tipoActor: asignacion.tipoActor,
     accesoTotal: asignacion.accesoTotal,
     permisos: (asignacion.permisos as unknown as string[] | null) ?? [],
+    areaId: asignacion.areaId ? asignacion.areaId.toString() : null,
   };
 }
 

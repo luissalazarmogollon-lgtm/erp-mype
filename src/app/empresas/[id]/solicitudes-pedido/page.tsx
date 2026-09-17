@@ -26,6 +26,7 @@ export default function SolicitudesPedidoPage({ params }: { params: { id: string
   const [vista, setVista] = useState<"mias" | "aprobacion" | "despacho">("mias");
   const [puedeAprobar, setPuedeAprobar] = useState(false);
   const [puedeDespachar, setPuedeDespachar] = useState(false);
+  const [puedeAprobarAlmacen, setPuedeAprobarAlmacen] = useState(false);
   const [solicitudes, setSolicitudes] = useState<Solicitud[]>([]);
   const [insumos, setInsumos] = useState<Insumo[]>([]);
   const [areas, setAreas] = useState<AreaOpcion[]>([]);
@@ -34,6 +35,11 @@ export default function SolicitudesPedidoPage({ params }: { params: { id: string
   const [guardando, setGuardando] = useState(false);
 
   const [areaId, setAreaId] = useState("");
+  // Área de trabajo asignada a quien está logueado (ver
+  // UsuarioEmpresa.areaId) — si tiene una, se autocompleta y no se le pide
+  // elegirla a mano (solo se muestra como texto). Null = no tiene, se
+  // muestra el selector de siempre.
+  const [areaAsignadaId, setAreaAsignadaId] = useState<string | null>(null);
   const [motivo, setMotivo] = useState("");
   const [seleccionados, setSeleccionados] = useState<Record<string, number>>({});
   const [busqueda, setBusqueda] = useState("");
@@ -42,6 +48,11 @@ export default function SolicitudesPedidoPage({ params }: { params: { id: string
     const res = await fetch(`/api/empresas/${empresaId}/mi-acceso`).then((r) => r.json());
     setPuedeAprobar(res.accesoTotal || res.permisos?.includes("aprobar_solicitudes_pedido"));
     setPuedeDespachar(res.accesoTotal || res.permisos?.includes("despachar_solicitudes_pedido"));
+    setPuedeAprobarAlmacen(res.accesoTotal || res.permisos?.includes("aprobar_solicitudes_almacen"));
+    if (res.areaId) {
+      setAreaAsignadaId(res.areaId);
+      setAreaId(res.areaId);
+    }
   }
 
   async function cargarSolicitudes(v: "mias" | "aprobacion" | "despacho") {
@@ -104,7 +115,9 @@ export default function SolicitudesPedidoPage({ params }: { params: { id: string
       return;
     }
 
-    setAreaId("");
+    // Si tiene un área asignada, se mantiene lista para la próxima
+    // solicitud en vez de vaciarla — es automática, no algo que eligió.
+    setAreaId(areaAsignadaId ?? "");
     setMotivo("");
     setSeleccionados({});
     setBusqueda("");
@@ -124,7 +137,7 @@ export default function SolicitudesPedidoPage({ params }: { params: { id: string
       </p>
       <h1 style={{ fontSize: 26, marginBottom: 20 }}>Solicitudes de Pedido</h1>
 
-      {(puedeAprobar || puedeDespachar) && (
+      {(puedeAprobar || puedeDespachar || puedeAprobarAlmacen) && (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <button
@@ -134,7 +147,7 @@ export default function SolicitudesPedidoPage({ params }: { params: { id: string
             >
               Mis solicitudes
             </button>
-            {(puedeAprobar || puedeDespachar) && (
+            {(puedeAprobar || puedeDespachar || puedeAprobarAlmacen) && (
               <button
                 className={vista === "aprobacion" ? "btn-primary" : "btn-ghost"}
                 onClick={() => setVista("aprobacion")}
@@ -173,18 +186,28 @@ export default function SolicitudesPedidoPage({ params }: { params: { id: string
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <div className="field">
-                  <label>Área que solicita{areas.length === 0 ? " (opcional)" : ""}</label>
-                  <select value={areaId} onChange={(e) => setAreaId(e.target.value)}>
-                    <option value="">Sin especificar</option>
-                    {areas.map((a) => (
-                      <option key={a.id} value={a.id}>{a.nombre}</option>
-                    ))}
-                  </select>
-                  {areas.length === 0 && (
-                    <p className="mono" style={{ fontSize: 10.5, color: "var(--ink-soft)", marginTop: 4 }}>
-                      Todavía no hay áreas creadas — pide a quien aprueba solicitudes que cree una en &quot;Gestionar
-                      áreas&quot;.
+                  <label>Área que solicita</label>
+                  {areaAsignadaId ? (
+                    // Ya tiene un área de trabajo asignada (ver "Usuarios y
+                    // accesos") — se usa automáticamente, sin preguntar.
+                    <p className="mono" style={{ fontSize: 13, padding: "8px 0" }}>
+                      {areas.find((a) => a.id === areaAsignadaId)?.nombre ?? "Cargando..."}
                     </p>
+                  ) : (
+                    <>
+                      <select value={areaId} onChange={(e) => setAreaId(e.target.value)}>
+                        <option value="">Sin especificar</option>
+                        {areas.map((a) => (
+                          <option key={a.id} value={a.id}>{a.nombre}</option>
+                        ))}
+                      </select>
+                      {areas.length === 0 && (
+                        <p className="mono" style={{ fontSize: 10.5, color: "var(--ink-soft)", marginTop: 4 }}>
+                          Todavía no hay áreas creadas — pide a quien aprueba solicitudes que cree una en &quot;Gestionar
+                          áreas&quot;.
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
                 <div className="field">
