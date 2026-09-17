@@ -659,6 +659,19 @@ model Gasto {
   // desde el Pedido de Compra, y el consumo de almacén es un reflejo
   // automático del Despacho — no una decisión manual.
   origenAutomatico     String?   @map("origen_automatico")
+  // Vínculo real (no solo texto en `descripcion`) desde el Gasto
+  // automático de vuelta a la operación exacta que lo generó — así se
+  // puede reversar con certeza al eliminar esa operación (RN nueva, ver
+  // DELETE en solicitudes-pedido/[solicitudId]/route.ts y en
+  // pedidos-compra/[pedidoCompraId]/route.ts), sin depender de parsear el
+  // texto de `descripcion`. Cada uno queda lleno solo para el
+  // origenAutomatico que le corresponde ("despacho_almacen" ->
+  // solicitudPedidoDetalleId, "recepcion_compra_almacen" ->
+  // pedidoCompraDetalleId), nunca ambos.
+  solicitudPedidoDetalleId BigInt? @unique @map("solicitud_pedido_detalle_id")
+  solicitudPedidoDetalle   SolicitudPedidoDetalle? @relation(fields: [solicitudPedidoDetalleId], references: [id])
+  pedidoCompraDetalleId    BigInt? @unique @map("pedido_compra_detalle_id")
+  pedidoCompraDetalle      PedidoCompraDetalle? @relation(fields: [pedidoCompraDetalleId], references: [id])
   usuarioId            String    @map("usuario_id") @db.Uuid
 
   cuentaPorPagar       CuentaPorPagar?
@@ -1008,6 +1021,9 @@ model SolicitudPedidoDetalle {
   fechaDespacho      DateTime?       @map("fecha_despacho")
   observacion        String?
   pedidoCompraDetalle PedidoCompraDetalle?
+  // Back-relation del Gasto "despacho_almacen" que este ítem generó al
+  // despacharse (Costo de Venta) — ver Gasto.solicitudPedidoDetalleId.
+  gasto              Gasto?
 
   @@index([insumoId, estadoItem])
   @@map("solicitudes_pedido_detalle")
@@ -1137,6 +1153,10 @@ model PedidoCompraDetalle {
   cantidadRecibida      Decimal?               @map("cantidad_recibida") @db.Decimal(10, 3)
   costoUnitarioReal     Decimal?               @map("costo_unitario_real") @db.Decimal(10, 4)
   fechaRecepcion        DateTime?              @map("fecha_recepcion")
+  // Back-relation del Gasto "recepcion_compra_almacen" que esta línea
+  // generó al recepcionarse (compra de mercadería, activo) — ver
+  // Gasto.pedidoCompraDetalleId.
+  gasto                 Gasto?
 
   @@map("pedidos_compra_detalle")
 }
