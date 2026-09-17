@@ -129,6 +129,10 @@ export async function POST(
         });
 
         // --- Costo de Venta automático (ver nota de diseño arriba) ---
+        // `solicitudPedidoDetalleId` es el vínculo real que permite
+        // reversar ESTE Gasto con certeza si más adelante se elimina la
+        // Solicitud (ver DELETE en ../route.ts) — sin depender de
+        // parsear el texto de `descripcion`.
         if (costoConsumidoItem > 0) {
           await tx.gasto.create({
             data: {
@@ -141,6 +145,7 @@ export async function POST(
               fecha: fechaDespacho,
               condicion: "credito",
               origenAutomatico: "despacho_almacen",
+              solicitudPedidoDetalleId: item.id,
               usuarioId: usuarioActual.id,
             },
           });

@@ -68,6 +68,9 @@ export default function SolicitudDetallePage({ params }: { params: { id: string;
   const [guardandoEdicion, setGuardandoEdicion] = useState(false);
   const [errorEdicion, setErrorEdicion] = useState<string | null>(null);
 
+  const [eliminando, setEliminando] = useState(false);
+  const [errorEliminar, setErrorEliminar] = useState<string | null>(null);
+
   async function cargarAcceso() {
     const res = await fetch(`/api/empresas/${empresaId}/mi-acceso`).then((r) => r.json());
     setPuedeDespachar(res.accesoTotal || res.permisos?.includes("despachar_solicitudes_pedido"));
@@ -207,6 +210,29 @@ export default function SolicitudDetallePage({ params }: { params: { id: string;
     router.push(`/empresas/${empresaId}/solicitudes-pedido`);
   }
 
+  async function handleEliminar() {
+    if (!data) return;
+    const advertencia =
+      data.estado === "enviada"
+        ? "¿Eliminar esta solicitud? No se puede deshacer."
+        : "¿Eliminar esta solicitud ya decidida? Se revertirá el stock, el Kardex y cualquier Costo de Venta o compra de mercadería que haya generado (siempre que no tenga pagos ya registrados). No se puede deshacer.";
+    if (!confirm(advertencia)) return;
+
+    setErrorEliminar(null);
+    setEliminando(true);
+    const res = await fetch(`/api/empresas/${empresaId}/solicitudes-pedido/${solicitudId}`, {
+      method: "DELETE",
+    });
+    setEliminando(false);
+
+    if (!res.ok) {
+      const json = await res.json();
+      setErrorEliminar(json.error?.toString() ?? "No se pudo eliminar la solicitud.");
+      return;
+    }
+    router.push(`/empresas/${empresaId}/solicitudes-pedido`);
+  }
+
   if (error && !data) {
     return (
       <main style={{ maxWidth: 800, margin: "0 auto", padding: "32px 24px" }}>
@@ -218,6 +244,10 @@ export default function SolicitudDetallePage({ params }: { params: { id: string;
 
   const enDecision = data.estado === "enviada" && data.puedeDecidir;
   const puedeEditar = data.esDueno && data.estado === "enviada";
+  // Igual regla que el backend: el encargado de almacén (o acceso total)
+  // puede eliminar en cualquier estado; el dueño, solo mientras nadie la
+  // haya decidido todavía (nada que revertir).
+  const puedeEliminar = data.puedeDecidir || (data.esDueno && data.estado === "enviada");
   const insumosFiltrados = insumosCatalogo.filter((i) =>
     i.nombre.toLowerCase().includes(editBusqueda.toLowerCase())
   );
@@ -235,12 +265,25 @@ export default function SolicitudDetallePage({ params }: { params: { id: string;
           <h1 style={{ fontSize: 24, marginBottom: 4 }}>{data.area ?? "Sin área"}</h1>
           {data.motivo && <p style={{ color: "var(--ink-soft)", marginBottom: 20 }}>{data.motivo}</p>}
         </div>
-        {puedeEditar && !editando && (
-          <button className="btn-ghost" style={{ fontSize: 12 }} onClick={iniciarEdicion}>
-            Editar solicitud
-          </button>
-        )}
+        <div style={{ display: "flex", gap: 8 }}>
+          {puedeEditar && !editando && (
+            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={iniciarEdicion}>
+              Editar solicitud
+            </button>
+          )}
+          {puedeEliminar && !editando && (
+            <button
+              className="btn-ghost"
+              style={{ fontSize: 12, color: "var(--alert)" }}
+              disabled={eliminando}
+              onClick={handleEliminar}
+            >
+              {eliminando ? "Eliminando..." : "Eliminar solicitud"}
+            </button>
+          )}
+        </div>
       </div>
+      {errorEliminar && <p className="field error" style={{ marginBottom: 12 }}>{errorEliminar}</p>}
 
       {data.estado !== "enviada" && (
         <div className="card" style={{ marginBottom: 20 }}>

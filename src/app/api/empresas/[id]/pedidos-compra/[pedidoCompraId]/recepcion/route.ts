@@ -85,7 +85,7 @@ export async function POST(
 
   try {
     await prisma.$transaction(async (tx) => {
-      const itemsRecibidos: { insumoNombre: string; monto: number }[] = [];
+      const itemsRecibidos: { detalleId: bigint; insumoNombre: string; monto: number }[] = [];
 
       for (const itemInput of parsed.data.items) {
         const detalleId = BigInt(itemInput.detalleId);
@@ -179,6 +179,7 @@ export async function POST(
         });
 
         itemsRecibidos.push({
+          detalleId: detalle.id,
           insumoNombre: insumo.nombre,
           monto: itemInput.cantidadRecibida * itemInput.costoUnitarioReal,
         });
@@ -211,6 +212,9 @@ export async function POST(
           await tx.pedidoCompra.update({ where: { id: pedidoCompraId }, data: { documentoCompraId } });
         }
 
+        // `pedidoCompraDetalleId` es el vínculo real que permite reversar
+        // ESTE Gasto con certeza si más adelante se elimina esta línea
+        // (o todo el Pedido de Compra) — ver DELETE en ../route.ts.
         for (const item of itemsRecibidos) {
           await tx.gasto.create({
             data: {
@@ -225,6 +229,7 @@ export async function POST(
               fecha: fechaRecepcion,
               condicion: "credito",
               origenAutomatico: "recepcion_compra_almacen",
+              pedidoCompraDetalleId: item.detalleId,
               usuarioId: usuarioActual.id,
             },
           });

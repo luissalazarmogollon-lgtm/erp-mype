@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 type DetalleItem = {
@@ -25,11 +26,14 @@ type PedidoDetalle = {
 export default function PedidoCompraDetallePage({ params }: { params: { id: string; pedidoCompraId: string } }) {
   const empresaId = params.id;
   const pedidoCompraId = params.pedidoCompraId;
+  const router = useRouter();
 
   const [data, setData] = useState<PedidoDetalle | null>(null);
   const [recepcion, setRecepcion] = useState<Record<string, { cantidad: number; costo: number }>>({});
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const [eliminando, setEliminando] = useState(false);
+  const [errorEliminar, setErrorEliminar] = useState<string | null>(null);
 
   async function cargar() {
     const res = await fetch(`/api/empresas/${empresaId}/pedidos-compra/${pedidoCompraId}`);
@@ -80,6 +84,27 @@ export default function PedidoCompraDetallePage({ params }: { params: { id: stri
     cargar();
   }
 
+  async function handleEliminar() {
+    if (
+      !confirm(
+        "¿Eliminar este pedido de compra? Se revertirá el stock, el Kardex y la compra de mercadería que haya generado en Cuentas por Pagar (siempre que no tenga pagos ya registrados, y que la mercadería no haya sido despachada a un área todavía). No se puede deshacer."
+      )
+    ) {
+      return;
+    }
+    setErrorEliminar(null);
+    setEliminando(true);
+    const res = await fetch(`/api/empresas/${empresaId}/pedidos-compra/${pedidoCompraId}`, { method: "DELETE" });
+    setEliminando(false);
+
+    if (!res.ok) {
+      const json = await res.json();
+      setErrorEliminar(json.error?.toString() ?? "No se pudo eliminar el pedido de compra.");
+      return;
+    }
+    router.push(`/empresas/${empresaId}/compras`);
+  }
+
   if (!data) return null;
 
   const pendientes = data.detalle.filter((d) => !d.recibido);
@@ -98,16 +123,27 @@ export default function PedidoCompraDetallePage({ params }: { params: { id: stri
             OC N° {data.id} · {new Date(data.fecha).toLocaleDateString("es-PE")} · {data.estado}
           </p>
         </div>
-        <a
-          href={`/api/empresas/${empresaId}/pedidos-compra/${pedidoCompraId}/pdf`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="btn-ghost"
-          style={{ textDecoration: "none", fontSize: 13 }}
-        >
-          Descargar PDF
-        </a>
+        <div style={{ display: "flex", gap: 8 }}>
+          <a
+            href={`/api/empresas/${empresaId}/pedidos-compra/${pedidoCompraId}/pdf`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-ghost"
+            style={{ textDecoration: "none", fontSize: 13 }}
+          >
+            Descargar PDF
+          </a>
+          <button
+            className="btn-ghost"
+            style={{ fontSize: 13, color: "var(--alert)" }}
+            disabled={eliminando}
+            onClick={handleEliminar}
+          >
+            {eliminando ? "Eliminando..." : "Eliminar pedido"}
+          </button>
+        </div>
       </div>
+      {errorEliminar && <p className="field error" style={{ marginTop: 10 }}>{errorEliminar}</p>}
 
       <div className="card" style={{ padding: 0, overflow: "hidden", margin: "20px 0" }}>
         {data.detalle.map((item, i) => (
