@@ -126,13 +126,22 @@ export async function reversarDespachoItem(
  * Reversa una LÍNEA de Pedido de Compra — "la entrada de mercadería al
  * almacén". Si todavía no se había recepcionado, solo borra la línea (no
  * hay nada más que deshacer). Si ya se había recepcionado:
- *   1. Bloquea si esa mercadería ya fue despachada a un área (el ítem de
- *      la Solicitud ya está en "despachado") — hay que deshacer primero
- *      ese despacho (eliminando la Solicitud, que lo hace automáticamente
- *      en el orden correcto — ver DELETE de solicitudes-pedido).
+ *   1. Si esa mercadería ya fue despachada a un área (el ítem de la
+ *      Solicitud ya está en "despachado"):
+ *        - Por defecto (`permitirSiYaDespachado=false`), bloquea — hay que
+ *          deshacer primero ese despacho (eliminando la Solicitud, o el
+ *          ítem despachado individual — ver DELETE de solicitudes-pedido).
+ *        - Si `permitirSiYaDespachado=true` (RN nueva: "eliminar como
+ *          super admin los pedidos despachados"), en vez de bloquear
+ *          revierte PRIMERO ese despacho con `reversarDespachoItem` (stock,
+ *          Kardex y el Gasto de Costo de Venta que generó) y luego sigue
+ *          revirtiendo la compra en sí, como si nunca se hubiera
+ *          despachado ni comprado. El llamador decide cuándo permitirlo
+ *          (por ejemplo, solo con acceso total) — ver DELETE de
+ *          pedidos-compra/[pedidoCompraId]/route.ts.
  *   2. Bloquea si el lote que generó ya fue consumido parcial o
  *      totalmente por CUALQUIER otro motivo (verificación extra de
- *      seguridad, por si el punto 1 no lo detectó).
+ *      seguridad, por si el punto 1 no lo detectó/revirtió).
  *   3. Bloquea si la Cuenta por Pagar de esa recepción ya tiene pagos
  *      registrados (no se toca el Flujo de Caja).
  *   4. Si nada de eso aplica: revierte el lote, el Kardex, el stock y el
@@ -145,8 +154,9 @@ export async function reversarDespachoItem(
  */
 export async function reversarLineaCompra(
   tx: PrismaTx,
-  pedidoCompraDetalleId: bigint
-): Promise<{ pedidoCompraId: bigint; montoReversado: number }> {
+  pedidoCompraDetalleId: bigint,
+  permitirSiYaDespachado = false
+): Promise<{ pedidoCompraId: bigint; montoReversado: number; despachoRevertido: boolean; montoCostoVentaRevertido: number }> {
   const detalle = await tx.pedidoCompraDetalle.findUniqueOrThrow({
     where: { id: pedidoCompraDetalleId },
     include: {
@@ -161,12 +171,24 @@ export async function reversarLineaCompra(
   });
 
   let montoReversado = 0;
+  let despachoRevertido = false;
+  let montoCostoVentaRevertido = 0;
 
   if (detalle.fechaRecepcion) {
     if (detalle.solicitudDetalle.estadoItem === "despachado") {
-      throw new Error(
-        `No se puede eliminar la compra de "${detalle.insumo.nombre}" — esa mercadería ya fue despachada a un área (ya es Costo de Venta). Elimina primero la Solicitud de Pedido que la recibió.`
-      );
+      if (!permitirSiYaDespachado) {
+        throw new Error(
+          `No se puede eliminar la compra de "${detalle.insumo.nombre}" — esa mercadería ya fue despachada a un área (ya es Costo de Venta). Elimina primero la Solicitud de Pedido que la recibió.`
+        );
+      }
+      // RN nueva: con acceso total se permite forzar la eliminación —
+      // primero se revierte el despacho (stock, Kardex y el Gasto de
+      // Costo de Venta que generó), y luego se sigue revirtiendo la
+      // compra normalmente más abajo, como si nunca se hubiera despachado
+      // ni comprado.
+      const rDespacho = await reversarDespachoItem(tx, detalle.solicitudDetalleId);
+      despachoRevertido = true;
+      montoCostoVentaRevertido = rDespacho.montoReversado;
     }
 
     const lote = await tx.loteCompra.findFirst({
@@ -273,5 +295,5 @@ export async function reversarLineaCompra(
 
   await tx.pedidoCompraDetalle.delete({ where: { id: detalle.id } });
 
-  return { pedidoCompraId: detalle.pedidoCompraId, montoReversado };
+  return { pedidoCompraId: detalle.pedidoCompraId, montoReversado, despachoRevertido, montoCostoVentaRevertido };
 }

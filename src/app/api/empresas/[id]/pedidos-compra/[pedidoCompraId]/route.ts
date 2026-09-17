@@ -46,6 +46,10 @@ export async function GET(
     // Solo "compras" puede eliminar el pedido (ver DELETE más abajo) — la
     // pantalla usa esto para mostrar u ocultar el botón "Eliminar pedido".
     puedeEliminar: puedeEditarCosto,
+    // Solo con acceso total el DELETE también revierte ítems ya
+    // despachados a un área (RN nueva) — la pantalla usa esto para avisar
+    // en el mensaje de confirmación.
+    puedeForzarDespachado: acceso.accesoTotal,
     proveedor: {
       id: pedido.proveedor.id.toString(),
       nombre: pedido.proveedor.nombre,
@@ -79,11 +83,16 @@ export async function GET(
 //     Estado de Resultados) + su Cuenta por Pagar, y devuelve el ítem de
 //     la Solicitud a "pendiente_compra" — como si nunca se hubiera
 //     comprado.
-// Se BLOQUEA (transacción atómica, nada se aplica) si cualquier línea:
-//   - ya fue despachada a un área (hay que eliminar esa Solicitud
-//     primero, desde Solicitudes de Pedido), o
-//   - tiene pagos ya registrados en Cuentas por Pagar (el Flujo de Caja
-//     no se toca nunca).
+//   - Línea YA recibida Y ya despachada a un área (RN nueva: "eliminar
+//     como super admin los pedidos despachados"): solo con acceso total
+//     se revierte TAMBIÉN ese despacho primero (stock, Kardex y el Gasto
+//     de Costo de Venta que generó, vía reversarDespachoItem dentro de
+//     reversarLineaCompra) y luego se sigue revirtiendo la compra normal.
+//     Sin acceso total, se sigue bloqueando (hay que eliminar esa
+//     Solicitud primero, desde Solicitudes de Pedido).
+// Se BLOQUEA igual (transacción atómica, nada se aplica) si cualquier
+// línea tiene pagos ya registrados en Cuentas por Pagar (el Flujo de Caja
+// no se toca nunca).
 export async function DELETE(
   request: Request,
   { params }: { params: { id: string; pedidoCompraId: string } }
@@ -93,11 +102,13 @@ export async function DELETE(
   const usuarioId = usuarioActual.id;
 
   const empresaId = BigInt(params.id);
+  let acceso;
   try {
-    await verificarAccesoEmpresa(usuarioId, empresaId, "compras");
+    acceso = await verificarAccesoEmpresa(usuarioId, empresaId, "compras");
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 403 });
   }
+  const permitirSiYaDespachado = acceso.accesoTotal;
 
   const pedidoCompraId = BigInt(params.pedidoCompraId);
   const pedido = await prisma.pedidoCompra.findFirst({
@@ -116,9 +127,15 @@ export async function DELETE(
   try {
     const resumen = await prisma.$transaction(async (tx) => {
       let montoRevertido = 0;
+      let despachosRevertidos = 0;
+      let montoCostoVentaRevertido = 0;
       for (const linea of lineas) {
-        const r = await reversarLineaCompra(tx, linea.id);
+        const r = await reversarLineaCompra(tx, linea.id, permitirSiYaDespachado);
         montoRevertido += r.montoReversado;
+        if (r.despachoRevertido) {
+          despachosRevertidos += 1;
+          montoCostoVentaRevertido += r.montoCostoVentaRevertido;
+        }
       }
 
       // reversarLineaCompra ya borró todas las líneas — el pedido queda
@@ -132,11 +149,18 @@ export async function DELETE(
           tablaAfectada: "pedidos_compra",
           registroId: pedidoCompraId,
           accion: "eliminar",
-          valorAnterior: { proveedor: proveedorNombre, estado: estadoAnterior, items: lineas.length, montoRevertido },
+          valorAnterior: {
+            proveedor: proveedorNombre,
+            estado: estadoAnterior,
+            items: lineas.length,
+            montoRevertido,
+            despachosRevertidos,
+            montoCostoVentaRevertido,
+          },
         },
       });
 
-      return { montoRevertido, items: lineas.length };
+      return { montoRevertido, items: lineas.length, despachosRevertidos, montoCostoVentaRevertido };
     });
 
     return NextResponse.json({ ok: true, ...resumen });

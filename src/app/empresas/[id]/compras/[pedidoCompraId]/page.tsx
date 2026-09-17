@@ -26,6 +26,7 @@ type PedidoDetalle = {
   puedeEditarCosto: boolean;
   puedeRecepcionar: boolean;
   puedeEliminar: boolean;
+  puedeForzarDespachado: boolean;
   proveedor: { id: string; nombre: string; ruc: string | null; contacto: string | null; telefono: string | null };
   detalle: DetalleItem[];
 };
@@ -96,11 +97,10 @@ export default function PedidoCompraDetallePage({ params }: { params: { id: stri
   }
 
   async function handleEliminar() {
-    if (
-      !confirm(
-        "¿Eliminar este pedido de compra? Se revertirá el stock, el Kardex y la compra de mercadería que haya generado en Cuentas por Pagar (siempre que no tenga pagos ya registrados, y que la mercadería no haya sido despachada a un área todavía). No se puede deshacer."
-      )
-    ) {
+    const advertencia = data?.puedeForzarDespachado
+      ? "¿Eliminar este pedido de compra? Se revertirá el stock, el Kardex y la compra de mercadería que haya generado en Cuentas por Pagar (siempre que no tenga pagos ya registrados). Si algún ítem ya fue despachado a un área, también se revertirá ese despacho y el Costo de Venta que generó. No se puede deshacer."
+      : "¿Eliminar este pedido de compra? Se revertirá el stock, el Kardex y la compra de mercadería que haya generado en Cuentas por Pagar (siempre que no tenga pagos ya registrados, y que la mercadería no haya sido despachada a un área todavía). No se puede deshacer.";
+    if (!confirm(advertencia)) {
       return;
     }
     setErrorEliminar(null);
