@@ -30,6 +30,7 @@ export default function ProductosPage({ params }: { params: { id: string } }) {
   const [mostrarForm, setMostrarForm] = useState(false);
   const [ajustando, setAjustando] = useState<string | null>(null);
   const [editando, setEditando] = useState<string | null>(null);
+  const [eliminandoId, setEliminandoId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [errorEdicion, setErrorEdicion] = useState<string | null>(null);
 
@@ -133,6 +134,24 @@ export default function ProductosPage({ params }: { params: { id: string } }) {
       return;
     }
     setEditando(null);
+    cargarTodo();
+  }
+
+  async function handleEliminar(p: Producto) {
+    const advertencia =
+      Number(p.stockActual) !== 0
+        ? `"${p.nombre}" todavía tiene stock (${p.stockActual}). ¿Eliminarlo de todas formas? No se borra su historial de ventas/lotes, solo desaparece de la lista y del punto de venta.`
+        : `¿Eliminar "${p.nombre}"? No se borra su historial, solo desaparece de la lista y del punto de venta.`;
+    if (!confirm(advertencia)) return;
+    setError(null);
+    setEliminandoId(p.id);
+    const res = await fetch(`/api/empresas/${empresaId}/productos/${p.id}`, { method: "DELETE" });
+    setEliminandoId(null);
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error?.toString() ?? "No se pudo eliminar el producto.");
+      return;
+    }
     cargarTodo();
   }
 
@@ -367,6 +386,14 @@ export default function ProductosPage({ params }: { params: { id: string } }) {
                   onClick={() => { setAjustando(p.id); setError(null); }}
                 >
                   Ajustar stock
+                </button>
+                <button
+                  className="btn-ghost"
+                  style={{ fontSize: 12, padding: "6px 12px", color: "var(--alert)", marginLeft: "auto" }}
+                  disabled={eliminandoId === p.id}
+                  onClick={() => handleEliminar(p)}
+                >
+                  {eliminandoId === p.id ? "Eliminando..." : "Eliminar"}
                 </button>
               </div>
             )}

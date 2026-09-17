@@ -77,7 +77,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
     prisma.categoriaProducto.findMany({ where: { empresaId }, orderBy: { nombre: "asc" } }),
     prisma.unidadMedida.findMany({ where: { empresaId }, orderBy: { nombre: "asc" } }),
     prisma.metodoPago.findMany({ where: { empresaId }, orderBy: { nombre: "asc" } }),
-    prisma.insumo.findMany({ where: { empresaId }, include: { unidadMedida: true }, orderBy: { nombre: "asc" } }),
+    prisma.insumo.findMany({ where: { empresaId, estado: "activo" }, include: { unidadMedida: true }, orderBy: { nombre: "asc" } }),
     prisma.producto.findMany({ where: { empresaId, estado: "activo" }, orderBy: { nombre: "asc" } }),
     prisma.cliente.findMany({ where: { empresaId }, orderBy: { nombre: "asc" } }),
     prisma.local.findMany({ where: { empresaId, estado: "activo" }, orderBy: { nombre: "asc" } }),

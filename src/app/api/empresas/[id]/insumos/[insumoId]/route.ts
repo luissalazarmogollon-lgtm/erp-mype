@@ -86,3 +86,45 @@ export async function PATCH(
 
   return NextResponse.json({ ok: true });
 }
+
+// DELETE /api/empresas/[id]/insumos/[insumoId] — "elimina" un insumo. Un
+// insumo real casi siempre tiene historial detrás (Kardex, lotes,
+// despachos, mermas, líneas de compra) que NO se puede borrar sin perder
+// trazabilidad contable — así que esto NUNCA es un borrado físico: solo
+// marca el insumo como "inactivo" (mismo patrón que Área/Cliente/
+// Proveedor/Producto). Un insumo inactivo desaparece de la lista y de
+// los selectores (nueva Solicitud de Pedido, Pedido de Compra, etc.),
+// pero todo su stock/costo/Kardex queda intacto y consultable.
+export async function DELETE(
+  request: Request,
+  { params }: { params: { id: string; insumoId: string } }
+) {
+  const usuarioActual = await getUsuarioActual();
+  if (!usuarioActual) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  const empresaId = BigInt(params.id);
+  try {
+    await verificarAccesoEmpresa(usuarioActual.id, empresaId, "insumos");
+  } catch (error) {
+    return NextResponse.json({ error: (error as Error).message }, { status: 403 });
+  }
+
+  const insumoId = BigInt(params.insumoId);
+  const insumo = await prisma.insumo.findFirst({ where: { id: insumoId, empresaId } });
+  if (!insumo) return NextResponse.json({ error: "Insumo no encontrado" }, { status: 404 });
+
+  await prisma.insumo.update({ where: { id: insumoId }, data: { estado: "inactivo" } });
+
+  await prisma.auditoria.create({
+    data: {
+      usuarioId: usuarioActual.id,
+      empresaId,
+      tablaAfectada: "insumos",
+      registroId: insumoId,
+      accion: "eliminar",
+      valorAnterior: { nombre: insumo.nombre, stockActual: insumo.stockActual.toString() },
+    },
+  });
+
+  return NextResponse.json({ ok: true });
+}

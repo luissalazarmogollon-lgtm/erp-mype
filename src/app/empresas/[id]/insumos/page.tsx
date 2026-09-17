@@ -31,6 +31,7 @@ export default function InsumosPage({ params }: { params: { id: string } }) {
   const [ajustando, setAjustando] = useState<string | null>(null);
   const [asignandoProveedor, setAsignandoProveedor] = useState<string | null>(null);
   const [editando, setEditando] = useState<string | null>(null);
+  const [eliminandoId, setEliminandoId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [errorEdicion, setErrorEdicion] = useState<string | null>(null);
 
@@ -126,6 +127,24 @@ export default function InsumosPage({ params }: { params: { id: string } }) {
       return;
     }
     setEditando(null);
+    cargarTodo();
+  }
+
+  async function handleEliminar(i: Insumo) {
+    const advertencia =
+      Number(i.stockActual) !== 0
+        ? `"${i.nombre}" todavía tiene stock (${i.stockActual}). ¿Eliminarlo de todas formas? No se borra su historial de compras/despachos, solo desaparece de la lista y de los selectores.`
+        : `¿Eliminar "${i.nombre}"? No se borra su historial, solo desaparece de la lista y de los selectores.`;
+    if (!confirm(advertencia)) return;
+    setError(null);
+    setEliminandoId(i.id);
+    const res = await fetch(`/api/empresas/${empresaId}/insumos/${i.id}`, { method: "DELETE" });
+    setEliminandoId(null);
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error?.toString() ?? "No se pudo eliminar el insumo.");
+      return;
+    }
     cargarTodo();
   }
 
@@ -348,6 +367,14 @@ export default function InsumosPage({ params }: { params: { id: string } }) {
                 >
                   Ver Kardex / Lotes
                 </Link>
+                <button
+                  className="btn-ghost"
+                  style={{ fontSize: 12, padding: "6px 12px", color: "var(--alert)", marginLeft: "auto" }}
+                  disabled={eliminandoId === i.id}
+                  onClick={() => handleEliminar(i)}
+                >
+                  {eliminandoId === i.id ? "Eliminando..." : "Eliminar"}
+                </button>
               </div>
             )}
           </div>

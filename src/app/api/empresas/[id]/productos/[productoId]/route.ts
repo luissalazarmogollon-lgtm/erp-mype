@@ -91,3 +91,45 @@ export async function PATCH(
 
   return NextResponse.json({ ok: true });
 }
+
+// DELETE /api/empresas/[id]/productos/[productoId] — "elimina" un
+// producto. Igual que Insumo: casi siempre tiene historial detrás
+// (Kardex, lotes, ventas) que no se puede borrar sin perder trazabilidad,
+// así que esto NUNCA es un borrado físico — solo marca el producto como
+// "inactivo" (columna que Producto ya tenía). Un producto inactivo
+// desaparece de la lista y de los selectores (nueva Venta, etc. — ver
+// catalogos/route.ts, que ya filtra por estado), pero su stock/costo/
+// Kardex y el historial de ventas que lo referencian quedan intactos.
+export async function DELETE(
+  request: Request,
+  { params }: { params: { id: string; productoId: string } }
+) {
+  const usuarioActual = await getUsuarioActual();
+  if (!usuarioActual) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  const empresaId = BigInt(params.id);
+  try {
+    await verificarAccesoEmpresa(usuarioActual.id, empresaId, "productos");
+  } catch (error) {
+    return NextResponse.json({ error: (error as Error).message }, { status: 403 });
+  }
+
+  const productoId = BigInt(params.productoId);
+  const producto = await prisma.producto.findFirst({ where: { id: productoId, empresaId } });
+  if (!producto) return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 });
+
+  await prisma.producto.update({ where: { id: productoId }, data: { estado: "inactivo" } });
+
+  await prisma.auditoria.create({
+    data: {
+      usuarioId: usuarioActual.id,
+      empresaId,
+      tablaAfectada: "productos",
+      registroId: productoId,
+      accion: "eliminar",
+      valorAnterior: { nombre: producto.nombre, stockActual: producto.stockActual.toString() },
+    },
+  });
+
+  return NextResponse.json({ ok: true });
+}

@@ -392,6 +392,11 @@ model Insumo {
   stockMinimo          Decimal  @default(0) @map("stock_minimo") @db.Decimal(10, 3)
   stockActual          Decimal  @default(0) @map("stock_actual") @db.Decimal(10, 3)
   costoPromedioActual  Decimal  @default(0) @map("costo_promedio_actual") @db.Decimal(10, 4)
+  // activo | inactivo — "eliminar" un insumo NUNCA lo borra físicamente
+  // (tiene historial de compras/despachos/ventas real detrás): solo lo
+  // marca inactivo, así desaparece de las listas y selectores pero todo
+  // su Kardex/lotes/movimientos se conservan intactos.
+  estado               String   @default("activo")
 
   movimientos          MovimientoInventario[]
   mermas               Merma[]

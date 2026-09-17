@@ -27,7 +27,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
   }
 
   const insumos = await prisma.insumo.findMany({
-    where: { empresaId },
+    where: { empresaId, estado: "activo" },
     include: { categoria: true, unidadMedida: true, proveedorPreferido: true },
     orderBy: { nombre: "asc" },
   });
