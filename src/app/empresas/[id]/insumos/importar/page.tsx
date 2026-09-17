@@ -5,6 +5,7 @@ import Link from "next/link";
 
 type Resultado = {
   creados: number;
+  actualizados: number;
   totalFilas: number;
   errores: { fila: number; motivo: string }[];
 };
@@ -49,7 +50,11 @@ export default function ImportarInsumosPage({ params }: { params: { id: string }
       <h1 style={{ fontSize: 24, marginBottom: 6 }}>Cargar insumos por plantilla</h1>
       <p style={{ fontSize: 13, color: "var(--ink-soft)", marginBottom: 20 }}>
         Descarga la plantilla, complétala en Excel o Google Sheets, y súbela de vuelta aquí. Si escribes una
-        categoría, unidad de medida o proveedor que todavía no existe, se crea automáticamente.
+        categoría, unidad de medida o proveedor que todavía no existe, se crea automáticamente. Si una fila coincide
+        con un insumo que ya tienes registrado (mismo código, o si no pones código, mismo nombre), se{" "}
+        <strong>sobrescriben todos sus datos</strong> (nombre, código, categoría, unidad de medida, stock mínimo y
+        proveedor preferido) con lo que traiga la plantilla — el stock actual y el costo del insumo no se tocan, esos
+        siguen viniendo de las compras y despachos ya registrados.
       </p>
 
       <div className="card" style={{ marginBottom: 20 }}>
@@ -85,8 +90,12 @@ export default function ImportarInsumosPage({ params }: { params: { id: string }
         {resultado && (
           <div style={{ marginTop: 16, borderTop: "1px solid var(--line)", paddingTop: 14 }}>
             <p style={{ fontSize: 14 }}>
-              <span style={{ color: "var(--teal)", fontWeight: 500 }}>{resultado.creados}</span> de {resultado.totalFilas}{" "}
-              fila{resultado.totalFilas !== 1 ? "s" : ""} se crearon correctamente.
+              <span style={{ color: "var(--teal)", fontWeight: 500 }}>{resultado.creados}</span> insumo
+              {resultado.creados !== 1 ? "s" : ""} nuevo{resultado.creados !== 1 ? "s" : ""} creado
+              {resultado.creados !== 1 ? "s" : ""} y{" "}
+              <span style={{ color: "var(--teal)", fontWeight: 500 }}>{resultado.actualizados}</span> sobrescrito
+              {resultado.actualizados !== 1 ? "s" : ""}, de {resultado.totalFilas} fila
+              {resultado.totalFilas !== 1 ? "s" : ""} en total.
             </p>
             {resultado.errores.length > 0 && (
               <div style={{ marginTop: 10 }}>
