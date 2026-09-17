@@ -6,23 +6,23 @@ import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-const lineaRecetaSchema = z.object({
-  insumoId: z.string(),
-  cantidadRequerida: z.number().positive(),
-  mermaEstandarPct: z.number().min(0).max(100).default(0),
-});
-
+// Producto = mercadería de venta al público comprada ya terminada para
+// revender (gaseosa, agua, etc.) — ya no se construye con una receta/ficha
+// técnica. Stock y costo funcionan exactamente igual que en Insumo:
+// arrancan en 0 y se cargan con "Ajustar stock" (ver
+// /productos/[productoId]/ajuste) hasta que exista un flujo de Compras
+// propio para Productos.
 const crearProductoSchema = z.object({
   codigo: z.string().optional(),
   nombre: z.string().min(2, "El nombre es obligatorio"),
   categoriaId: z.string().optional(),
   tipo: z.enum(["producto", "servicio"]),
   precioVenta: z.number().min(0),
-  requiereReceta: z.boolean().default(false),
-  receta: z.array(lineaRecetaSchema).default([]),
+  unidadMedidaId: z.string().optional(),
+  stockMinimo: z.number().min(0).default(0),
 });
 
-// GET /api/empresas/[id]/productos — lista productos con su ficha técnica.
+// GET /api/empresas/[id]/productos — lista productos con su stock y costo actual.
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   const usuarioActual = await getUsuarioActual();
   if (!usuarioActual) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
@@ -36,10 +36,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
   const productos = await prisma.producto.findMany({
     where: { empresaId },
-    include: {
-      categoria: true,
-      fichaTecnica: { include: { insumo: true } },
-    },
+    include: { categoria: true, unidadMedida: true },
     orderBy: { nombre: "asc" },
   });
 
@@ -48,27 +45,24 @@ export async function GET(request: Request, { params }: { params: { id: string }
       id: p.id.toString(),
       codigo: p.codigo,
       nombre: p.nombre,
+      categoriaId: p.categoriaId?.toString() ?? null,
       categoria: p.categoria?.nombre ?? null,
       tipo: p.tipo,
       precioVenta: p.precioVenta.toString(),
-      requiereReceta: p.requiereReceta,
       estado: p.estado,
-      receta: p.fichaTecnica.map((f) => ({
-        insumoNombre: f.insumo.nombre,
-        cantidadRequerida: f.cantidadRequerida.toString(),
-        costoInsumo: f.insumo.costoPromedioActual.toString(),
-      })),
-      // Costo estimado actual del producto según su receta (RN-020),
-      // recalculado en vivo con el costo promedio de hoy de cada insumo.
-      costoEstimadoActual: p.fichaTecnica
-        .reduce((acc, f) => acc + Number(f.cantidadRequerida) * Number(f.insumo.costoPromedioActual), 0)
-        .toFixed(4),
+      unidadMedidaId: p.unidadMedidaId?.toString() ?? null,
+      unidadMedida: p.unidadMedida?.abreviatura ?? null,
+      stockMinimo: p.stockMinimo.toString(),
+      stockActual: p.stockActual.toString(),
+      costoPromedioActual: p.costoPromedioActual.toString(),
+      bajoMinimo: Number(p.stockActual) < Number(p.stockMinimo),
+      margen: (Number(p.precioVenta) - Number(p.costoPromedioActual)).toFixed(2),
     }))
   );
 }
 
-// POST /api/empresas/[id]/productos — crea un producto y, si requiere
-// receta, su ficha técnica completa en la misma transacción (RN-020).
+// POST /api/empresas/[id]/productos — crea un producto nuevo (stock y
+// costo inician en 0; se cargan con "Ajustar stock").
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   const usuarioActual = await getUsuarioActual();
   if (!usuarioActual) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
@@ -87,19 +81,10 @@ export async function POST(request: Request, { params }: { params: { id: string 
   }
   const datos = parsed.data;
 
-  if (datos.requiereReceta && datos.receta.length === 0) {
-    return NextResponse.json(
-      { error: "Si el producto requiere receta, debes agregar al menos un insumo" },
-      { status: 400 }
-    );
-  }
-
-  // Validación cross-tenant: categoriaId e insumoId llegan del cliente como
-  // simples IDs — sin verificar, alguien podría (por error o a propósito)
-  // enviar el ID de una categoría o insumo de OTRA empresa, y Prisma lo
-  // aceptaría igual porque la FK no exige que empresaId coincida. Eso
-  // rompería el aislamiento multi-tenant: el costo de este producto
-  // terminaría calculado con el insumo de otra empresa.
+  // Validación cross-tenant: categoriaId/unidadMedidaId llegan del cliente
+  // como simples IDs — sin verificar, alguien podría (por error o a
+  // propósito) enviar el ID de una categoría o unidad de OTRA empresa, y
+  // Prisma lo aceptaría igual porque la FK no exige que empresaId coincida.
   if (datos.categoriaId) {
     const categoria = await prisma.categoriaProducto.findFirst({
       where: { id: BigInt(datos.categoriaId), empresaId },
@@ -108,18 +93,12 @@ export async function POST(request: Request, { params }: { params: { id: string 
       return NextResponse.json({ error: "La categoría seleccionada no existe en esta empresa" }, { status: 400 });
     }
   }
-
-  if (datos.receta.length > 0) {
-    const insumoIds = Array.from(new Set(datos.receta.map((linea) => BigInt(linea.insumoId))));
-    const insumosDeLaEmpresa = await prisma.insumo.findMany({
-      where: { id: { in: insumoIds }, empresaId },
-      select: { id: true },
+  if (datos.unidadMedidaId) {
+    const unidad = await prisma.unidadMedida.findFirst({
+      where: { id: BigInt(datos.unidadMedidaId), empresaId },
     });
-    if (insumosDeLaEmpresa.length !== insumoIds.length) {
-      return NextResponse.json(
-        { error: "Alguno de los insumos de la receta no existe en esta empresa" },
-        { status: 400 }
-      );
+    if (!unidad) {
+      return NextResponse.json({ error: "La unidad de medida seleccionada no existe en esta empresa" }, { status: 400 });
     }
   }
 
@@ -132,20 +111,10 @@ export async function POST(request: Request, { params }: { params: { id: string 
         categoriaId: datos.categoriaId ? BigInt(datos.categoriaId) : null,
         tipo: datos.tipo,
         precioVenta: datos.precioVenta,
-        requiereReceta: datos.requiereReceta,
+        unidadMedidaId: datos.unidadMedidaId ? BigInt(datos.unidadMedidaId) : null,
+        stockMinimo: datos.stockMinimo,
       },
     });
-
-    if (datos.requiereReceta && datos.receta.length > 0) {
-      await tx.fichaTecnica.createMany({
-        data: datos.receta.map((linea) => ({
-          productoId: nuevoProducto.id,
-          insumoId: BigInt(linea.insumoId),
-          cantidadRequerida: linea.cantidadRequerida,
-          mermaEstandarPct: linea.mermaEstandarPct,
-        })),
-      });
-    }
 
     await tx.auditoria.create({
       data: {

@@ -110,3 +110,93 @@ export async function registrarFaltanteSinLote(
     },
   });
 }
+
+// ---------------------------------------------------------------------
+// Versiones para Producto (mercadería de reventa con stock propio) —
+// mismo mecanismo PEPS que las de Insumo de arriba, duplicadas en vez de
+// generalizadas: LoteCompra/MovimientoInventario son polimórficos entre
+// insumoId y productoId (exactamente uno lleno por fila), así que cada
+// función arma su `where`/`data` con el campo que le corresponde y deja
+// el otro en null — separarlas evita tocar el camino de Insumo, que ya
+// está en producción, mientras se prueba el de Producto.
+// ---------------------------------------------------------------------
+
+export async function consumirLotesPepsProducto(
+  tx: Prisma.TransactionClient,
+  params: {
+    productoId: bigint;
+    cantidad: number;
+    empresaId: bigint;
+    tipo: string;
+    referenciaTipo: string;
+    referenciaId: bigint;
+    usuarioId: string;
+  }
+): Promise<ConsumoPepsResultado> {
+  const { productoId, cantidad, empresaId, tipo, referenciaTipo, referenciaId, usuarioId } = params;
+
+  let faltante = cantidad;
+
+  const lotes = await tx.loteCompra.findMany({
+    where: { productoId, cantidadDisponible: { gt: 0 } },
+    orderBy: { fechaIngreso: "asc" },
+  });
+
+  for (const lote of lotes) {
+    if (faltante <= 0) break;
+    const disponibleLote = Number(lote.cantidadDisponible);
+    const consumir = Math.min(disponibleLote, faltante);
+
+    await tx.loteCompra.update({
+      where: { id: lote.id },
+      data: { cantidadDisponible: disponibleLote - consumir },
+    });
+    await tx.movimientoInventario.create({
+      data: {
+        empresaId,
+        productoId,
+        tipo,
+        cantidad: -consumir,
+        costoUnitario: lote.costoUnitario,
+        loteId: lote.id,
+        usuarioId,
+        referenciaTipo,
+        referenciaId,
+      },
+    });
+
+    faltante -= consumir;
+  }
+
+  return { cubierto: cantidad - faltante, faltante };
+}
+
+export async function registrarFaltanteSinLoteProducto(
+  tx: Prisma.TransactionClient,
+  params: {
+    productoId: bigint;
+    cantidad: number;
+    empresaId: bigint;
+    tipo: string;
+    referenciaTipo: string;
+    referenciaId: bigint;
+    usuarioId: string;
+    costoUnitario: number;
+  }
+) {
+  const { productoId, cantidad, empresaId, tipo, referenciaTipo, referenciaId, usuarioId, costoUnitario } = params;
+  if (cantidad <= 0) return;
+  await tx.movimientoInventario.create({
+    data: {
+      empresaId,
+      productoId,
+      tipo,
+      cantidad: -cantidad,
+      costoUnitario,
+      loteId: null,
+      usuarioId,
+      referenciaTipo,
+      referenciaId,
+    },
+  });
+}

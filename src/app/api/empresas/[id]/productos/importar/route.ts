@@ -11,48 +11,31 @@ type FilaProducto = {
   categoria?: string;
   tipo?: string;
   precio_venta?: number | string;
-  requiere_receta?: string | boolean;
+  unidad_medida?: string;
+  stock_minimo?: number | string;
+  stock_inicial?: number | string;
+  costo_unitario_inicial?: number | string;
 };
-
-type FilaReceta = {
-  producto_nombre?: string;
-  producto_codigo?: string;
-  insumo?: string;
-  cantidad_requerida?: number | string;
-  merma_estandar_pct?: number | string;
-};
-
-function esAfirmativo(valor: unknown): boolean {
-  const texto = String(valor ?? "").trim().toLowerCase();
-  return ["si", "sí", "true", "1", "x", "yes"].includes(texto);
-}
 
 // POST /api/empresas/[id]/productos/importar — recibe el Excel de la
 // plantilla de Productos (campo "archivo" en el form-data, plantilla
-// separada de la de Insumos — ver /plantilla) y crea o actualiza los
-// productos en bloque, junto con su ficha técnica (receta).
+// separada de la de Insumos) y crea o actualiza los productos en bloque.
 //
-// Mismo criterio de "sobrescribir lo existente" que ya tiene la
-// importación de Insumos: si una fila de la hoja "Productos" coincide con
-// un producto YA EXISTENTE de esta empresa (mismo código, o si no trae
-// código, mismo nombre sin distinguir mayúsculas), se ACTUALIZA ese
-// producto — se sobrescriben nombre, código, categoría, tipo, precio de
-// venta y si requiere receta — en vez de fallar o crear un duplicado.
+// Producto ya no se construye con una receta/ficha técnica (rediseño del
+// módulo: ahora es mercadería comprada ya terminada para revender, con su
+// propio stock y costo) — la plantilla se simplificó a una sola hoja, con
+// las mismas columnas de stock/costo/unidad que ya tiene la de Insumos.
 //
-// La receta (hoja "Receta") tiene una regla propia, por ser una lista de
-// líneas (uno a muchos) y no un solo valor por producto:
-//   - Si el producto NO aparece mencionado en ninguna fila de la hoja
-//     "Receta" (o la hoja no existe en el archivo), su ficha técnica NO SE
-//     TOCA — así una plantilla que solo trae precios/categorías nuevos no
-//     borra por accidente la receta de nadie.
-//   - Si el producto SÍ aparece en la hoja "Receta", su ficha técnica se
-//     REEMPLAZA por completo con las líneas válidas de esa hoja (se borran
-//     las líneas anteriores y se crean las nuevas) — esto es lo que
-//     "sobrescribir en su totalidad" significa para una receta.
-// A diferencia de categoría/proveedor en Insumos, el insumo de una línea
-// de receta NUNCA se crea automáticamente si el nombre no coincide con
-// uno existente — un insumo trae stock y costo reales, no se puede
-// inventar desde una plantilla; la fila queda como error.
+// Mismo criterio de "sobrescribir lo existente" que Insumos: si una fila
+// coincide con un producto YA EXISTENTE de esta empresa (mismo código, o
+// si no trae código, mismo nombre sin distinguir mayúsculas), se
+// ACTUALIZA ese producto — se sobrescriben nombre, código, categoría,
+// tipo, precio de venta, unidad de medida y stock mínimo — dejando
+// intactos stockActual y costoPromedioActual (esos vienen de "Ajustar
+// stock" o de ventas ya registradas, no de la plantilla). Las columnas
+// stock_inicial/costo_unitario_inicial se ignoran por completo al
+// actualizar un producto existente; solo aplican al crear uno nuevo,
+// igual que en Insumos.
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   const usuarioActual = await getUsuarioActual();
   if (!usuarioActual) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
@@ -78,79 +61,36 @@ export async function POST(request: Request, { params }: { params: { id: string 
     return NextResponse.json({ error: "El archivo no es un Excel válido" }, { status: 400 });
   }
 
-  const hojaProductos = libro.Sheets["Productos"] ?? libro.Sheets[libro.SheetNames[0]];
-  if (!hojaProductos) {
+  const hoja = libro.Sheets["Productos"] ?? libro.Sheets[libro.SheetNames[0]];
+  if (!hoja) {
     return NextResponse.json({ error: "No se encontró la hoja 'Productos' en el archivo" }, { status: 400 });
   }
-  const filas: FilaProducto[] = XLSX.utils.sheet_to_json(hojaProductos, { defval: "" });
+  const filas: FilaProducto[] = XLSX.utils.sheet_to_json(hoja, { defval: "" });
 
-  const hojaReceta = libro.Sheets["Receta"];
-  const filasReceta: FilaReceta[] = hojaReceta ? XLSX.utils.sheet_to_json(hojaReceta, { defval: "" }) : [];
-
-  const [categoriasExistentes, insumosExistentes, productosExistentes] = await Promise.all([
+  const [categoriasExistentes, unidadesExistentes, productosExistentes] = await Promise.all([
     prisma.categoriaProducto.findMany({ where: { empresaId } }),
-    prisma.insumo.findMany({ where: { empresaId } }),
+    prisma.unidadMedida.findMany({ where: { empresaId } }),
     prisma.producto.findMany({ where: { empresaId } }),
   ]);
   const categoriaPorNombre = new Map(categoriasExistentes.map((c) => [c.nombre.toLowerCase(), c]));
-  const insumoPorNombre = new Map(insumosExistentes.map((i) => [i.nombre.toLowerCase(), i]));
+  const unidadPorNombre = new Map(unidadesExistentes.map((u) => [u.nombre.toLowerCase(), u]));
   // Igual patrón que en insumos/importar/route.ts: primero por código (la
-  // clave única real), y si la fila no trae código, por nombre.
+  // clave única real), y si la fila no trae código, por nombre. Se
+  // actualizan a medida que se crean/editan productos dentro del loop,
+  // para que dos filas de la MISMA plantilla no generen un duplicado
+  // entre sí.
   const productoPorCodigo = new Map(
     productosExistentes.filter((p) => p.codigo).map((p) => [p.codigo!.toLowerCase(), p])
   );
   const productoPorNombre = new Map(productosExistentes.map((p) => [p.nombre.toLowerCase(), p]));
 
   const errores: { fila: number; motivo: string }[] = [];
-
-  // --- Pasada 1: valida y agrupa las líneas de la hoja "Receta" por el
-  // producto al que pertenecen (por código si lo trae, si no por nombre).
-  // Cada línea se valida de forma independiente; una línea inválida se
-  // reporta como error y se descarta, sin bloquear las demás líneas del
-  // mismo producto ni el resto del archivo.
-  const recetaPorClave = new Map<string, { insumoId: bigint; cantidadRequerida: number; mermaEstandarPct: number }[]>();
-  for (let i = 0; i < filasReceta.length; i++) {
-    const fila = filasReceta[i];
-    const numeroFila = i + 2;
-    const productoCodigo = String(fila.producto_codigo ?? "").trim();
-    const productoNombre = String(fila.producto_nombre ?? "").trim();
-    if (!productoCodigo && !productoNombre) {
-      errores.push({ fila: numeroFila, motivo: "(hoja Receta) falta producto_nombre o producto_codigo" });
-      continue;
-    }
-    const clave = productoCodigo ? `codigo:${productoCodigo.toLowerCase()}` : `nombre:${productoNombre.toLowerCase()}`;
-
-    const insumoNombre = String(fila.insumo ?? "").trim();
-    if (!insumoNombre) {
-      errores.push({ fila: numeroFila, motivo: `(hoja Receta) falta el insumo de "${productoNombre || productoCodigo}"` });
-      continue;
-    }
-    const insumo = insumoPorNombre.get(insumoNombre.toLowerCase());
-    if (!insumo) {
-      errores.push({
-        fila: numeroFila,
-        motivo: `(hoja Receta) el insumo "${insumoNombre}" no existe en esta empresa — revísalo en la hoja Ayuda`,
-      });
-      continue;
-    }
-    const cantidadRequerida = Number(fila.cantidad_requerida);
-    if (!(cantidadRequerida > 0)) {
-      errores.push({ fila: numeroFila, motivo: `(hoja Receta) "${insumoNombre}": la cantidad requerida debe ser mayor a 0` });
-      continue;
-    }
-    const mermaEstandarPct = Number(fila.merma_estandar_pct) || 0;
-
-    if (!recetaPorClave.has(clave)) recetaPorClave.set(clave, []);
-    recetaPorClave.get(clave)!.push({ insumoId: insumo.id, cantidadRequerida, mermaEstandarPct });
-  }
-
   let creados = 0;
   let actualizados = 0;
 
-  // --- Pasada 2: procesa la hoja "Productos", una fila a la vez. ---
   for (let i = 0; i < filas.length; i++) {
     const fila = filas[i];
-    const numeroFila = i + 2;
+    const numeroFila = i + 2; // +2: fila 1 es encabezado, arrays son 0-index
 
     const nombre = String(fila.nombre ?? "").trim();
     if (!nombre) {
@@ -168,23 +108,19 @@ export async function POST(request: Request, { params }: { params: { id: string 
       errores.push({ fila: numeroFila, motivo: `"${nombre}": falta el precio de venta` });
       continue;
     }
-    const requiereReceta = esAfirmativo(fila.requiere_receta);
 
     const existente =
       (codigoLimpio ? productoPorCodigo.get(codigoLimpio.toLowerCase()) : undefined) ??
       productoPorNombre.get(nombre.toLowerCase());
 
-    // Las líneas de receta de ESTE producto, si la hoja "Receta" lo
-    // menciona (por su código, o si no tiene, por su nombre en esta fila).
-    const claveReceta = codigoLimpio ? `codigo:${codigoLimpio.toLowerCase()}` : `nombre:${nombre.toLowerCase()}`;
-    const lineasReceta = recetaPorClave.get(claveReceta);
-    const tieneRecetaEnArchivo = lineasReceta !== undefined && lineasReceta.length > 0;
-
-    if (!existente && requiereReceta && !tieneRecetaEnArchivo) {
-      errores.push({
-        fila: numeroFila,
-        motivo: `"${nombre}": requiere receta pero no tiene ninguna línea válida en la hoja "Receta"`,
-      });
+    const stockInicial = Number(fila.stock_inicial) || 0;
+    const costoInicial = Number(fila.costo_unitario_inicial) || 0;
+    // La validación de "stock inicial sin costo" solo aplica al CREAR un
+    // producto nuevo — al sobrescribir uno existente, stock_inicial y
+    // costo_unitario_inicial se ignoran por completo (el stock/costo real
+    // ya viene de "Ajustar stock" o de ventas ya ocurridas).
+    if (!existente && stockInicial > 0 && costoInicial <= 0) {
+      errores.push({ fila: numeroFila, motivo: `"${nombre}": tiene stock inicial pero no tiene costo unitario inicial` });
       continue;
     }
 
@@ -204,46 +140,84 @@ export async function POST(request: Request, { params }: { params: { id: string 
           }
         }
 
+        // Unidad de medida: usa la existente o crea una nueva (se comparte
+        // el mismo catálogo de unidades que Insumos).
+        let unidadMedidaId: bigint | null = null;
+        const unidadNombre = String(fila.unidad_medida ?? "").trim();
+        if (unidadNombre) {
+          const unidadExistente = unidadPorNombre.get(unidadNombre.toLowerCase());
+          if (unidadExistente) {
+            unidadMedidaId = unidadExistente.id;
+          } else {
+            const nueva = await tx.unidadMedida.create({
+              data: { empresaId, nombre: unidadNombre, abreviatura: unidadNombre.slice(0, 10) },
+            });
+            unidadPorNombre.set(unidadNombre.toLowerCase(), nueva);
+            unidadMedidaId = nueva.id;
+          }
+        }
+
         if (existente) {
           // --- Sobrescribe el producto existente en su totalidad (ficha) ---
+          // Deliberadamente NO se tocan stockActual ni costoPromedioActual.
           const actualizado = await tx.producto.update({
             where: { id: existente.id },
-            data: { nombre, codigo: codigoLimpio, categoriaId, tipo, precioVenta, requiereReceta },
+            data: {
+              nombre,
+              codigo: codigoLimpio,
+              categoriaId,
+              tipo,
+              precioVenta,
+              unidadMedidaId,
+              stockMinimo: Number(fila.stock_minimo) || 0,
+            },
           });
           productoPorNombre.set(actualizado.nombre.toLowerCase(), actualizado);
           if (actualizado.codigo) productoPorCodigo.set(actualizado.codigo.toLowerCase(), actualizado);
-
-          // La receta solo se reemplaza si este producto SÍ aparece en la
-          // hoja "Receta" del archivo — si no aparece, se deja tal como
-          // estaba (ver nota de diseño arriba).
-          if (tieneRecetaEnArchivo) {
-            await tx.fichaTecnica.deleteMany({ where: { productoId: existente.id } });
-            await tx.fichaTecnica.createMany({
-              data: lineasReceta!.map((linea) => ({
-                productoId: existente.id,
-                insumoId: linea.insumoId,
-                cantidadRequerida: linea.cantidadRequerida,
-                mermaEstandarPct: linea.mermaEstandarPct,
-              })),
-            });
-          }
           return { accion: "actualizar" as const };
         }
 
         const nuevoProducto = await tx.producto.create({
-          data: { empresaId, nombre, codigo: codigoLimpio, categoriaId, tipo, precioVenta, requiereReceta },
+          data: {
+            empresaId,
+            nombre,
+            codigo: codigoLimpio,
+            categoriaId,
+            tipo,
+            precioVenta,
+            unidadMedidaId,
+            stockMinimo: Number(fila.stock_minimo) || 0,
+            stockActual: stockInicial,
+            costoPromedioActual: stockInicial > 0 ? costoInicial : 0,
+          },
         });
         productoPorNombre.set(nuevoProducto.nombre.toLowerCase(), nuevoProducto);
         if (nuevoProducto.codigo) productoPorCodigo.set(nuevoProducto.codigo.toLowerCase(), nuevoProducto);
 
-        if (requiereReceta && tieneRecetaEnArchivo) {
-          await tx.fichaTecnica.createMany({
-            data: lineasReceta!.map((linea) => ({
+        // Respaldo en Lote (igual que el ajuste manual) si trae stock inicial.
+        if (stockInicial > 0) {
+          const lote = await tx.loteCompra.create({
+            data: {
+              empresaId,
               productoId: nuevoProducto.id,
-              insumoId: linea.insumoId,
-              cantidadRequerida: linea.cantidadRequerida,
-              mermaEstandarPct: linea.mermaEstandarPct,
-            })),
+              origen: "ajuste_manual",
+              cantidadInicial: stockInicial,
+              cantidadDisponible: stockInicial,
+              costoUnitario: costoInicial,
+              referenciaTipo: "importacion_masiva",
+            },
+          });
+          await tx.movimientoInventario.create({
+            data: {
+              empresaId,
+              productoId: nuevoProducto.id,
+              tipo: "ajuste_manual",
+              cantidad: stockInicial,
+              costoUnitario: costoInicial,
+              loteId: lote.id,
+              usuarioId: usuarioActual.id,
+              referenciaTipo: "importacion_masiva",
+            },
           });
         }
         return { accion: "crear" as const };

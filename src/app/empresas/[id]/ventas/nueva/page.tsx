@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-type Producto = { id: string; nombre: string; precioVenta: string; requiereReceta: boolean };
+type Producto = { id: string; nombre: string; precioVenta: string };
 type Catalogo = { id: string; nombre: string };
 
 type LineaCarrito = { productoId: string; nombre: string; cantidad: number; precioUnitario: number };

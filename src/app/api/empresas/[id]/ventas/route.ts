@@ -3,7 +3,7 @@ import { z } from "zod";
 import { mensajeErrorZod } from "@/lib/zodError";
 import { prisma } from "@/lib/prisma";
 import { getUsuarioActual, verificarAccesoEmpresa } from "@/lib/auth";
-import { consumirLotesPeps, registrarFaltanteSinLote } from "@/lib/inventario";
+import { consumirLotesPepsProducto, registrarFaltanteSinLoteProducto } from "@/lib/inventario";
 
 export const dynamic = "force-dynamic";
 
@@ -65,9 +65,11 @@ export async function GET(request: Request, { params }: { params: { id: string }
 }
 
 // POST /api/empresas/[id]/ventas — registra una venta completa (HU-10):
-// calcula costo por ficha técnica (RN-020), lo congela en el detalle
-// (RN-021), valida y descuenta stock (RN-022, RN-023), calcula IGV
-// según configuración de la empresa (RN-025).
+// el costo de cada línea es el costo promedio actual del propio Producto
+// (ya no se calcula por ficha técnica — Producto es mercadería comprada ya
+// terminada, con su propio stock/costo, ver rediseño del módulo), se
+// congela en el detalle (RN-021), valida y descuenta stock (RN-022,
+// RN-023), calcula IGV según configuración de la empresa (RN-025).
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   const usuarioActual = await getUsuarioActual();
   if (!usuarioActual) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
@@ -89,43 +91,38 @@ export async function POST(request: Request, { params }: { params: { id: string 
   }
   const datos = parsed.data;
 
-  // Cargamos cada producto con su ficha técnica (receta) para calcular
-  // costo y validar stock ANTES de tocar la base de datos.
+  // Cargamos cada producto para tomar su costo promedio actual y validar
+  // stock ANTES de tocar la base de datos.
   const productos = await prisma.producto.findMany({
     where: { empresaId, id: { in: datos.items.map((i) => BigInt(i.productoId)) } },
-    include: { fichaTecnica: { include: { insumo: true } } },
   });
 
   if (productos.length !== datos.items.length) {
     return NextResponse.json({ error: "Algún producto no existe en esta empresa" }, { status: 400 });
   }
 
-  // Acumulamos el consumo total de cada insumo across todos los items de
-  // la venta, para validar stock una sola vez por insumo (RN-022).
-  const consumoPorInsumo = new Map<
+  // Acumulamos el consumo total de cada producto across todos los items de
+  // la venta (puede repetirse si el carrito trae la misma línea dos veces),
+  // para validar stock una sola vez por producto (RN-022).
+  const consumoPorProducto = new Map<
     string,
     { cantidad: number; nombre: string; stockActual: number; costoPromedioActual: number }
   >();
   const itemsCalculados = datos.items.map((item) => {
     const producto = productos.find((p) => p.id === BigInt(item.productoId))!;
 
-    // RN-020: costo real = Σ (cantidad_receta × costo_promedio_insumo)
-    const costoUnitarioCalculado = producto.fichaTecnica.reduce(
-      (acc, f) => acc + Number(f.cantidadRequerida) * Number(f.insumo.costoPromedioActual),
-      0
-    );
+    // El costo de venta es el costo promedio actual del propio producto
+    // (RN-031 ya lo mantiene actualizado con cada entrada de stock).
+    const costoUnitarioCalculado = Number(producto.costoPromedioActual);
 
-    for (const f of producto.fichaTecnica) {
-      const key = f.insumoId.toString();
-      const consumoLinea = Number(f.cantidadRequerida) * item.cantidad;
-      const existente = consumoPorInsumo.get(key);
-      consumoPorInsumo.set(key, {
-        cantidad: (existente?.cantidad ?? 0) + consumoLinea,
-        nombre: f.insumo.nombre,
-        stockActual: Number(f.insumo.stockActual),
-        costoPromedioActual: Number(f.insumo.costoPromedioActual),
-      });
-    }
+    const key = producto.id.toString();
+    const existente = consumoPorProducto.get(key);
+    consumoPorProducto.set(key, {
+      cantidad: (existente?.cantidad ?? 0) + item.cantidad,
+      nombre: producto.nombre,
+      stockActual: Number(producto.stockActual),
+      costoPromedioActual: costoUnitarioCalculado,
+    });
 
     return {
       productoId: producto.id,
@@ -138,7 +135,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
   // RN-022: validar stock suficiente (bloquea por defecto).
   if (!datos.forzarSinStock) {
-    const faltantes = Array.from(consumoPorInsumo.entries())
+    const faltantes = Array.from(consumoPorProducto.entries())
       .filter(([, v]) => v.cantidad > v.stockActual)
       .map(([, v]) => `${v.nombre} (necesitas ${v.cantidad}, tienes ${v.stockActual})`);
 
@@ -194,24 +191,24 @@ export async function POST(request: Request, { params }: { params: { id: string 
     // patrón que Despacho de Solicitudes y Ajuste de Stock), en vez de
     // solo generar un movimiento genérico con costo 0 — así el Kardex
     // queda con el costo real de cada lote tocado, y los lotes se
-    // mantienen sincronizados con el stock real del insumo.
-    for (const [insumoIdStr, consumo] of consumoPorInsumo.entries()) {
-      const insumoId = BigInt(insumoIdStr);
-      const resultado = await consumirLotesPeps(tx, {
+    // mantienen sincronizados con el stock real del producto.
+    for (const [productoIdStr, consumo] of consumoPorProducto.entries()) {
+      const productoId = BigInt(productoIdStr);
+      const resultado = await consumirLotesPepsProducto(tx, {
         empresaId,
-        insumoId,
+        productoId,
         cantidad: consumo.cantidad,
         tipo: "salida_venta",
         referenciaTipo: "venta",
         referenciaId: nuevaVenta.id,
         usuarioId: usuarioActual.id,
       });
-      // Si los lotes no alcanzan (posible con insumos que ya tenían ventas
-      // de antes de este fix, cuando no se tocaban lotes), se cubre igual
-      // con el costo promedio actual — no se bloquea una venta ya cobrada.
-      await registrarFaltanteSinLote(tx, {
+      // Si los lotes no alcanzan (ej. productos con ventas de antes de
+      // este rediseño), se cubre igual con el costo promedio actual — no
+      // se bloquea una venta ya cobrada.
+      await registrarFaltanteSinLoteProducto(tx, {
         empresaId,
-        insumoId,
+        productoId,
         cantidad: resultado.faltante,
         tipo: "salida_venta",
         referenciaTipo: "venta",
@@ -219,8 +216,8 @@ export async function POST(request: Request, { params }: { params: { id: string 
         usuarioId: usuarioActual.id,
         costoUnitario: consumo.costoPromedioActual,
       });
-      await tx.insumo.update({
-        where: { id: insumoId },
+      await tx.producto.update({
+        where: { id: productoId },
         data: { stockActual: { decrement: consumo.cantidad } },
       });
     }

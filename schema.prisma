@@ -269,7 +269,7 @@ model UnidadMedida {
   nombre       String
   abreviatura  String
   insumos      Insumo[]
-  fichasTecnicas FichaTecnica[]
+  productos    Producto[]
 
   @@unique([empresaId, nombre])
   @@map("unidades_medida")
@@ -393,7 +393,6 @@ model Insumo {
   stockActual          Decimal  @default(0) @map("stock_actual") @db.Decimal(10, 3)
   costoPromedioActual  Decimal  @default(0) @map("costo_promedio_actual") @db.Decimal(10, 4)
 
-  fichasTecnicas       FichaTecnica[]
   movimientos          MovimientoInventario[]
   mermas               Merma[]
   solicitudesPedidoDetalle SolicitudPedidoDetalle[]
@@ -407,47 +406,58 @@ model Insumo {
   @@map("insumos")
 }
 
+// Producto = mercadería de venta al público comprada ya terminada para
+// revender (gaseosa, agua, snacks) — NO se construye con una receta. Tiene
+// su propio control de stock/costo/lotes, con la misma mecánica PEPS y de
+// costo promedio ponderado que Insumo (ver LoteCompra/MovimientoInventario
+// más abajo, ahora polimórficos entre Insumo y Producto). El concepto de
+// ficha técnica/receta se retiró del módulo de Productos (antes vivía en
+// el modelo FichaTecnica, ya eliminado de este schema) — la tabla
+// `fichas_tecnicas` y la columna `requiere_receta` se dejan intactas a
+// nivel de base de datos (con los datos de cualquier empresa que ya las
+// haya usado) pero el sistema ya no las lee ni las escribe.
 model Producto {
-  id              BigInt   @id @default(autoincrement())
-  empresaId       BigInt   @map("empresa_id")
-  empresa         Empresa  @relation(fields: [empresaId], references: [id])
-  codigo          String?
-  nombre          String
-  categoriaId     BigInt?  @map("categoria_id")
-  categoria       CategoriaProducto? @relation(fields: [categoriaId], references: [id])
-  tipo            String   // producto | servicio
-  precioVenta     Decimal  @map("precio_venta") @db.Decimal(10, 2)
-  requiereReceta  Boolean  @default(false) @map("requiere_receta")
-  estado          String   @default("activo")
+  id                   BigInt   @id @default(autoincrement())
+  empresaId            BigInt   @map("empresa_id")
+  empresa              Empresa  @relation(fields: [empresaId], references: [id])
+  codigo               String?
+  nombre               String
+  categoriaId          BigInt?  @map("categoria_id")
+  categoria            CategoriaProducto? @relation(fields: [categoriaId], references: [id])
+  tipo                 String   // producto | servicio
+  precioVenta          Decimal  @map("precio_venta") @db.Decimal(10, 2)
+  estado               String   @default("activo")
 
-  fichaTecnica    FichaTecnica[]
-  ventasDetalle   VentaDetalle[]
+  unidadMedidaId       BigInt?  @map("unidad_medida_id")
+  unidadMedida         UnidadMedida?    @relation(fields: [unidadMedidaId], references: [id])
+  stockMinimo          Decimal  @default(0) @map("stock_minimo") @db.Decimal(10, 3)
+  stockActual          Decimal  @default(0) @map("stock_actual") @db.Decimal(10, 3)
+  costoPromedioActual  Decimal  @default(0) @map("costo_promedio_actual") @db.Decimal(10, 4)
+  proveedorPreferidoId BigInt?  @map("proveedor_preferido_id")
+  proveedorPreferido   Proveedor? @relation(fields: [proveedorPreferidoId], references: [id])
+
+  lotes                LoteCompra[]
+  movimientos          MovimientoInventario[]
+  ventasDetalle        VentaDetalle[]
 
   @@unique([empresaId, codigo])
   @@map("productos")
 }
 
-// La "receta" de un producto: cuánto de cada insumo lleva (RN-020).
-model FichaTecnica {
-  id                  BigInt   @id @default(autoincrement())
-  productoId          BigInt   @map("producto_id")
-  producto            Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
-  insumoId            BigInt   @map("insumo_id")
-  insumo              Insumo   @relation(fields: [insumoId], references: [id])
-  cantidadRequerida   Decimal  @map("cantidad_requerida") @db.Decimal(10, 4)
-  unidadMedidaId      BigInt?  @map("unidad_medida_id")
-  unidadMedida        UnidadMedida? @relation(fields: [unidadMedidaId], references: [id])
-  mermaEstandarPct    Decimal  @default(0) @map("merma_estandar_pct") @db.Decimal(5, 2)
-
-  @@map("fichas_tecnicas")
-}
-
+// insumoId / productoId son mutuamente excluyentes (exactamente uno de los
+// dos está lleno por fila — CHECK a nivel de base de datos, ver migración
+// SQL): un movimiento de Kardex es de un Insumo o de un Producto, nunca de
+// ambos. Se dejaron ambos como opcionales (en vez de crear una tabla
+// aparte) para reutilizar tal cual el motor PEPS/costo-promedio ya
+// probado con Insumo.
 model MovimientoInventario {
   id              BigInt   @id @default(autoincrement())
   empresaId       BigInt   @map("empresa_id")
   empresa         Empresa  @relation(fields: [empresaId], references: [id])
-  insumoId        BigInt   @map("insumo_id")
-  insumo          Insumo   @relation(fields: [insumoId], references: [id])
+  insumoId        BigInt?  @map("insumo_id")
+  insumo          Insumo?  @relation(fields: [insumoId], references: [id])
+  productoId      BigInt?  @map("producto_id")
+  producto        Producto? @relation(fields: [productoId], references: [id])
   tipo            String   // entrada_compra | salida_venta | salida_solicitud | merma | ajuste_manual
   cantidad        Decimal  @db.Decimal(10, 3)
   costoUnitario   Decimal  @map("costo_unitario") @db.Decimal(10, 4)
@@ -459,6 +469,7 @@ model MovimientoInventario {
   usuarioId       String   @map("usuario_id") @db.Uuid
 
   @@index([insumoId, fecha])
+  @@index([productoId, fecha])
   @@map("movimientos_inventario")
 }
 
@@ -1059,12 +1070,17 @@ model SolicitudPedidoDetalle {
 // KPI simplificado y no se toca por este mecanismo.
 // ---------------------------------------------------------------------
 
+// insumoId / productoId son mutuamente excluyentes, igual que en
+// MovimientoInventario (ver comentario ahí) — un lote PEPS es de un
+// Insumo o de un Producto, nunca de ambos.
 model LoteCompra {
   id                 BigInt   @id @default(autoincrement())
   empresaId          BigInt   @map("empresa_id")
   empresa            Empresa  @relation(fields: [empresaId], references: [id])
-  insumoId           BigInt   @map("insumo_id")
-  insumo             Insumo   @relation(fields: [insumoId], references: [id])
+  insumoId           BigInt?  @map("insumo_id")
+  insumo             Insumo?  @relation(fields: [insumoId], references: [id])
+  productoId         BigInt?  @map("producto_id")
+  producto           Producto? @relation(fields: [productoId], references: [id])
   // apertura (migración inicial) | ajuste_manual | compra (Sprint 6+)
   origen             String
   fechaIngreso       DateTime @default(now()) @map("fecha_ingreso")
@@ -1077,6 +1093,7 @@ model LoteCompra {
   movimientos        MovimientoInventario[]
 
   @@index([insumoId, fechaIngreso])
+  @@index([productoId, fechaIngreso])
   @@map("lotes_compra")
 }
 
@@ -1105,9 +1122,10 @@ model Proveedor {
   email     String?
   estado    String   @default("activo")
 
-  insumosPreferidos Insumo[]
-  pedidosCompra     PedidoCompra[]
-  cuentasBancarias  CuentaBancariaProveedor[]
+  insumosPreferidos   Insumo[]
+  productosPreferidos Producto[]
+  pedidosCompra       PedidoCompra[]
+  cuentasBancarias    CuentaBancariaProveedor[]
 
   @@unique([empresaId, nombre])
   @@map("proveedores")
