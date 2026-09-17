@@ -147,7 +147,7 @@ export default function Sidebar({
       <div className="sidebar-brand" style={{ display: "flex", alignItems: "center", justifyContent: collapsed ? "center" : "flex-start" }}>
         {!collapsed && "ERP-MYPE"}
         {collapsed && (
-          <div style={{ width: 28, height: 28, borderRadius: 8, background: "var(--primary)", color: "var(--on-primary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700 }}>
+          <div style={{ width: 28, height: 28, borderRadius: 8, background: "var(--stamp)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700 }}>
             EM
           </div>
         )}
@@ -203,7 +203,7 @@ export default function Sidebar({
           );
         })}
 
-        <div style={{ borderTop: "1px solid var(--sidebar-border)", margin: "8px 6px" }} />
+        <div style={{ borderTop: "1px solid rgba(255,255,255,0.12)", margin: "8px 6px" }} />
 
         {FLAT_ITEMS.map((item) => (
           <Link
@@ -217,14 +217,14 @@ export default function Sidebar({
         ))}
       </nav>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 8px", borderTop: "1px solid var(--sidebar-border)", justifyContent: collapsed ? "center" : "flex-start" }}>
-        <div style={{ width: 30, height: 30, borderRadius: 999, background: "var(--primary-bg)", color: "var(--primary-hover)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, flex: "none" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 8px", borderTop: "1px solid rgba(255,255,255,0.12)", justifyContent: collapsed ? "center" : "flex-start" }}>
+        <div style={{ width: 30, height: 30, borderRadius: 999, background: "var(--stamp-bg)", color: "var(--stamp)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, flex: "none" }}>
           {userInitials}
         </div>
         {!collapsed && (
           <div style={{ overflow: "hidden" }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--on-primary)", whiteSpace: "nowrap" }}>{userName}</div>
-            <div style={{ fontSize: 11, color: "var(--sidebar-ink-muted)", whiteSpace: "nowrap" }}>{userSubtitle}</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#fff", whiteSpace: "nowrap" }}>{userName}</div>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", whiteSpace: "nowrap" }}>{userSubtitle}</div>
           </div>
         )}
       </div>
