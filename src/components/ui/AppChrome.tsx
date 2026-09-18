@@ -56,7 +56,7 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
           gap: 16,
           padding: "12px 24px",
           background: "var(--brand)",
-          borderBottom: "3px solid var(--stamp)",
+          borderBottom: "3px solid var(--brand-dark)",
         }}
       >
         <Link
