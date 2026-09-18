@@ -22,7 +22,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
       <Sidebar />
-      <div style={{ flexGrow: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      {/* El sidebar tiene su propio scroll interno (ver nav en Sidebar.tsx)
+          y por eso este contenedor fija su altura al viewport con
+          overflow:hidden. Pero el contenido de cada pantalla (los distintos
+          page.tsx) es un <main> normal sin su propio scroll — con
+          overflow:hidden aquí también, cualquier pantalla más alta que la
+          ventana quedaba recortada y sin forma de bajar (el bug reportado:
+          "no me deja escrolear"). El fix es que ESTE contenedor sea el que
+          scrollea verticalmente, no el sidebar. */}
+      <div style={{ flexGrow: 1, minWidth: 0, display: "flex", flexDirection: "column", overflowY: "auto", overflowX: "hidden" }}>
         {children}
       </div>
     </div>
