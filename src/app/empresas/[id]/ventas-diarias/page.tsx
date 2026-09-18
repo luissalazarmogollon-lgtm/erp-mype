@@ -465,6 +465,7 @@ type Cxc = {
   saldoPendiente: string;
   fechaEmision: string;
   estado: string;
+  tieneCobros: boolean;
 };
 type ClienteOpcion = { id: string; nombre: string; docIdentidad: string | null };
 
@@ -485,6 +486,12 @@ function FacturacionServicios({ empresaId }: { empresaId: string }) {
   // Agrupación por mes (RN pedida: "En facturación debe mostrar las
   // facturas por mes") — qué meses están expandidos, por clave "YYYY-MM".
   const [mesesAbiertos, setMesesAbiertos] = useState<Record<string, boolean>>({});
+  // Eliminar una factura ya registrada — mismo criterio que en Créditos:
+  // reservado al superadmin de la plataforma, y bloqueado si ya tiene
+  // cobros/pagos registrados (para no perder el rastro de dinero que ya
+  // entró a caja).
+  const [esSuperadmin, setEsSuperadmin] = useState(false);
+  const [eliminandoId, setEliminandoId] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     clienteId: "",
@@ -499,14 +506,16 @@ function FacturacionServicios({ empresaId }: { empresaId: string }) {
   const [nuevoCliente, setNuevoCliente] = useState({ nombre: "", docIdentidad: "", telefono: "" });
 
   async function cargar() {
-    const [resFacturas, resClientes, resCatalogos] = await Promise.all([
+    const [resFacturas, resClientes, resCatalogos, resAcceso] = await Promise.all([
       fetch(`/api/empresas/${empresaId}/cuentas-por-cobrar`).then((r) => r.json()),
       fetch(`/api/empresas/${empresaId}/clientes`).then((r) => r.json()),
       fetch(`/api/empresas/${empresaId}/catalogos`).then((r) => r.json()),
+      fetch(`/api/empresas/${empresaId}/mi-acceso`).then((r) => r.json()),
     ]);
     setFacturas(resFacturas);
     setClientes(resClientes);
     setCuentasBancarias(resCatalogos.cuentasBancarias ?? []);
+    if (!resAcceso.error) setEsSuperadmin(Boolean(resAcceso.esSuperadminPlataforma));
   }
 
   useEffect(() => {
@@ -596,6 +605,30 @@ function FacturacionServicios({ empresaId }: { empresaId: string }) {
       fechaVencimiento: "",
     });
     setMostrarForm(false);
+    cargar();
+  }
+
+  async function handleEliminar(f: Cxc) {
+    if (
+      !window.confirm(
+        `¿Eliminar la factura ${f.numeroFactura ? f.numeroFactura + " " : ""}de "${f.cliente}" por S/ ${Number(f.montoTotal).toFixed(2)}? Esto no se puede deshacer.`
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    setEliminandoId(f.id);
+
+    const res = await fetch(`/api/empresas/${empresaId}/cuentas-por-cobrar/${f.id}`, { method: "DELETE" });
+
+    setEliminandoId(null);
+
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error?.toString() ?? "No se pudo eliminar la factura.");
+      return;
+    }
+
     cargar();
   }
 
@@ -835,6 +868,26 @@ function FacturacionServicios({ empresaId }: { empresaId: string }) {
                 </p>
               </div>
             </div>
+
+            {/* Eliminar una factura es una acción destructiva sobre datos
+                financieros — reservada al superadmin de la plataforma, y
+                aun para él bloqueada si ya tiene pagos registrados. */}
+            {esSuperadmin && (
+              f.tieneCobros ? (
+                <p className="mono" style={{ fontSize: 10.5, color: "var(--ink-soft)", marginTop: 8, fontStyle: "italic" }}>
+                  🔒 Ya tiene pagos registrados — no se puede eliminar.
+                </p>
+              ) : (
+                <button
+                  onClick={() => handleEliminar(f)}
+                  disabled={eliminandoId === f.id}
+                  className="btn-ghost"
+                  style={{ fontSize: 11, padding: "3px 10px", marginTop: 8, color: "var(--alert)" }}
+                >
+                  {eliminandoId === f.id ? "Eliminando..." : "Eliminar factura"}
+                </button>
+              )
+            )}
 
             {f.estado !== "pagada" && (
               cobrando === f.id ? (
