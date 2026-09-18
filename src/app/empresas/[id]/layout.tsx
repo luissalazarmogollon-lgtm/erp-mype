@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 // Ajusta este import a donde termines copiando Sidebar.tsx.
 // Si tu proyecto no usa el alias "@/", usa una ruta relativa
@@ -19,9 +22,17 @@ import Sidebar from "@/components/layout/Sidebar";
  * lleva sidebar ni topbar.
  */
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  // En celular el sidebar de 240px no cabe (aplastaba el contenido contra
+  // el borde — ver captura del reporte) así que ahí deja de ocupar espacio
+  // fijo y pasa a ser un panel que se abre encima del contenido (CSS en
+  // globals.css, sección "Sidebar / mobile"). Este estado es el que
+  // controla si ese panel está abierto; en desktop no hace nada (el CSS
+  // solo aplica el comportamiento "off-canvas" bajo el breakpoint móvil).
+  const [mobileOpen, setMobileOpen] = useState(false);
+
   return (
     <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
-      <Sidebar />
+      <Sidebar mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)} />
       {/* El sidebar tiene su propio scroll interno (ver nav en Sidebar.tsx)
           y por eso este contenedor fija su altura al viewport con
           overflow:hidden. Pero el contenido de cada pantalla (los distintos
@@ -31,6 +42,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           "no me deja escrolear"). El fix es que ESTE contenedor sea el que
           scrollea verticalmente, no el sidebar. */}
       <div style={{ flexGrow: 1, minWidth: 0, display: "flex", flexDirection: "column", overflowY: "auto", overflowX: "hidden" }}>
+        {/* Botón de menú — solo visible en celular (CSS lo oculta en
+            desktop, donde el sidebar ya está siempre visible al costado).
+            Va pegado arriba del contenido de cada pantalla, no flotando
+            sobre la barra superior de AppChrome, para no taparla ni
+            depender de que cada pantalla tenga su propio encabezado. */}
+        <button
+          type="button"
+          className="sidebar-mobile-toggle"
+          onClick={() => setMobileOpen(true)}
+          aria-label="Abrir menú"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 20, height: 20 }}>
+            <path d="M3 6h18M3 12h18M3 18h18" />
+          </svg>
+          <span>Menú</span>
+        </button>
         {children}
       </div>
     </div>

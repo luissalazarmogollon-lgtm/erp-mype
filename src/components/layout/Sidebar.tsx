@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 /**
  * Sidebar compartido de erp-mype.
@@ -129,11 +129,21 @@ export default function Sidebar({
   userInitials = "A",
   userName = "Administrador",
   userSubtitle = "Cuenta principal",
+  // En celular el sidebar deja de ocupar espacio fijo (ahí no entraba: el
+  // contenido quedaba aplastado y cortado a los costados — ver
+  // src/app/empresas/[id]/layout.tsx) y pasa a ser un panel que se abre
+  // encima del contenido (off-canvas). `mobileOpen`/`onCloseMobile` los
+  // controla ese layout; en desktop (donde el CSS ya no lo saca de flujo)
+  // estas dos props no hacen nada.
+  mobileOpen = false,
+  onCloseMobile,
 }: {
   collapsed?: boolean;
   userInitials?: string;
   userName?: string;
   userSubtitle?: string;
+  mobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }) {
   const pathname = usePathname();
   const params = useParams<{ id: string }>();
@@ -154,8 +164,17 @@ export default function Sidebar({
   const isActive = (segment: string) => pathname?.startsWith(`${base}/${segment}`);
   const isDashboardActive = pathname === base;
 
+  // Al tocar un link del menú en celular, cierra el panel solo — si no,
+  // se quedaría abierto tapando la pantalla nueva.
+  useEffect(() => {
+    onCloseMobile?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
   return (
-    <aside className={`sidebar${collapsed ? " collapsed" : ""}`}>
+    <>
+      {mobileOpen && <div className="sidebar-backdrop" onClick={onCloseMobile} />}
+      <aside className={`sidebar${collapsed ? " collapsed" : ""}${mobileOpen ? " mobile-open" : ""}`}>
       <div className="sidebar-brand" style={{ display: "flex", alignItems: "center", justifyContent: collapsed ? "center" : "flex-start" }}>
         {!collapsed && "ERP-MYPE"}
         {collapsed && (
@@ -221,6 +240,7 @@ export default function Sidebar({
           </div>
         )}
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }
