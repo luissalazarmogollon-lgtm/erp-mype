@@ -1,44 +1,38 @@
 @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap");
 
 /*
-  Paleta: SOLO gris y amarillo/dorado, igual que el logo de SAP Business
-  One (el texto "SAP Business" en gris y el "One" en dorado). El gris
-  carbón es el color estructural — encabezado, botones, bordes activos,
-  enfoque de campos — y el dorado queda reservado como acento (insignia
-  "EM", franja bajo el encabezado, y también su uso previo como color de
-  "pendiente/sin clasificar" en varias pantallas). Los colores verde/rojo
-  (--teal / --alert) NO son de marca: son indicadores funcionales de
-  saldo a favor/en contra que ya se usan en todo el sistema financiero
-  (montos positivos y negativos, errores de validación), así que se
-  mantienen para no perder esa señal visual.
+  Paleta v2: azul como color principal (acciones, foco, ítem activo del
+  sidebar) sobre grises fríos y modernos. El dorado (--stamp) queda como
+  acento secundario (insignia "EM", badges de advertencia). Los verdes/
+  rojos (--teal / --alert) siguen siendo indicadores funcionales de saldo
+  a favor/en contra, no de marca.
 
-  Todas las pantallas de la app ya usaban estas mismas variables (--ink,
-  --paper-card, --line, etc.) en vez de colores sueltos, así que cambiar
-  los valores aquí actualiza el look de todo el sistema sin tocar cada
-  pantalla una por una.
+  Son los MISMOS nombres de variable y de clase de antes — solo cambian
+  los valores — así que todo el sistema se actualiza de una vez, sin
+  tocar página por página.
 */
 :root {
-  --ink: #29292b;
-  --ink-soft: #6c6c70;
-  --paper-bg: #f1f0ee;
-  --paper: #e8e6e3;
+  --ink: #0f172a;
+  --ink-soft: #64748b;
+  --paper-bg: #f8fafc;
+  --paper: #f1f5f9;
   --paper-card: #ffffff;
-  --line: #dbd9d5;
+  --line: #e2e8f0;
 
-  --brand: #4b4b4e;
-  --brand-dark: #302f31;
-  --brand-bg: #ececeb;
+  --brand: #2563eb;
+  --brand-dark: #1d4ed8;
+  --brand-bg: #dbeafe;
 
-  --stamp: #b8790a;
-  --stamp-bg: #f8ecd2;
-  --teal: #147a4c;
-  --teal-bg: #ddf3e6;
-  --alert: #c0392b;
-  --alert-bg: #fbe1dd;
+  --stamp: #d97706;
+  --stamp-bg: #fef3c7;
+  --teal: #15803d;
+  --teal-bg: #dcfce7;
+  --alert: #dc2626;
+  --alert-bg: #fee2e2;
 
-  --radius: 8px;
-  --shadow-sm: 0 1px 2px rgba(20, 20, 20, 0.07), 0 1px 1px rgba(20, 20, 20, 0.04);
-  --shadow-md: 0 8px 24px rgba(20, 20, 20, 0.12);
+  --radius: 10px;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 1px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 10px 28px rgba(15, 23, 42, 0.14);
 }
 
 * {
@@ -191,7 +185,7 @@ a.card:focus-visible {
 }
 
 input[type="checkbox"] {
-  accent-color: var(--stamp);
+  accent-color: var(--brand);
 }
 
 /* Panel decorativo de la pantalla de login — oculto en pantallas angostas,
@@ -204,9 +198,7 @@ input[type="checkbox"] {
 
 /* =========================================================================
    Piezas nuevas para el rediseño del layout: badges, tabla, modal,
-   alertas, sidebar y cabecera de página. Reusan la misma paleta gris/
-   dorado de arriba (--ink, --brand, --stamp, --teal, --alert, --radius,
-   --shadow-sm/md) — no se agregó ningún color nuevo.
+   alertas, sidebar y cabecera de página.
    ========================================================================= */
 
 /* ---------- Botones que faltaban ---------- */
@@ -247,7 +239,7 @@ input[type="checkbox"] {
 .badge-success { background: var(--teal-bg); color: var(--teal); }
 .badge-warning { background: var(--stamp-bg); color: var(--stamp); }
 .badge-error { background: var(--alert-bg); color: var(--alert); }
-.badge-info { background: var(--paper); color: var(--ink-soft); }
+.badge-info { background: var(--brand-bg); color: var(--brand-dark); }
 
 /* ---------- Tablas ---------- */
 .table-wrap {
@@ -278,7 +270,7 @@ input[type="checkbox"] {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(41, 41, 43, 0.45);
+  background: rgba(15, 23, 42, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -322,13 +314,13 @@ input[type="checkbox"] {
 .alert-success { background: var(--teal-bg); color: var(--teal); }
 .alert-warning { background: var(--stamp-bg); color: var(--stamp); }
 .alert-error { background: var(--alert-bg); color: var(--alert); }
-.alert-info { background: var(--paper); color: var(--ink-soft); }
+.alert-info { background: var(--brand-bg); color: var(--brand-dark); }
 
-/* ---------- Sidebar (gris oscuro de marca, no azul) ---------- */
+/* ---------- Sidebar ---------- */
 .sidebar {
   width: 240px;
   height: 100%;
-  background: var(--brand-dark);
+  background: var(--ink);
   box-sizing: border-box;
   padding: 20px 12px;
   display: flex;
@@ -369,7 +361,7 @@ input[type="checkbox"] {
 }
 .nav-item svg { width: 17px; height: 17px; flex: none; }
 .nav-item:hover { color: #fff; }
-.nav-item.active { background: var(--stamp); color: #fff; }
+.nav-item.active { background: var(--brand); color: #fff; }
 .nav-item.child { padding-left: 33px; }
 
 /* ---------- Cabecera de página (topbar de cada pantalla) ---------- */
