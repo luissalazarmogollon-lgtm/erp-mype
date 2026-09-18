@@ -1,0 +1,81 @@
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import { getUsuarioActual, getEmpresasVisibles } from "@/lib/auth";
+
+// Selector de empresa activa (HU-03). Un Asesor/Asistente ve aquí solo
+// las empresas donde tiene una fila activa en usuario_empresa (RN-001);
+// el superadmin ve todas.
+//
+// CAMBIO: un usuario normal (no superadmin) con exactamente UNA empresa
+// asignada ya no ve este selector — entra directo a esa empresa. El
+// superadmin sigue viendo "Tus empresas" (gestiona varias), y si algún
+// día un usuario normal llega a tener más de una empresa, también sigue
+// viendo el selector para esa (única) situación ambigua.
+export default async function DashboardPage() {
+  const usuario = await getUsuarioActual();
+  if (!usuario) redirect("/login");
+
+  const empresas = await getEmpresasVisibles(usuario.id);
+
+  if (!usuario.esSuperadminPlataforma && empresas.length === 1) {
+    redirect(`/empresas/${empresas[0].id}`);
+  }
+
+  return (
+    <main style={{ maxWidth: 900, margin: "0 auto", padding: "32px 24px" }}>
+      <div style={{ marginBottom: 8 }}>
+        <h1 style={{ fontSize: 24 }}>Tus empresas</h1>
+        <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)" }}>
+          {usuario.nombres} {usuario.apellidos} ·{" "}
+          {usuario.esSuperadminPlataforma ? "Superadmin" : usuario.tipoActorBase}
+        </p>
+      </div>
+
+      {usuario.esSuperadminPlataforma && (
+        <div style={{ margin: "24px 0", display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Link href="/onboarding/empresa" className="btn-primary" style={{ textDecoration: "none" }}>
+            + Dar de alta nueva empresa
+          </Link>
+          <Link href="/usuarios" className="btn-ghost" style={{ textDecoration: "none" }}>
+            Usuarios y accesos
+          </Link>
+          <Link href="/cuentas-por-cobrar" className="btn-ghost" style={{ textDecoration: "none" }}>
+            Cuentas por Cobrar (todas las empresas)
+          </Link>
+          <Link href="/reportes/gastos-por-naturaleza" className="btn-ghost" style={{ textDecoration: "none" }}>
+            Gastos por Naturaleza (todas las empresas)
+          </Link>
+        </div>
+      )}
+
+      {empresas.length === 0 ? (
+        <div className="card" style={{ marginTop: 24 }}>
+          <p>Todavía no tienes empresas asignadas. Pídele al superadmin que te asigne una.</p>
+        </div>
+      ) : (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+            gap: 16,
+            marginTop: 24,
+          }}
+        >
+          {empresas.map((empresa) => (
+            <Link
+              key={empresa.id.toString()}
+              href={`/empresas/${empresa.id}`}
+              className="card"
+              style={{ textDecoration: "none", color: "var(--ink)", display: "block" }}
+            >
+              <h3 style={{ fontSize: 16, marginBottom: 6 }}>{empresa.nombreComercial}</h3>
+              <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
+                {empresa.monedaOperacion} · {empresa.aplicaIgv ? `IGV ${empresa.tasaIgv}%` : "Sin IGV"}
+              </p>
+            </Link>
+          ))}
+        </div>
+      )}
+    </main>
+  );
+}
