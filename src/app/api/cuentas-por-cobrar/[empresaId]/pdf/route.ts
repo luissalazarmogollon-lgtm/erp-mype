@@ -6,6 +6,8 @@ import { calcularCuentasPorCobrarConsolidado, type CuentaCxCResumen } from "@/li
 
 export const dynamic = "force-dynamic";
 
+const MARGEN = 50;
+
 function hoyISO() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -52,10 +54,19 @@ function agruparPorCliente(cuentas: CuentaCxCResumen[]): ClienteAgrupado[] {
 // GET /api/cuentas-por-cobrar/[empresaId]/pdf
 //
 // PDF de UNA sola empresa con sus Cuentas por Cobrar pendientes,
-// consolidadas por cliente (no en orden cronológico plano como el PDF
-// consolidado de todas las empresas) — para que la gerencia de esa empresa
-// vea claramente cuánto le debe cada cliente en total, con el detalle de
-// sus facturas pendientes debajo.
+// consolidadas por cliente — para que la gerencia de esa empresa vea
+// claramente cuánto le debe cada cliente en total, con el detalle de sus
+// facturas pendientes debajo.
+//
+// El reporte anterior se armaba dejando que pdfkit partiera clientes y
+// facturas a la mitad cuando la página se llenaba, lo que dejaba el PDF
+// desordenado (una factura podía quedar cortada entre una página y la
+// siguiente, mezclada visualmente con el título). Esta versión reserva el
+// espacio exacto de cada bloque ANTES de dibujarlo (`reservarEspacio`) y
+// salta de página a propósito cuando no cabe entero, así ningún cliente
+// ni ninguna factura queda partido — y agrega numeración de página real
+// (con `bufferPages`) en vez de un pie de página que solo aparecía una
+// vez.
 //
 // Usa el mismo permiso que la pantalla de Créditos de esa empresa
 // ("creditos"): no hace falta ser superadmin, cualquiera con acceso a
@@ -83,7 +94,11 @@ export async function GET(request: Request, { params }: { params: { empresaId: s
     const clientes = agruparPorCliente(empresaData?.cuentas ?? []);
 
     const chunks: Buffer[] = [];
-    const doc = new PDFDocument({ size: "A4", margin: 50 });
+    // bufferPages: sin esto, al volver al final a dibujar el pie de
+    // página con "Página X de Y" solo se puede escribir en la ÚLTIMA
+    // página — con bufferPages se puede volver a CUALQUIER página ya
+    // generada y agregarle el pie, una vez que se sabe cuántas hay en total.
+    const doc = new PDFDocument({ size: "A4", margin: MARGEN, bufferPages: true });
     doc.on("data", (chunk) => chunks.push(chunk));
 
     const pdfBuffer: Buffer = await new Promise((resolve, reject) => {
@@ -91,75 +106,153 @@ export async function GET(request: Request, { params }: { params: { empresaId: s
       doc.on("error", reject);
 
       try {
-        // --- Encabezado ---
-        doc.fontSize(18).text("Cuentas por Cobrar", { align: "right" });
-        doc.fontSize(10).fillColor("#555").text(`Generado el ${new Date().toLocaleDateString("es-PE")}`, { align: "right" });
-        doc.moveDown(1.5);
+        const anchoUtil = doc.page.width - MARGEN * 2;
+        const limiteInferior = () => doc.page.height - doc.page.margins.bottom;
 
-        doc.fillColor("#000").fontSize(14).text(empresa.nombreComercial);
-        if (empresa.ruc) doc.fontSize(9).fillColor("#555").text(`RUC: ${empresa.ruc}`);
+        // Reserva `altura` puntos verticales antes de imprimir un bloque:
+        // si no caben en lo que queda de la página actual, salta a una
+        // página nueva ANTES de empezar a escribirlo. Así un cliente o una
+        // factura nunca queda cortado a la mitad entre dos páginas.
+        function reservarEspacio(altura: number) {
+          if (doc.y + altura > limiteInferior()) doc.addPage();
+        }
+
+        // --- Encabezado (una sola vez, en la primera página) ---
+        doc.fontSize(9).fillColor("#888").text("REPORTE DE CUENTAS POR COBRAR", { width: anchoUtil, align: "right" });
+        doc.fontSize(9).fillColor("#888").text(`Generado el ${new Date().toLocaleDateString("es-PE")}`, {
+          width: anchoUtil,
+          align: "right",
+        });
         doc.moveDown(0.6);
-        doc.fontSize(16).fillColor("#c0392b").text(`Total pendiente: S/ ${totalPorCobrar.toFixed(2)}`);
-        doc.moveDown(1.2);
+
+        doc.fontSize(17).fillColor("#000").text(empresa.nombreComercial, { width: anchoUtil });
+        if (empresa.ruc) doc.fontSize(9.5).fillColor("#666").text(`RUC ${empresa.ruc}`);
+        doc.moveDown(0.8);
+
+        // Barra con el total: es el número que la gerencia busca primero,
+        // así que va grande y destacado, no mezclado entre párrafos.
+        const yBarra = doc.y;
+        const altoBarra = 48;
+        doc.rect(MARGEN, yBarra, anchoUtil, altoBarra).fill("#fdecea");
+        doc
+          .fillColor("#c0392b")
+          .fontSize(20)
+          .text(`S/ ${totalPorCobrar.toFixed(2)}`, MARGEN + 16, yBarra + 9);
+        doc
+          .fillColor("#c0392b")
+          .fontSize(9.5)
+          .text(
+            `Total pendiente de cobro  ·  ${clientes.length} cliente${clientes.length !== 1 ? "s" : ""} con saldo`,
+            MARGEN + 16,
+            yBarra + 31
+          );
+        doc.x = MARGEN;
+        doc.y = yBarra + altoBarra + 20;
 
         if (clientes.length === 0) {
           doc.fontSize(10).fillColor("#555").text("No hay cuentas por cobrar pendientes en esta empresa.");
         } else {
-          doc
-            .fontSize(11)
-            .fillColor("#000")
-            .text(`Detalle por cliente (${clientes.length} cliente${clientes.length !== 1 ? "s" : ""} con saldo pendiente)`, {
-              underline: true,
-            });
-          doc.moveDown(0.5);
-
-          for (const cliente of clientes) {
-            doc.moveDown(0.4);
+          clientes.forEach((cliente, index) => {
             const pctCliente = totalPorCobrar > 0 ? (cliente.totalCliente / totalPorCobrar) * 100 : 0;
-            doc
-              .fontSize(11.5)
-              .fillColor("#000")
-              .text(`${cliente.cliente}${cliente.clienteRuc ? ` — RUC ${cliente.clienteRuc}` : ""}`);
-            doc
-              .fontSize(10.5)
-              .fillColor("#c0392b")
-              .text(
-                `Debe: S/ ${cliente.totalCliente.toFixed(2)}  (${pctCliente.toFixed(1)}% del total)  —  ${
-                  cliente.cuentas.length
-                } factura${cliente.cuentas.length !== 1 ? "s" : ""} pendiente${cliente.cuentas.length !== 1 ? "s" : ""}`
-              );
+            const nombreCliente = `${index + 1}.  ${cliente.cliente}${cliente.clienteRuc ? `  —  RUC ${cliente.clienteRuc}` : ""}`;
+            const totalClienteTexto = `S/ ${cliente.totalCliente.toFixed(2)}`;
+            const anchoNombre = anchoUtil - 120;
 
-            for (const cuenta of cliente.cuentas) {
-              const vencida = estaVencida(cuenta.fechaVencimiento);
-              const partesFecha = [
-                cuenta.numeroFactura ? `Factura ${cuenta.numeroFactura}` : "Sin N° de factura",
-                `Emitida ${fechaCorta(cuenta.fechaEmision)}`,
-                cuenta.fechaVencimiento ? `Vence ${fechaCorta(cuenta.fechaVencimiento)}${vencida ? " (VENCIDA)" : ""}` : null,
-              ].filter(Boolean);
+            doc.fontSize(11.5);
+            const altoNombre = doc.heightOfString(nombreCliente, { width: anchoNombre });
+            const altoEncabezadoCliente = altoNombre + 16 + 10;
+
+            // Reserva el encabezado del cliente + su primera factura juntos
+            // — un cliente nunca debe empezar al fondo de la página con
+            // sus facturas quedando solas en la siguiente.
+            const primeraCuenta = cliente.cuentas[0];
+            const alturaPrimeraFactura = primeraCuenta ? alturaFactura(doc, primeraCuenta, anchoUtil - 18) : 0;
+            reservarEspacio(altoEncabezadoCliente + alturaPrimeraFactura);
+
+            if (index > 0) {
               doc
-                .fontSize(9.5)
-                .fillColor(vencida ? "#c0392b" : "#555")
-                .text(partesFecha.join(" · "), { indent: 14 });
-              doc
-                .fontSize(9.5)
-                .fillColor("#000")
-                .text(
-                  `Saldo: S/ ${cuenta.saldoPendiente.toFixed(2)} de S/ ${cuenta.montoTotal.toFixed(2)}${
-                    cuenta.descripcion ? ` — ${cuenta.descripcion}` : ""
-                  }`,
-                  { indent: 14 }
-                );
+                .moveTo(MARGEN, doc.y)
+                .lineTo(MARGEN + anchoUtil, doc.y)
+                .strokeColor("#e5e5e5")
+                .lineWidth(1)
+                .stroke();
+              doc.moveDown(0.6);
             }
-          }
+
+            const yFila = doc.y;
+            doc.fontSize(11.5).fillColor("#000").text(nombreCliente, MARGEN, yFila, { width: anchoNombre });
+            doc
+              .fontSize(13)
+              .fillColor("#c0392b")
+              .text(totalClienteTexto, MARGEN, yFila, { width: anchoUtil, align: "right" });
+            doc.y = yFila + Math.max(altoNombre, 16);
+            doc.x = MARGEN;
+
+            doc
+              .fontSize(9.5)
+              .fillColor("#888")
+              .text(
+                `${cliente.cuentas.length} factura${cliente.cuentas.length !== 1 ? "s" : ""} pendiente${
+                  cliente.cuentas.length !== 1 ? "s" : ""
+                }  ·  ${pctCliente.toFixed(1)}% del total`,
+                MARGEN,
+                doc.y + 2,
+                { width: anchoUtil }
+              );
+            doc.moveDown(0.7);
+
+            cliente.cuentas.forEach((cuenta) => {
+              const anchoDetalle = anchoUtil - 18;
+              reservarEspacio(alturaFactura(doc, cuenta, anchoDetalle));
+
+              const vencida = estaVencida(cuenta.fechaVencimiento);
+              const lineaFecha = [
+                cuenta.numeroFactura ? `Factura ${cuenta.numeroFactura}` : "Sin N° de factura",
+                `emitida ${fechaCorta(cuenta.fechaEmision)}`,
+                cuenta.fechaVencimiento ? `vence ${fechaCorta(cuenta.fechaVencimiento)}` : null,
+              ]
+                .filter(Boolean)
+                .join("  ·  ");
+              const lineaSaldo = `Saldo S/ ${cuenta.saldoPendiente.toFixed(2)} de S/ ${cuenta.montoTotal.toFixed(2)}${
+                cuenta.descripcion ? `  —  ${cuenta.descripcion}` : ""
+              }`;
+
+              doc
+                .fontSize(9.5)
+                .fillColor(vencida ? "#c0392b" : "#666")
+                .text(lineaFecha + (vencida ? "   ·   VENCIDA" : ""), MARGEN + 18, doc.y, { width: anchoDetalle });
+              doc.fontSize(9.5).fillColor("#111").text(lineaSaldo, MARGEN + 18, doc.y + 1, { width: anchoDetalle });
+              doc.moveDown(0.55);
+            });
+
+            doc.moveDown(0.3);
+          });
         }
 
-        doc.moveDown(2);
-        doc.fontSize(8).fillColor("#888").text(
-          "Documento generado automáticamente por el sistema. Incluye solo cuentas pendientes o vencidas — las ya cobradas no aparecen aquí.",
-          50,
-          doc.page.height - 80,
-          { width: 495 }
-        );
+        // --- Pie de página en TODAS las páginas ya generadas ---
+        const totalPaginas = doc.bufferedPageRange().count;
+        for (let i = 0; i < totalPaginas; i++) {
+          doc.switchToPage(i);
+          // El pie va DENTRO del margen inferior de la página (a propósito,
+          // para no robarle espacio al contenido) — pero pdfkit trata ese
+          // margen como zona prohibida y, si se le escribe ahí sin avisar,
+          // entiende que el texto "no cabe" y agrega una página en blanco
+          // extra por cada .text() (así se generaron 9 páginas de una de 3
+          // en las pruebas). Desactivar el margen inferior de ESTA página
+          // antes de dibujar el pie evita ese efecto.
+          doc.page.margins.bottom = 0;
+          const yPie = doc.page.height - 38;
+          doc
+            .fontSize(8)
+            .fillColor("#999")
+            .text("Incluye solo cuentas pendientes o vencidas — las ya cobradas no aparecen aquí.", MARGEN, yPie, {
+              width: anchoUtil - 90,
+            });
+          doc.fontSize(8).fillColor("#999").text(`Página ${i + 1} de ${totalPaginas}`, MARGEN, yPie, {
+            width: anchoUtil,
+            align: "right",
+          });
+        }
 
         doc.end();
       } catch (errorAlArmar) {
@@ -179,4 +272,27 @@ export async function GET(request: Request, { params }: { params: { empresaId: s
     console.error("Error generando PDF de Cuentas por Cobrar por empresa:", error);
     return NextResponse.json({ error: `No se pudo generar el PDF: ${(error as Error).message}` }, { status: 500 });
   }
+}
+
+// Altura real (en puntos) que va a ocupar el bloque de una factura —
+// calculada con el texto real (una descripción larga puede envolver a 2
+// líneas), para que `reservarEspacio` decida bien si hace falta saltar de
+// página. Debe llamarse con el mismo fontSize/ancho que se usa al
+// imprimir, o el cálculo no coincide con lo dibujado.
+function alturaFactura(doc: PDFKit.PDFDocument, cuenta: CuentaCxCResumen, anchoDetalle: number): number {
+  const vencida = estaVencida(cuenta.fechaVencimiento);
+  const lineaFecha = [
+    cuenta.numeroFactura ? `Factura ${cuenta.numeroFactura}` : "Sin N° de factura",
+    `emitida ${fechaCorta(cuenta.fechaEmision)}`,
+    cuenta.fechaVencimiento ? `vence ${fechaCorta(cuenta.fechaVencimiento)}` : null,
+  ]
+    .filter(Boolean)
+    .join("  ·  ");
+  const lineaSaldo = `Saldo S/ ${cuenta.saldoPendiente.toFixed(2)} de S/ ${cuenta.montoTotal.toFixed(2)}${
+    cuenta.descripcion ? `  —  ${cuenta.descripcion}` : ""
+  }`;
+  doc.fontSize(9.5);
+  const altoFecha = doc.heightOfString(lineaFecha + (vencida ? "   ·   VENCIDA" : ""), { width: anchoDetalle });
+  const altoSaldo = doc.heightOfString(lineaSaldo, { width: anchoDetalle });
+  return altoFecha + altoSaldo + 1 + 0.55 * 9.5 * 1.2; // + el moveDown(0.55) que sigue
 }
