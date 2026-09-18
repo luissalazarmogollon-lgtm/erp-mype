@@ -14,13 +14,13 @@
 :root {
   --ink: #0f172a;
   --ink-soft: #64748b;
-  --paper-bg: #f8fafc;
+  --paper-bg: #ffffff;
   --paper: #f1f5f9;
   --paper-card: #ffffff;
   --line: #e2e8f0;
 
-  --brand: #2563eb;
-  --brand-dark: #1d4ed8;
+  --brand: #1e40af;
+  --brand-dark: #1e3a8a;
   --brand-bg: #dbeafe;
 
   --stamp: #d97706;
