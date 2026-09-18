@@ -5,6 +5,7 @@ import Link from "next/link";
 
 type Cxc = {
   id: string;
+  clienteId: string;
   cliente: string;
   clienteRuc: string | null;
   numeroFactura: string | null;
@@ -34,6 +35,9 @@ export default function CreditosPage({ params }: { params: { id: string } }) {
   const [mostrarPagadas, setMostrarPagadas] = useState(false);
   const [esSuperadmin, setEsSuperadmin] = useState(false);
   const [eliminandoId, setEliminandoId] = useState<string | null>(null);
+  // Agrupación por cliente (RN pedida: "debe agrupar las facturas por
+  // pagar por cliente") — qué grupos están expandidos, por clienteId.
+  const [clientesAbiertos, setClientesAbiertos] = useState<Record<string, boolean>>({});
 
   const [form, setForm] = useState({
     clienteId: "",
@@ -68,6 +72,29 @@ export default function CreditosPage({ params }: { params: { id: string } }) {
   const totalPorCobrar = cxcs.filter((c) => c.estado !== "pagada").reduce((acc, c) => acc + Number(c.saldoPendiente), 0);
   const cxcsVisibles = mostrarPagadas ? cxcs : cxcs.filter((c) => c.estado !== "pagada");
   const cantidadPagadas = cxcs.filter((c) => c.estado === "pagada").length;
+
+  // Agrupa las facturas visibles por cliente — mismo patrón de "grupo
+  // colapsable" que ya usa Ventas diarias, pero por clienteId en vez de
+  // por fecha. Se ordena por lo que cada cliente debe (de mayor a menor),
+  // igual que en el PDF para alta gerencia, así la pantalla y el reporte
+  // muestran las cosas en el mismo orden.
+  const gruposPorCliente = Array.from(
+    cxcsVisibles.reduce((mapa, c) => {
+      const grupo = mapa.get(c.clienteId) ?? { clienteId: c.clienteId, cliente: c.cliente, clienteRuc: c.clienteRuc, cuentas: [] as Cxc[] };
+      grupo.cuentas.push(c);
+      mapa.set(c.clienteId, grupo);
+      return mapa;
+    }, new Map<string, { clienteId: string; cliente: string; clienteRuc: string | null; cuentas: Cxc[] }>())
+      .values()
+  )
+    .map((g) => ({
+      ...g,
+      totalGrupo: g.cuentas.reduce((acc, c) => acc + Number(c.saldoPendiente), 0),
+    }))
+    .sort((a, b) => b.totalGrupo - a.totalGrupo);
+
+  const toggleCliente = (clienteId: string) =>
+    setClientesAbiertos((prev) => ({ ...prev, [clienteId]: !prev[clienteId] }));
 
   async function crearCliente() {
     const res = await fetch(`/api/empresas/${empresaId}/clientes`, {
@@ -177,9 +204,18 @@ export default function CreditosPage({ params }: { params: { id: string } }) {
         → <b>Créditos (CxC)</b>
       </p>
       <h1 style={{ fontSize: 26, marginBottom: 6 }}>Créditos a clientes</h1>
-      <p className="mono" style={{ fontSize: 12, color: "var(--alert)", marginBottom: 20 }}>
-        Total por cobrar: S/ {totalPorCobrar.toFixed(2)}
-      </p>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
+        <p className="mono" style={{ fontSize: 12, color: "var(--alert)", margin: 0 }}>
+          Total por cobrar: S/ {totalPorCobrar.toFixed(2)}
+        </p>
+        {/* Reporte para presentar a alta gerencia: agrupado por cliente con
+            el total que debe cada uno — ya existe este mismo armado en el
+            backend (calcularCuentasPorCobrarConsolidado / agruparPorCliente),
+            solo faltaba el enlace desde esta pantalla. */}
+        <a href={`/api/cuentas-por-cobrar/${empresaId}/pdf`} className="btn-ghost" style={{ fontSize: 12.5, padding: "8px 16px" }}>
+          Descargar PDF para gerencia
+        </a>
+      </div>
 
       {!mostrarForm ? (
         <button className="btn-primary" onClick={() => setMostrarForm(true)} style={{ marginBottom: 20 }}>
@@ -306,8 +342,45 @@ export default function CreditosPage({ params }: { params: { id: string } }) {
         </label>
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {cxcsVisibles.map((c) => (
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {gruposPorCliente.map((grupo) => {
+          const abierto = clientesAbiertos[grupo.clienteId] ?? false;
+          return (
+            <div key={grupo.clienteId}>
+              <button
+                type="button"
+                onClick={() => toggleCliente(grupo.clienteId)}
+                className="card"
+                style={{
+                  width: "100%",
+                  textAlign: "left",
+                  padding: 14,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  cursor: "pointer",
+                  background: "var(--paper)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 11, color: "var(--ink-soft)", transform: abierto ? "rotate(90deg)" : "none", transition: "transform .12s ease" }}>▸</span>
+                  <div>
+                    <p style={{ fontSize: 14, fontWeight: 600 }}>
+                      {grupo.cliente}{grupo.clienteRuc ? ` — RUC ${grupo.clienteRuc}` : ""}
+                    </p>
+                    <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
+                      {grupo.cuentas.length} factura{grupo.cuentas.length === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                </div>
+                <p className="mono" style={{ fontSize: 15, fontWeight: 600, color: "var(--alert)" }}>
+                  S/ {grupo.totalGrupo.toFixed(2)}
+                </p>
+              </button>
+
+              {abierto && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8, paddingLeft: 18 }}>
+                  {grupo.cuentas.map((c) => (
           <div key={c.id} className="card" style={{ padding: 14 }}>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <div>
@@ -428,7 +501,12 @@ export default function CreditosPage({ params }: { params: { id: string } }) {
               )
             )}
           </div>
-        ))}
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </main>
   );

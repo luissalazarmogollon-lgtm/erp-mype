@@ -50,6 +50,10 @@ export async function GET(request: Request, { params }: { params: { id: string }
   return NextResponse.json(
     cxcs.map((c) => ({
       id: c.id.toString(),
+      // clienteId aparte del nombre: el frontend agrupa las facturas por
+      // cliente (pantalla de Créditos) y agrupar por id es confiable ante
+      // clientes con el mismo nombre — agrupar por texto no lo era.
+      clienteId: c.clienteId.toString(),
       cliente: c.cliente.nombre,
       clienteRuc: c.cliente.docIdentidad,
       numeroFactura: c.numeroFactura,

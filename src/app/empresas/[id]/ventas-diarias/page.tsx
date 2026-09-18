@@ -482,6 +482,9 @@ function FacturacionServicios({ empresaId }: { empresaId: string }) {
   const [cuentasBancarias, setCuentasBancarias] = useState<{ id: string; bancoNombre: string; saldoActual: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [mostrarPagadas, setMostrarPagadas] = useState(false);
+  // Agrupación por mes (RN pedida: "En facturación debe mostrar las
+  // facturas por mes") — qué meses están expandidos, por clave "YYYY-MM".
+  const [mesesAbiertos, setMesesAbiertos] = useState<Record<string, boolean>>({});
 
   const [form, setForm] = useState({
     clienteId: "",
@@ -514,6 +517,33 @@ function FacturacionServicios({ empresaId }: { empresaId: string }) {
   const totalPorCobrar = facturas.filter((f) => f.estado !== "pagada").reduce((acc, f) => acc + Number(f.saldoPendiente), 0);
   const facturasVisibles = mostrarPagadas ? facturas : facturas.filter((f) => f.estado !== "pagada");
   const cantidadPagadas = facturas.filter((f) => f.estado === "pagada").length;
+
+  // Agrupa las facturas visibles por mes de emisión (YYYY-MM) — mismo
+  // patrón de "grupo colapsable" que ya usa VentasDiariasClasica para
+  // agrupar por día, pero a nivel mes. Los meses más recientes primero.
+  const gruposPorMes = Array.from(
+    facturasVisibles.reduce((mapa, f) => {
+      const clave = f.fechaEmision.slice(0, 7);
+      const grupo = mapa.get(clave) ?? { mes: clave, facturas: [] as Cxc[] };
+      grupo.facturas.push(f);
+      mapa.set(clave, grupo);
+      return mapa;
+    }, new Map<string, { mes: string; facturas: Cxc[] }>())
+      .values()
+  )
+    .map((g) => ({
+      ...g,
+      totalMes: g.facturas.reduce((acc, f) => acc + Number(f.saldoPendiente), 0),
+      montoEmitidoMes: g.facturas.reduce((acc, f) => acc + Number(f.montoTotal), 0),
+    }))
+    .sort((a, b) => (a.mes < b.mes ? 1 : -1));
+
+  const etiquetaMes = (mes: string) => {
+    const texto = new Date(`${mes}-01T00:00:00Z`).toLocaleDateString("es-PE", { month: "long", year: "numeric", timeZone: "UTC" });
+    return texto.charAt(0).toUpperCase() + texto.slice(1);
+  };
+
+  const toggleMes = (mes: string) => setMesesAbiertos((prev) => ({ ...prev, [mes]: !prev[mes] }));
 
   async function crearCliente() {
     const res = await fetch(`/api/empresas/${empresaId}/clientes`, {
@@ -747,8 +777,43 @@ function FacturacionServicios({ empresaId }: { empresaId: string }) {
         </label>
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {facturasVisibles.map((f) => (
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {gruposPorMes.map((grupo) => {
+          const abierto = mesesAbiertos[grupo.mes] ?? true;
+          return (
+            <div key={grupo.mes}>
+              <button
+                type="button"
+                onClick={() => toggleMes(grupo.mes)}
+                className="card"
+                style={{
+                  width: "100%",
+                  textAlign: "left",
+                  padding: 14,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  cursor: "pointer",
+                  background: "var(--paper)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 11, color: "var(--ink-soft)", transform: abierto ? "rotate(90deg)" : "none", transition: "transform .12s ease" }}>▸</span>
+                  <div>
+                    <p style={{ fontSize: 14, fontWeight: 600, textTransform: "capitalize" }}>{etiquetaMes(grupo.mes)}</p>
+                    <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
+                      {grupo.facturas.length} factura{grupo.facturas.length === 1 ? "" : "s"} · emitido S/ {grupo.montoEmitidoMes.toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+                <p className="mono" style={{ fontSize: 15, fontWeight: 600, color: grupo.totalMes > 0 ? "var(--alert)" : "var(--teal)" }}>
+                  S/ {grupo.totalMes.toFixed(2)}
+                </p>
+              </button>
+
+              {abierto && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8, paddingLeft: 18 }}>
+                  {grupo.facturas.map((f) => (
           <div key={f.id} className="card" style={{ padding: 14 }}>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <div>
@@ -846,7 +911,12 @@ function FacturacionServicios({ empresaId }: { empresaId: string }) {
               )
             )}
           </div>
-        ))}
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
         {facturasVisibles.length === 0 && (
           <p style={{ color: "var(--ink-soft)", fontSize: 14 }}>Todavía no hay facturas registradas.</p>
         )}
