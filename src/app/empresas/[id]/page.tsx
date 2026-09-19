@@ -87,12 +87,19 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
 
   return (
     <main style={{ maxWidth: 800, margin: "0 auto", padding: "32px 24px" }}>
-      <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 6 }}>
-        <Link href="/dashboard" style={{ color: "inherit" }}>
-          Tus empresas
-        </Link>{" "}
-        → <b>{empresa.nombreComercial}</b>
-      </p>
+      {/* "Tus empresas →" solo tiene sentido para el superadmin de
+          plataforma, que sí administra varias empresas y puede querer
+          volver al selector — un usuario normal solo tiene asignada ESTA
+          empresa (nunca ve otra), así que para él esa migaja no lleva a
+          ningún lado útil y solo agrega ruido. */}
+      {usuarioActual.esSuperadminPlataforma && (
+        <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 6 }}>
+          <Link href="/dashboard" style={{ color: "inherit" }}>
+            Tus empresas
+          </Link>{" "}
+          → <b>{empresa.nombreComercial}</b>
+        </p>
+      )}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <h1 style={{ fontSize: 26, marginBottom: 6 }}>{empresa.nombreComercial}</h1>
         {usuarioActual.esSuperadminPlataforma && (
