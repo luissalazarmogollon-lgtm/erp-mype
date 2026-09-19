@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { NATURALEZAS_EGRESO, CATEGORIAS_POR_NATURALEZA } from "@/lib/naturalezaEgreso";
 import { TIPOS_COMPROBANTE } from "@/lib/tiposComprobante";
 
@@ -175,10 +174,7 @@ export default function CajaChicaPage({ params }: { params: { id: string } }) {
   return (
     <main style={{ maxWidth: 750, margin: "0 auto", padding: "32px 24px" }}>
       <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 6 }}>
-        <Link href={`/empresas/${empresaId}`} style={{ color: "inherit" }}>
-          Empresa
-        </Link>{" "}
-        → <b>Caja Chica</b>
+        <b>Caja Chica</b>
       </p>
       <h1 style={{ fontSize: 26, marginBottom: 6 }}>Caja Chica</h1>
       <p style={{ color: "var(--ink-soft)", fontSize: 13, marginBottom: 20 }}>

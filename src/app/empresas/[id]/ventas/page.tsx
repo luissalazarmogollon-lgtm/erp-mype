@@ -28,10 +28,7 @@ export default function VentasPage({ params }: { params: { id: string } }) {
   return (
     <main style={{ maxWidth: 800, margin: "0 auto", padding: "32px 24px" }}>
       <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 6 }}>
-        <Link href={`/empresas/${empresaId}`} style={{ color: "inherit" }}>
-          Empresa
-        </Link>{" "}
-        → <b>Ventas</b>
+        <b>Ventas</b>
       </p>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <h1 style={{ fontSize: 26 }}>Ventas</h1>

@@ -158,10 +158,7 @@ export default function ProductosPage({ params }: { params: { id: string } }) {
   return (
     <main style={{ maxWidth: 800, margin: "0 auto", padding: "32px 24px" }}>
       <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 6 }}>
-        <Link href={`/empresas/${empresaId}`} style={{ color: "inherit" }}>
-          Empresa
-        </Link>{" "}
-        → <b>Productos</b>
+        <b>Productos</b>
       </p>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
         <h1 style={{ fontSize: 26 }}>Productos</h1>

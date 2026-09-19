@@ -267,10 +267,7 @@ export default function ClientesPage({ params }: { params: { id: string } }) {
   return (
     <main style={{ maxWidth: 760, margin: "0 auto", padding: "32px 24px" }}>
       <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 6 }}>
-        <Link href={`/empresas/${empresaId}`} style={{ color: "inherit" }}>
-          Empresa
-        </Link>{" "}
-        → <b>Clientes</b>
+        <b>Clientes</b>
       </p>
       <h1 style={{ fontSize: 26, marginBottom: 6 }}>Clientes</h1>
       <p style={{ color: "var(--ink-soft)", fontSize: 13, marginBottom: 20 }}>

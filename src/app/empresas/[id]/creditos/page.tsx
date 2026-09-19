@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 
 type Cxc = {
   id: string;
@@ -198,10 +197,7 @@ export default function CreditosPage({ params }: { params: { id: string } }) {
   return (
     <main style={{ maxWidth: 700, margin: "0 auto", padding: "32px 24px" }}>
       <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 6 }}>
-        <Link href={`/empresas/${empresaId}`} style={{ color: "inherit" }}>
-          Empresa
-        </Link>{" "}
-        → <b>Créditos (CxC)</b>
+        <b>Créditos (CxC)</b>
       </p>
       <h1 style={{ fontSize: 26, marginBottom: 6 }}>Créditos a clientes</h1>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>

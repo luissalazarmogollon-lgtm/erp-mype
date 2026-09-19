@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { NATURALEZAS_EGRESO, CATEGORIAS_POR_NATURALEZA } from "@/lib/naturalezaEgreso";
 import { TIPOS_COMPROBANTE } from "@/lib/tiposComprobante";
 
@@ -320,10 +319,7 @@ export default function GastosPage({ params }: { params: { id: string } }) {
   return (
     <main style={{ maxWidth: 750, margin: "0 auto", padding: "32px 24px" }}>
       <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 6 }}>
-        <Link href={`/empresas/${empresaId}`} style={{ color: "inherit" }}>
-          Empresa
-        </Link>{" "}
-        → <b>Gastos y Costos</b>
+        <b>Gastos y Costos</b>
       </p>
       <h1 style={{ fontSize: 26, marginBottom: 6 }}>Gastos y Costos</h1>
       <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 20 }}>

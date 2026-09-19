@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 
 // Este mismo módulo ("ventas_diarias" — el permiso no cambió de nombre a
 // propósito, para no tener que reasignarlo a nadie) sirve dos pantallas
@@ -202,10 +201,7 @@ function VentasDiariasClasica({ empresaId }: { empresaId: string }) {
   return (
     <main style={{ maxWidth: 700, margin: "0 auto", padding: "32px 24px" }}>
       <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 6 }}>
-        <Link href={`/empresas/${empresaId}`} style={{ color: "inherit" }}>
-          Empresa
-        </Link>{" "}
-        → <b>Ventas diarias</b>
+        <b>Ventas diarias</b>
       </p>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
         <h1 style={{ fontSize: 26 }}>Ventas diarias</h1>
@@ -660,10 +656,7 @@ function FacturacionServicios({ empresaId }: { empresaId: string }) {
   return (
     <main style={{ maxWidth: 700, margin: "0 auto", padding: "32px 24px" }}>
       <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 6 }}>
-        <Link href={`/empresas/${empresaId}`} style={{ color: "inherit" }}>
-          Empresa
-        </Link>{" "}
-        → <b>Facturación</b>
+        <b>Facturación</b>
       </p>
       <h1 style={{ fontSize: 26, marginBottom: 6 }}>Facturación</h1>
       <p style={{ color: "var(--ink-soft)", fontSize: 13, marginBottom: 6 }}>

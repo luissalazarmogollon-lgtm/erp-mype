@@ -299,10 +299,7 @@ export default function ActividadesPage({ params }: { params: { id: string } }) 
   return (
     <main style={{ maxWidth: 980, margin: "0 auto", padding: "32px 24px" }}>
       <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 6 }}>
-        <Link href={`/empresas/${empresaId}`} style={{ color: "inherit" }}>
-          Empresa
-        </Link>{" "}
-        → <b>Actividades</b>
+        <b>Actividades</b>
       </p>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8, gap: 16, flexWrap: "wrap" }}>

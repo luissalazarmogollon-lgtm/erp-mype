@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { NATURALEZAS_EGRESO, CATEGORIAS_POR_NATURALEZA } from "@/lib/naturalezaEgreso";
 import { TIPOS_COMPROBANTE } from "@/lib/tiposComprobante";
 
@@ -222,10 +221,7 @@ export default function CuentasPorPagarPage({ params }: { params: { id: string }
   return (
     <main style={{ maxWidth: 700, margin: "0 auto", padding: "32px 24px" }}>
       <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 6 }}>
-        <Link href={`/empresas/${empresaId}`} style={{ color: "inherit" }}>
-          Empresa
-        </Link>{" "}
-        → <b>Cuentas por pagar</b>
+        <b>Cuentas por pagar</b>
       </p>
       <h1 style={{ fontSize: 26, marginBottom: 6 }}>Cuentas por pagar</h1>
       <p className="mono" style={{ fontSize: 12, color: "var(--alert)", marginBottom: 20 }}>

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 
 type Cuota = {
   id: string;
@@ -166,10 +165,7 @@ export default function PrestamosPage({ params }: { params: { id: string } }) {
   return (
     <main style={{ maxWidth: 720, margin: "0 auto", padding: "32px 24px" }}>
       <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 6 }}>
-        <Link href={`/empresas/${empresaId}`} style={{ color: "inherit" }}>
-          Empresa
-        </Link>{" "}
-        → <b>Préstamos</b>
+        <b>Préstamos</b>
       </p>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
         <h1 style={{ fontSize: 26 }}>Préstamos</h1>

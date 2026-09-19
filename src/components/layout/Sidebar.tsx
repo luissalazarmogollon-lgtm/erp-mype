@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { MODULOS_SOLO_PRODUCTOS, MODULOS_SOLO_SERVICIOS, type ModuloKey } from "@/lib/permisosModulo";
 
 /**
  * Sidebar compartido de erp-mype.
@@ -17,13 +18,32 @@ import { useEffect, useState } from "react";
  * src/app/empresas/[id]/ — si creas o renombras una carpeta ahí, actualiza
  * también su entrada aquí.
  *
- * No toca tu lógica de permisos: si filtras el menú por
- * `UsuarioEmpresa.permisos`, hazlo donde importes este componente
- * (pasando una lista ya filtrada), no dentro de él.
+ * SEGREGACIÓN DE FUNCIONES: cada link lleva la lista de `modulos` (claves
+ * de permisosModulo.ts) que dan acceso a esa pantalla — el MISMO criterio
+ * que ya usa el panel de la empresa (ACCESOS_DIRECTOS en
+ * src/app/empresas/[id]/page.tsx) para decidir qué accesos directos
+ * mostrar, para que ambos lugares coincidan siempre. El componente pide
+ * `/api/empresas/[id]/mi-acceso` y oculta: (a) cualquier link cuyos
+ * módulos no calcen con los permisos de la persona (salvo accesoTotal o
+ * superadmin de plataforma, que ven todo), y (b) un GRUPO completo si,
+ * después de ese filtro, no le queda ningún link adentro — así nunca se ve
+ * un grupo vacío ("Finanzas" sin nada debajo). Antes el menú mostraba
+ * TODO a cualquiera; si la persona entraba a un módulo sin permiso, la
+ * pantalla igual intentaba cargar datos que la API le negaba (403) y
+ * varias de esas pantallas no manejaban ese caso — de ahí el
+ * "Application error: a client-side exception" que se reportó. Ocultar el
+ * link evita que la persona llegue ahí desde el menú.
  */
 
-type NavLink = { label: string; segment: string };
+type NavLink = { label: string; segment: string; modulos: ModuloKey[] };
 type NavGroup = { label: string; icon: JSX.Element; children: NavLink[] };
+
+type MiAcceso = {
+  esSuperadminPlataforma: boolean;
+  accesoTotal: boolean;
+  permisos: string[];
+  esServicios: boolean;
+};
 
 const IconGrid = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -71,55 +91,74 @@ const IconChevron = (
 );
 
 // segment = nombre EXACTO de la carpeta real dentro de src/app/empresas/[id]/
+// modulos = las mismas claves que ACCESOS_DIRECTOS usa en
+// src/app/empresas/[id]/page.tsx para esa misma pantalla — si agregas o
+// cambias una pantalla ahí, refleja el mismo cambio aquí.
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Comercial",
     icon: IconUsers,
     children: [
-      { label: "Clientes", segment: "clientes" },
-      { label: "Ventas", segment: "ventas" },
-      { label: "Ventas diarias", segment: "ventas-diarias" },
+      { label: "Clientes", segment: "clientes", modulos: ["ventas_pos", "ventas_diarias", "creditos"] },
+      { label: "Ventas", segment: "ventas", modulos: ["ventas_pos"] },
+      { label: "Ventas diarias", segment: "ventas-diarias", modulos: ["ventas_diarias"] },
     ],
   },
   {
     label: "Compras",
     icon: IconBag,
     children: [
-      { label: "Proveedores", segment: "proveedores" },
-      { label: "Solicitudes de pedido", segment: "solicitudes-pedido" },
-      { label: "Compras", segment: "compras" },
+      { label: "Proveedores", segment: "proveedores", modulos: ["compras"] },
+      {
+        label: "Solicitudes de pedido",
+        segment: "solicitudes-pedido",
+        modulos: [
+          "solicitudes_pedido",
+          "aprobar_solicitudes_pedido",
+          "despachar_solicitudes_pedido",
+          "aprobar_solicitudes_almacen",
+        ],
+      },
+      { label: "Compras", segment: "compras", modulos: ["compras", "recepcionar_compras_almacen"] },
     ],
   },
   {
     label: "Inventario",
     icon: IconBox,
     children: [
-      { label: "Productos", segment: "productos" },
-      { label: "Insumos", segment: "insumos" },
-      { label: "Locales", segment: "locales" },
-      { label: "Mermas", segment: "mermas" },
+      { label: "Productos", segment: "productos", modulos: ["productos"] },
+      { label: "Insumos", segment: "insumos", modulos: ["insumos"] },
+      { label: "Locales", segment: "locales", modulos: ["locales"] },
+      { label: "Mermas", segment: "mermas", modulos: ["mermas"] },
     ],
   },
   {
     label: "Finanzas",
     icon: IconWallet,
     children: [
-      { label: "Caja chica", segment: "caja-chica" },
-      { label: "Flujo de caja", segment: "flujo-caja" },
-      { label: "Créditos (cuentas por cobrar)", segment: "creditos" },
-      { label: "Cuentas por pagar", segment: "cuentas-por-pagar" },
-      { label: "Gastos", segment: "gastos" },
-      { label: "Préstamos", segment: "prestamos" },
-      { label: "Alertas de costo", segment: "alertas-costo" },
-      { label: "Estado de resultados", segment: "estado-resultados" },
+      { label: "Caja chica", segment: "caja-chica", modulos: ["caja_chica"] },
+      { label: "Flujo de caja", segment: "flujo-caja", modulos: ["flujo_caja"] },
+      { label: "Créditos (cuentas por cobrar)", segment: "creditos", modulos: ["creditos"] },
+      {
+        label: "Cuentas por pagar",
+        segment: "cuentas-por-pagar",
+        modulos: ["cuentas_por_pagar", "cuentas_por_pagar_registrar"],
+      },
+      { label: "Gastos", segment: "gastos", modulos: ["gastos"] },
+      { label: "Préstamos", segment: "prestamos", modulos: ["prestamos"] },
+      // Alertas de costo no tiene un permiso propio — usa "compras", igual
+      // que en ACCESOS_DIRECTOS (empresas/[id]/page.tsx no la lista como
+      // acceso directo, pero la API de alertas-costo exige ese permiso).
+      { label: "Alertas de costo", segment: "alertas-costo", modulos: ["compras"] },
+      { label: "Estado de resultados", segment: "estado-resultados", modulos: ["estado_resultados"] },
     ],
   },
   {
     label: "Otros",
     icon: IconMore,
     children: [
-      { label: "Actividades", segment: "actividades" },
-      { label: "RR.HH.", segment: "rrhh" },
+      { label: "Actividades", segment: "actividades", modulos: ["actividades", "actividades_propias"] },
+      { label: "RR.HH.", segment: "rrhh", modulos: ["rrhh"] },
     ],
   },
 ];
@@ -158,6 +197,63 @@ export default function Sidebar({
     return initial;
   });
 
+  // Segregación de funciones: qué puede ver esta persona EN ESTA empresa.
+  // null mientras carga — durante ese instante no se muestra ningún grupo
+  // (mejor un menú vacío por medio segundo que mostrar de más y corregir).
+  const [acceso, setAcceso] = useState<MiAcceso | null>(null);
+
+  useEffect(() => {
+    if (!empresaId) return;
+    let cancelado = false;
+    fetch(`/api/empresas/${empresaId}/mi-acceso`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelado || !data) return;
+        setAcceso({
+          esSuperadminPlataforma: Boolean(data.esSuperadminPlataforma),
+          accesoTotal: Boolean(data.accesoTotal),
+          permisos: (data.permisos as string[] | null) ?? [],
+          esServicios: Boolean(data.esServicios),
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelado = true;
+    };
+  }, [empresaId]);
+
+  // Ve todo sin filtrar: el superadmin de plataforma, o quien tenga
+  // "acceso total" asignado EN ESTA empresa (el "super usuario" de esa
+  // empresa) — ver src/lib/auth.ts.
+  const veTodo = !!(acceso?.esSuperadminPlataforma || acceso?.accesoTotal);
+
+  // Un link exclusivo de un tipo de negocio (ver MODULOS_SOLO_PRODUCTOS /
+  // MODULOS_SOLO_SERVICIOS) no aplica al tipo de ESTA empresa — mismo
+  // criterio que ya usa el panel de la empresa (seOculta).
+  function aplicaAlTipoDeNegocio(modulos: ModuloKey[]): boolean {
+    if (!acceso) return false;
+    const esSoloProductos = modulos.every((m) => (MODULOS_SOLO_PRODUCTOS as string[]).includes(m));
+    const esSoloServicios = modulos.every((m) => (MODULOS_SOLO_SERVICIOS as string[]).includes(m));
+    if (acceso.esServicios && esSoloProductos) return false;
+    if (!acceso.esServicios && esSoloServicios) return false;
+    return true;
+  }
+
+  function tienePermiso(modulos: ModuloKey[]): boolean {
+    if (!acceso) return false;
+    if (veTodo) return true;
+    return modulos.some((m) => acceso.permisos.includes(m));
+  }
+
+  // El menú final: cada grupo, con solo los links a los que la persona
+  // tiene acceso — y el grupo entero desaparece si no le queda ninguno
+  // (ej. alguien de Cocina/Almacén sin ningún permiso de Finanzas no debe
+  // ver un grupo "Finanzas" vacío).
+  const gruposVisibles = NAV_GROUPS.map((grupo) => ({
+    ...grupo,
+    children: grupo.children.filter((c) => aplicaAlTipoDeNegocio(c.modulos) && tienePermiso(c.modulos)),
+  })).filter((grupo) => grupo.children.length > 0);
+
   const toggleGroup = (label: string) =>
     setOpenGroups((prev) => ({ ...prev, [label]: !prev[label] }));
 
@@ -194,7 +290,13 @@ export default function Sidebar({
           {!collapsed && "Dashboard"}
         </Link>
 
-        {NAV_GROUPS.map((group) => {
+        {acceso === null && !collapsed && (
+          <p className="mono" style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", padding: "10px 12px" }}>
+            Cargando menú…
+          </p>
+        )}
+
+        {gruposVisibles.map((group) => {
           const open = !!openGroups[group.label];
           return (
             <div key={group.label}>

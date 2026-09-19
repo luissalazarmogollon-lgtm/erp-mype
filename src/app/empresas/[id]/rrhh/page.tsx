@@ -92,10 +92,7 @@ export default function RrhhPage({ params }: { params: { id: string } }) {
   return (
     <main style={{ maxWidth: 800, margin: "0 auto", padding: "32px 24px" }}>
       <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 6 }}>
-        <Link href={`/empresas/${empresaId}`} style={{ color: "inherit" }}>
-          Empresa
-        </Link>{" "}
-        → <b>RRHH</b>
+        <b>RRHH</b>
       </p>
       <h1 style={{ fontSize: 26, marginBottom: 6 }}>RRHH — Trabajadores</h1>
       <p style={{ color: "var(--ink-soft)", fontSize: 13, marginBottom: 20 }}>

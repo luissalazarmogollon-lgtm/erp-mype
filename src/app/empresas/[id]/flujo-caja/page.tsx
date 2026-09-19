@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 
 type Cuenta = { id: string; bancoNombre: string; numeroCuenta: string | null; moneda: string; saldoActual: string };
 type MovimientoItem = { id: string; tipo: string; monto: number; concepto: string; fecha: string };
@@ -70,10 +69,7 @@ export default function FlujoCajaPage({ params }: { params: { id: string } }) {
   return (
     <main style={{ maxWidth: 750, margin: "0 auto", padding: "32px 24px" }}>
       <p className="mono" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 6 }}>
-        <Link href={`/empresas/${empresaId}`} style={{ color: "inherit" }}>
-          Empresa
-        </Link>{" "}
-        → <b>Flujo de Caja</b>
+        <b>Flujo de Caja</b>
       </p>
       <h1 style={{ fontSize: 26, marginBottom: 6 }}>Flujo de Caja</h1>
       <div style={{ marginBottom: 20 }}>
