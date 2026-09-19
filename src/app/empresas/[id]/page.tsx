@@ -151,13 +151,6 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
             No tienes acceso a ningún módulo de esta empresa todavía. Pídele al superadmin que te lo asigne.
           </p>
         )}
-        {esServicios && acceso.accesoTotal && (
-          <p className="mono" style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 10 }}>
-            Esta empresa es de tipo Servicios: Insumos, Mermas, Productos y recetas, Ventas por producto (POS),
-            Compras, Proveedores y Solicitudes de Pedido están ocultos porque no maneja inventario. En su lugar
-            factura a sus clientes desde "Facturación", que registra directamente en Cuentas por Cobrar.
-          </p>
-        )}
       </div>
 
       {/* "Equipo asignado" expone correos y niveles de acceso de TODAS las
