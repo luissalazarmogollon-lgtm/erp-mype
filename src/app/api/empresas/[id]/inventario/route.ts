@@ -66,10 +66,6 @@ const itemContadoSchema = z.object({
   // Un conteo físico nunca puede ser negativo — es lo que la persona
   // encontró en el almacén.
   cantidadContada: z.number().min(0),
-  // Solo obligatorio cuando el conteo da MÁS de lo que el sistema tenía
-  // registrado (ver validación más abajo) — es el costo unitario del
-  // excedente encontrado.
-  costoUnitarioExcedente: z.number().min(0).optional(),
 });
 
 const registrarConteoSchema = z.object({
@@ -84,18 +80,23 @@ const registrarConteoSchema = z.object({
 //     almacén), no un delta — este endpoint calcula
 //     delta = cantidadContada - stockActual internamente.
 //   - Si delta === 0 (el conteo coincide con lo registrado), no se toca.
-//   - Si delta > 0 (sobrante), se exige costoUnitarioExcedente y se crea
-//     un LoteCompra nuevo, igual que un ajuste manual con cantidad > 0.
+//   - Si delta > 0 (sobrante), se crea un LoteCompra nuevo al costo
+//     promedio que el ítem YA tenía — este módulo es solo para contar
+//     cantidades (la primera carga de stock); costear no es función de
+//     quien hace el conteo físico. Como el costo del excedente es igual
+//     al costo promedio actual, el promedio ponderado no cambia. De aquí
+//     en adelante, el Kardex/costo se alimenta de Órdenes de Compra
+//     (ingresos) y Solicitudes de Pedido (salidas) — este módulo de
+//     Inventario es una herramienta puntual para la carga inicial.
 //   - Si delta < 0 (faltante), se consume de los lotes existentes en
 //     orden PEPS, igual que un ajuste manual con cantidad < 0. Como la
 //     cantidad contada nunca puede ser negativa, el stock resultante
 //     siempre es >= 0 (RN-033 no puede violarse desde este endpoint).
 // Todo se procesa en UNA sola transacción: primero se valida CADA ítem
-// (costo del excedente presente, lotes suficientes para cubrir cualquier
-// faltante) y solo si TODOS pasan se aplican los cambios — así una
-// persona que acaba de contar decenas de ítems no pierde su trabajo por
-// un solo ítem con problema; ve de una vez la lista completa de qué
-// corregir antes de grabar.
+// (lotes suficientes para cubrir cualquier faltante) y solo si TODOS
+// pasan se aplican los cambios — así una persona que acaba de contar
+// decenas de ítems no pierde su trabajo por un solo ítem con problema; ve
+// de una vez la lista completa de qué corregir antes de grabar.
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   const usuarioActual = await getUsuarioActual();
   if (!usuarioActual) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
@@ -149,7 +150,6 @@ export async function POST(request: Request, { params }: { params: { id: string 
         stockActual: number;
         costoActual: number;
         cantidadContada: number;
-        costoUnitarioExcedente?: number;
         delta: number;
       };
       const aAplicar: ItemAAplicar[] = [];
@@ -165,13 +165,6 @@ export async function POST(request: Request, { params }: { params: { id: string 
         const costoActual = Number(registro.costoPromedioActual);
         const delta = item.cantidadContada - stockActual;
 
-        if (delta > 0 && item.costoUnitarioExcedente === undefined) {
-          errores.push(
-            `"${registro.nombre}": el conteo (${item.cantidadContada}) es mayor al stock registrado (${stockActual}) — falta indicar el costo unitario del excedente.`
-          );
-          continue;
-        }
-
         if (delta === 0) continue; // coincide con lo registrado, nada que hacer
 
         aAplicar.push({
@@ -181,7 +174,6 @@ export async function POST(request: Request, { params }: { params: { id: string 
           stockActual,
           costoActual,
           cantidadContada: item.cantidadContada,
-          costoUnitarioExcedente: item.costoUnitarioExcedente,
           delta,
         });
       }
@@ -214,10 +206,11 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
       for (const item of aAplicar) {
         const nuevoStock = item.stockActual + item.delta;
-        const nuevoCosto =
-          item.delta > 0
-            ? (item.stockActual * item.costoActual + item.delta * (item.costoUnitarioExcedente ?? 0)) / nuevoStock
-            : item.costoActual;
+        // El costo promedio nunca cambia por un conteo físico: al
+        // sobrante se le asigna el mismo costo promedio que el ítem ya
+        // tenía (costear no es función de quien cuenta), y al faltante no
+        // le toca cambiar el promedio de lo que queda.
+        const nuevoCosto = item.costoActual;
 
         if (item.tipo === "insumo") {
           await tx.insumo.update({
@@ -239,7 +232,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
               origen: "ajuste_inventario",
               cantidadInicial: item.delta,
               cantidadDisponible: item.delta,
-              costoUnitario: item.costoUnitarioExcedente ?? 0,
+              costoUnitario: item.costoActual,
               referenciaTipo: "ajuste_inventario",
             },
           });
@@ -249,7 +242,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
               ...(item.tipo === "insumo" ? { insumoId: item.id } : { productoId: item.id }),
               tipo: "ajuste_inventario",
               cantidad: item.delta,
-              costoUnitario: item.costoUnitarioExcedente ?? 0,
+              costoUnitario: item.costoActual,
               loteId: lote.id,
               usuarioId: usuarioActual.id,
               referenciaTipo: "ajuste_inventario",

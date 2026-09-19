@@ -17,8 +17,6 @@ type Catalogo = { insumos: Item[]; productos: Item[] };
 
 type Tipo = "insumo" | "producto";
 
-type EntradaConteo = { contado: string; costoExcedente: string };
-
 function clave(tipo: Tipo, id: string) {
   return `${tipo}:${id}`;
 }
@@ -46,7 +44,7 @@ export default function InventarioPage({ params }: { params: { id: string } }) {
   const [datos, setDatos] = useState<Catalogo | null>(null);
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
-  const [entradas, setEntradas] = useState<Record<string, EntradaConteo>>({});
+  const [entradas, setEntradas] = useState<Record<string, string>>({});
   const [errores, setErrores] = useState<string[]>([]);
   const [resultado, setResultado] = useState<string | null>(null);
   const [grabando, setGrabando] = useState(false);
@@ -76,59 +74,31 @@ export default function InventarioPage({ params }: { params: { id: string } }) {
   const gruposProductos = useMemo(() => (datos ? agruparPorCategoria(datos.productos) : []), [datos]);
 
   function actualizarContado(tipo: Tipo, id: string, valor: string) {
-    setEntradas((prev) => ({
-      ...prev,
-      [clave(tipo, id)]: { contado: valor, costoExcedente: prev[clave(tipo, id)]?.costoExcedente ?? "" },
-    }));
-  }
-  function actualizarCosto(tipo: Tipo, id: string, valor: string) {
-    setEntradas((prev) => ({
-      ...prev,
-      [clave(tipo, id)]: { contado: prev[clave(tipo, id)]?.contado ?? "", costoExcedente: valor },
-    }));
+    setEntradas((prev) => ({ ...prev, [clave(tipo, id)]: valor }));
   }
 
-  const totalContados = Object.values(entradas).filter((e) => e.contado.trim() !== "").length;
+  const totalContados = Object.values(entradas).filter((v) => v.trim() !== "").length;
 
   async function handleGrabar() {
     setErrores([]);
     setResultado(null);
     if (!datos) return;
 
-    const items: { tipo: Tipo; id: string; cantidadContada: number; costoUnitarioExcedente?: number }[] = [];
+    const items: { tipo: Tipo; id: string; cantidadContada: number }[] = [];
     const erroresLocal: string[] = [];
 
     function procesar(tipo: Tipo, lista: Item[]) {
       for (const it of lista) {
-        const entrada = entradas[clave(tipo, it.id)];
-        if (!entrada || entrada.contado.trim() === "") continue; // no se contó — se omite, no se toca
+        const valor = entradas[clave(tipo, it.id)];
+        if (valor === undefined || valor.trim() === "") continue; // no se contó — se omite, no se toca
 
-        const contado = Number(entrada.contado);
+        const contado = Number(valor);
         if (!Number.isFinite(contado) || contado < 0) {
           erroresLocal.push(`"${it.nombre}": la cantidad contada no es válida.`);
           continue;
         }
 
-        const stockActual = Number(it.stockActual);
-        let costoUnitarioExcedente: number | undefined;
-
-        if (contado > stockActual) {
-          const costoTxt = entrada.costoExcedente.trim();
-          if (costoTxt === "") {
-            erroresLocal.push(
-              `"${it.nombre}": contaste ${contado} y el sistema tenía ${stockActual} — indica el costo unitario del excedente.`
-            );
-            continue;
-          }
-          const costo = Number(costoTxt);
-          if (!Number.isFinite(costo) || costo < 0) {
-            erroresLocal.push(`"${it.nombre}": el costo del excedente no es válido.`);
-            continue;
-          }
-          costoUnitarioExcedente = costo;
-        }
-
-        items.push({ tipo, id: it.id, cantidadContada: contado, costoUnitarioExcedente });
+        items.push({ tipo, id: it.id, cantidadContada: contado });
       }
     }
 
@@ -146,7 +116,7 @@ export default function InventarioPage({ params }: { params: { id: string } }) {
 
     if (
       !window.confirm(
-        `¿Grabar el conteo de ${items.length} ítem(s)? Esto actualiza el stock y el costo donde corresponda, y no se puede deshacer.`
+        `¿Grabar el conteo de ${items.length} ítem(s)? Esto actualiza el stock según lo contado y no se puede deshacer.`
       )
     ) {
       return;
@@ -180,8 +150,8 @@ export default function InventarioPage({ params }: { params: { id: string } }) {
       <h1 style={{ fontSize: 26, marginBottom: 6 }}>Conteo físico de inventario</h1>
       <p style={{ color: "var(--ink-soft)", fontSize: 13, marginBottom: 20 }}>
         Cuenta lo que tienes en almacén insumo por insumo y producto por producto, organizado por categoría. Escribe
-        la cantidad que encontraste solo en los ítems que cuentes — los que dejes en blanco no se tocan. Al final,
-        graba todo de una sola vez.
+        solo la cantidad que encontraste — los ítems que dejes en blanco no se tocan. No hace falta indicar costos:
+        un sobrante se registra al costo promedio que el ítem ya tenía. Al final, graba todo de una sola vez.
       </p>
 
       {cargando && <p style={{ color: "var(--ink-soft)" }}>Cargando inventario…</p>}
@@ -204,7 +174,6 @@ export default function InventarioPage({ params }: { params: { id: string } }) {
                   items={items}
                   entradas={entradas}
                   onContado={actualizarContado}
-                  onCosto={actualizarCosto}
                 />
               ))}
             </>
@@ -221,7 +190,6 @@ export default function InventarioPage({ params }: { params: { id: string } }) {
                   items={items}
                   entradas={entradas}
                   onContado={actualizarContado}
-                  onCosto={actualizarCosto}
                 />
               ))}
             </>
@@ -280,14 +248,12 @@ function TablaCategoria({
   items,
   entradas,
   onContado,
-  onCosto,
 }: {
   tipo: Tipo;
   categoria: string;
   items: Item[];
-  entradas: Record<string, EntradaConteo>;
+  entradas: Record<string, string>;
   onContado: (tipo: Tipo, id: string, valor: string) => void;
-  onCosto: (tipo: Tipo, id: string, valor: string) => void;
 }) {
   return (
     <div className="card" style={{ marginBottom: 14 }}>
@@ -296,10 +262,7 @@ function TablaCategoria({
       </p>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {items.map((it) => {
-          const entrada = entradas[clave(tipo, it.id)];
-          const contadoNum = entrada?.contado.trim() !== "" ? Number(entrada?.contado) : null;
           const stockActual = Number(it.stockActual);
-          const esExcedente = contadoNum !== null && Number.isFinite(contadoNum) && contadoNum > stockActual;
 
           return (
             <div
@@ -335,24 +298,10 @@ function TablaCategoria({
                   step="0.001"
                   min={0}
                   placeholder="—"
-                  value={entrada?.contado ?? ""}
+                  value={entradas[clave(tipo, it.id)] ?? ""}
                   onChange={(e) => onContado(tipo, it.id, e.target.value)}
                 />
               </div>
-
-              {esExcedente && (
-                <div className="field" style={{ marginBottom: 0, flex: "0 0 160px" }}>
-                  <label style={{ fontSize: 11, color: "var(--alert)" }}>Costo unit. del excedente</label>
-                  <input
-                    type="number"
-                    step="0.0001"
-                    min={0}
-                    placeholder="S/ 0.00"
-                    value={entrada?.costoExcedente ?? ""}
-                    onChange={(e) => onCosto(tipo, it.id, e.target.value)}
-                  />
-                </div>
-              )}
             </div>
           );
         })}
