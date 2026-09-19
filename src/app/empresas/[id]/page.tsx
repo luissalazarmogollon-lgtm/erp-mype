@@ -59,13 +59,16 @@ export default async function EmpresaDetallePage({ params }: { params: { id: str
     { modulos: ["flujo_caja"], href: "flujo-caja", label: "Flujo de Caja" },
     { modulos: ["prestamos"], href: "prestamos", label: "Préstamos" },
     { modulos: ["ventas_diarias"], href: "ventas-diarias", label: esServicios ? "Facturación" : "Ventas diarias" },
-    { modulos: ["ventas_pos"], href: "ventas", label: "Ventas (POS)" },
+    // "Ventas (POS)" se quitó de aquí: el negocio no vende por ese medio,
+    // todo se registra a mano. El código y las ventas históricas del
+    // módulo siguen intactos (no se borraron), solo dejó de ofrecerse.
     { modulos: ["productos"], href: "productos", label: "Productos" },
     { modulos: ["insumos"], href: "insumos", label: "Insumos" },
+    { modulos: ["inventario"], href: "inventario", label: "Inventario (conteo físico)" },
     { modulos: ["mermas"], href: "mermas", label: "Mermas" },
     { modulos: ["gastos"], href: "gastos", label: "Gastos y Costos" },
     { modulos: ["creditos"], href: "creditos", label: esServicios ? "Cuentas por Cobrar" : "Créditos (CxC)" },
-    { modulos: ["ventas_pos", "ventas_diarias", "creditos"], href: "clientes", label: "Clientes" },
+    { modulos: ["ventas_diarias", "creditos"], href: "clientes", label: "Clientes" },
     { modulos: ["cuentas_por_pagar", "cuentas_por_pagar_registrar"], href: "cuentas-por-pagar", label: "Cuentas por pagar" },
     { modulos: ["rrhh"], href: "rrhh", label: "RRHH" },
     { modulos: ["caja_chica"], href: "caja-chica", label: "Caja Chica" },

@@ -32,10 +32,13 @@ export function EquipoAsignado({
   // inventario/compras al editar a alguien del equipo — no existen para
   // esa empresa. Al revés, en Productos no se ofrece "actividades". (La
   // lista completa se sigue usando para MOSTRAR permisos ya asignados
-  // anteriormente, por si la empresa cambió de tipo después.)
+  // anteriormente, por si la empresa cambió de tipo después.) "ventas_pos"
+  // se excluye siempre: el módulo dejó de ofrecerse (el negocio no vende
+  // por ese medio) aunque a alguien que ya lo tenía asignado no se le
+  // quita solo por no aparecer aquí como opción.
   const modulosOfrecidos = MODULOS_DISPONIBLES.filter((m) =>
     esServicios ? !MODULOS_SOLO_PRODUCTOS.includes(m.key) : !MODULOS_SOLO_SERVICIOS.includes(m.key)
-  );
+  ).filter((m) => m.key !== "ventas_pos");
   const [editando, setEditando] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);

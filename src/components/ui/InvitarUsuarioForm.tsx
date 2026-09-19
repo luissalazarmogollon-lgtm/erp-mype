@@ -8,10 +8,12 @@ export function InvitarUsuarioForm({ empresaId, esServicios = false }: { empresa
   // En una empresa de Servicios no tiene sentido ofrecer permisos de
   // módulos de inventario/compras — no existen para esa empresa. Al revés,
   // en una empresa de Productos no se ofrece "actividades" (Gestión de
-  // Actividades es exclusivo de Servicios).
+  // Actividades es exclusivo de Servicios). "ventas_pos" se excluye
+  // siempre: el módulo dejó de ofrecerse (el negocio no vende por ese
+  // medio) aunque el código y el permiso en sí sigan existiendo.
   const modulosOfrecidos = MODULOS_DISPONIBLES.filter((m) =>
     esServicios ? !MODULOS_SOLO_PRODUCTOS.includes(m.key) : !MODULOS_SOLO_SERVICIOS.includes(m.key)
-  );
+  ).filter((m) => m.key !== "ventas_pos");
   const router = useRouter();
   const [abierto, setAbierto] = useState(false);
   const [error, setError] = useState<string | null>(null);

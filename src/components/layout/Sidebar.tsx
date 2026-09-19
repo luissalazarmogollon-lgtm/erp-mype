@@ -99,8 +99,12 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Comercial",
     icon: IconUsers,
     children: [
-      { label: "Clientes", segment: "clientes", modulos: ["ventas_pos", "ventas_diarias", "creditos"] },
-      { label: "Ventas", segment: "ventas", modulos: ["ventas_pos"] },
+      // El módulo "Ventas (POS)" se dejó de usar (el negocio no vende por
+      // ese medio, todo se registra a mano) — se quitó del menú, del
+      // panel de accesos directos y de los permisos que se pueden asignar
+      // a una persona nueva. El código y las ventas históricas siguen
+      // intactos por si algún día hace falta reactivarlo o consultarlas.
+      { label: "Clientes", segment: "clientes", modulos: ["ventas_diarias", "creditos"] },
       { label: "Ventas diarias", segment: "ventas-diarias", modulos: ["ventas_diarias"] },
     ],
   },
@@ -128,6 +132,7 @@ const NAV_GROUPS: NavGroup[] = [
     children: [
       { label: "Productos", segment: "productos", modulos: ["productos"] },
       { label: "Insumos", segment: "insumos", modulos: ["insumos"] },
+      { label: "Conteo de inventario", segment: "inventario", modulos: ["inventario"] },
       { label: "Locales", segment: "locales", modulos: ["locales"] },
       { label: "Mermas", segment: "mermas", modulos: ["mermas"] },
     ],
